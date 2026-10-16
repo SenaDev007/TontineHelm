@@ -1,0 +1,1129 @@
+     1→     1→# Cahier des charges MVP et grille de prix : TontiHelm
+     2→     2→
+     3→     3→YEHI OR Tech · Version 1.0 · Octobre 2026 · Nom de travail du produit : TontiHelm
+     4→     4→
+     5→     5→## 1. Contexte et objectif
+     6→     6→
+     7→     7→TontiHelm est un SaaS de gestion de tontines journalières pour les microfinances de proximité, les groupements d'épargne et les PME collectrices du Bénin. Un agent collecteur passe chaque jour chez ses clients, encaisse un montant fixe et le consigne dans un carnet papier. Le MVP remplace ce carnet par une application fiable, utilisable hors ligne, avec un tableau de bord pour le gérant.
+     8→     8→
+     9→     9→Objectif du MVP : prouver en 90 jours que 3 structures pilotes abandonnent leur carnet papier et acceptent de payer un abonnement mensuel.
+    10→    10→
+    11→    11→## 2. Principe cardinal
+    12→    12→
+    13→    13→TontiHelm ne détient, ne reçoit et ne redistribue aucun fonds. L'argent circule uniquement entre le cotisant et la structure cliente, en espèces ou par mobile money vers le compte de la structure. TontiHelm enregistre, calcule et rapporte.
+    14→    14→
+    15→    15→Conséquences de conception :
+    16→    16→
+    17→    17→- Aucun portefeuille interne, aucun solde stocké au nom de TontiHelm.
+    18→    18→- Chaque structure s'inscrit avec son justificatif d'agrément (arrêté du ministre pour un SFD, récépissé ou statut pour un groupement). Le compte reste en attente jusqu'à validation manuelle.
+    19→    19→- Les conditions d'utilisation stipulent que le client déclare son agrément et reste responsable des fonds.
+    20→    20→
+    21→    21→## 3. Utilisateurs et rôles
+    22→    22→
+    23→    23→| Rôle | Mission | Droits |
+    24→    24→| --- | --- | --- |
+    25→    25→| Propriétaire | Dirige la structure | Tout, y compris facturation et utilisateurs |
+    26→    26→| Gérant | Supervise les agents et la caisse | Clients, agents, clôtures, rapports |
+    27→    27→| Agent collecteur | Encaisse sur le terrain | Ses clients et ses encaissements du jour |
+    28→    28→| Contrôleur | Audite sans modifier | Lecture seule et export du journal |
+    29→    29→| Cotisant | Épargne | Pas d'accès au MVP, il reçoit des reçus par SMS ou WhatsApp |
+    30→    30→
+    31→    31→## 4. Fonctionnalités du MVP
+    32→    32→
+    33→    33→### M1. Inscription de la structure et vérification
+    34→    34→
+    35→    35→- Formulaire avec nom, type de structure, numéro d'agrément, pièce jointe du justificatif, contacts du dirigeant.
+    36→    36→- File de validation côté administrateur YEHI OR Tech.
+    37→    37→- Période d'essai de 60 jours activée à la validation.
+    38→    38→
+    39→    39→### M2. Gestion des cotisants et des carnets
+    40→    40→
+    41→    41→- Fiche cotisant : identité, téléphone, quartier, pièce d'identité (numéro seul, sans image au MVP), agent référent.
+    42→    42→- Carnet : mise journalière, durée du cycle, date de début, commission de la structure (paramétrable, par exemple un jour de cotisation par cycle).
+    43→    43→- Statuts du carnet : actif, en retard, clos, retiré.
+    44→    44→
+    45→    45→### M3. Collecte journalière (application agent)
+    46→    46→
+    47→    47→- Application web installable (PWA), conçue d'abord pour smartphone Android d'entrée de gamme.
+    48→    48→- Liste des clients de la tournée du jour, triée par quartier.
+    49→    49→- Saisie d'un encaissement en 2 touches : montant par défaut, validation.
+    50→    50→- Fonctionnement complet hors ligne, synchronisation automatique au retour du réseau.
+    51→    51→- Reçu immédiat par SMS ou WhatsApp au cotisant.
+    52→    52→- Gestion des cas réels : paiement partiel, double jour payé d'avance, jour manqué.
+    53→    53→
+    54→    54→### M4. Paiement mobile money en flux direct
+    55→    55→
+    56→    56→- Lien de paiement envoyé au cotisant, via un agrégateur agréé (FedaPay en premier choix, KkiaPay en alternative).
+    57→    57→- Les fonds arrivent sur le compte marchand de la structure. TontiHelm reçoit uniquement la notification de succès.
+    58→    58→- Rapprochement automatique entre notification et ligne du carnet.
+    59→    59→
+    60→    60→### M5. Clôture de caisse
+    61→    61→
+    62→    62→- En fin de tournée, l'agent déclare le total en espèces remis.
+    63→    63→- Le système compare ce total aux encaissements enregistrés et affiche l'écart.
+    64→    64→- Le gérant valide ou conteste la clôture. Une clôture validée ne se modifie plus.
+    65→    65→
+    66→    66→### M6. Tableau de bord du gérant
+    67→    67→
+    68→    68→- Encaissements du jour, de la semaine, du mois, par agent et par quartier.
+    69→    69→- Carnets en retard, classés par nombre de jours manqués.
+    70→    70→- Écarts de caisse non résolus.
+    71→    71→- Export Excel et PDF.
+    72→    72→
+    73→    73→### M7. Notifications
+    74→    74→
+    75→    75→- Reçu de cotisation, rappel de retard, fin de cycle.
+    76→    76→- Canaux : SMS en base, WhatsApp Business en option payante.
+    77→    77→- Modèles de messages rédigés en français simple, personnalisables par structure.
+    78→    78→
+    79→    79→### M8. Journal d'audit
+    80→    80→
+    81→    81→- Chaque écriture (encaissement, correction, clôture, suppression) est horodatée et attribuée à un utilisateur.
+    82→    82→- Aucune suppression physique. Une correction crée une nouvelle ligne qui annule la précédente.
+    83→    83→- Export du journal par le contrôleur.
+    84→    84→
+    85→    85→### M9. Facturation de l'abonnement
+    86→    86→
+    87→    87→- Plans et paliers de la section 11.
+    88→    88→- Paiement de l'abonnement par mobile money.
+    89→    89→- Blocage en lecture seule après 15 jours d'impayé, sans perte de données.
+    90→    90→
+    91→    91→### Hors périmètre du MVP
+    92→    92→
+    93→    93→Crédit et prêts, scoring par IA, comptabilité générale, portail cotisant, application iOS native, multi-agences complexes. Ces modules arrivent après validation des pilotes.
+    94→    94→
+    95→    95→## 5. Règles métier clés
+    96→    96→
+    97→    97→1. Un carnet appartient à une seule structure et à un seul agent référent à la fois.
+    98→    98→2. Un encaissement ne dépasse jamais le montant restant du cycle, sauf paiement d'avance explicitement marqué.
+    99→    99→3. La commission de la structure se calcule à la clôture du cycle et s'affiche sur le relevé du cotisant.
+   100→   100→4. Un agent ne voit que ses propres clients.
+   101→   101→5. Une clôture de caisse validée verrouille les encaissements de la journée.
+   102→   102→
+   103→   103→## 6. Exigences non fonctionnelles
+   104→   104→
+   105→   105→| Critère | Cible |
+   106→   106→| --- | --- |
+   107→   107→| Mode hors ligne | 100 % des fonctions agent disponibles sans réseau |
+   108→   108→| Temps d'un encaissement | Moins de 10 secondes |
+   109→   109→| Chargement sur 3G | Moins de 4 secondes |
+   110→   110→| Disponibilité | 99,5 % mensuel |
+   111→   111→| Isolation des données | Une structure n'accède jamais aux données d'une autre |
+   112→   112→| Sauvegarde | Quotidienne, restauration testée chaque mois |
+   113→   113→| Sécurité | Authentification par téléphone et code, double facteur pour propriétaire et gérant |
+   114→   114→| Données personnelles | Conformité Code du numérique béninois, déclaration auprès de l'APDP à confirmer avec un juriste |
+   115→   115→
+   116→   116→## 7. Architecture technique
+   117→   117→
+   118→   118→- Frontend : Next.js, TypeScript, Tailwind, PWA avec service worker et file d'attente locale (IndexedDB).
+   119→   119→- Backend : Node.js, API REST, validation Zod.
+   120→   120→- Base de données : PostgreSQL avec row-level security par structure.
+   121→   121→- Paiement : FedaPay, avec webhook signé.
+   122→   122→- Messages : passerelle SMS locale, API WhatsApp Business.
+   123→   123→- Hébergement : Vercel pour le frontend, base managée avec sauvegardes.
+   124→   124→- Socle : réutilisation du module multi-tenant, des rôles et de la facturation des produits Helm existants.
+   125→   125→
+   126→   126→## 8. Modèle de données (entités principales)
+   127→   127→
+   128→   128→Structure, Utilisateur, Agent, Cotisant, Carnet, Encaissement, Clôture, Paiement mobile, Notification, Journal d'audit, Abonnement, Facture.
+   129→   129→
+   130→   130→Relation centrale : Structure possède des Agents et des Cotisants, un Cotisant possède des Carnets, un Carnet reçoit des Encaissements, une Clôture regroupe les Encaissements d'un agent sur une journée.
+   131→   131→
+   132→   132→## 9. Conformité et gestion du risque
+   133→   133→
+   134→   134→| Risque | Mesure |
+   135→   135→| --- | --- |
+   136→   136→| Client sans agrément | Vérification manuelle à l'inscription, clause contractuelle, droit de suspension |
+   137→   137→| Fraude d'un agent | Clôture quotidienne, écarts visibles, journal non modifiable |
+   138→   138→| Perte de données au champ | Stockage local chiffré, synchronisation avec reprise sur erreur |
+   139→   139→| Fuite de données | Isolation par structure, chiffrement en transit et au repos, journaux d'accès |
+   140→   140→| Litige sur un paiement | Rapprochement automatique et historique complet par carnet |
+   141→   141→
+   142→   142→Avant le lancement : consultation d'un avocat béninois spécialisé en finance et prise de contact avec l'ANSIFD.
+   143→   143→
+   144→   144→## 10. Planning (12 semaines)
+   145→   145→
+   146→   146→| Semaines | Livrables |
+   147→   147→| --- | --- |
+   148→   148→| 1 et 2 | Cadrage juridique, maquettes agent et gérant, base multi-tenant |
+   149→   149→| 3 et 4 | M1, M2, rôles et authentification |
+   150→   150→| 5 à 7 | M3 collecte hors ligne et synchronisation |
+   151→   151→| 8 et 9 | M4 paiement mobile money, M7 notifications |
+   152→   152→| 10 | M5 clôture de caisse, M6 tableau de bord |
+   153→   153→| 11 | M8 audit, M9 facturation, tests de charge |
+   154→   154→| 12 | Déploiement chez les 3 structures pilotes, formation des agents |
+   155→   155→
+   156→   156→Critères de réussite à 90 jours : 3 pilotes actifs, au moins 70 % des encaissements saisis dans l'application, zéro perte de données, au moins 2 pilotes qui acceptent de passer à l'abonnement payant.
+   157→   157→
+   158→   158→## 11. Grille de prix
+   159→   159→
+   160→   160→Tous les montants sont des hypothèses de départ à valider avec les pilotes.
+   161→   161→
+   162→   162→### Repère de valeur
+   163→   163→
+   164→   164→Un collecteur qui suit 300 clients à 500 FCFA par jour manipule environ 4,5 millions de FCFA par mois. Un abonnement de 35 000 FCFA représente moins de 1 % de ce flux.
+   165→   165→
+   166→   166→### Paliers mensuels
+   167→   167→
+   168→   168→|  | Démarrage | Pro | Institution |
+   169→   169→| --- | --- | --- | --- |
+   170→   170→| Prix par mois | 15 000 FCFA | 35 000 FCFA | 75 000 FCFA |
+   171→   171→| Agents inclus | 2 | 10 | 40 |
+   172→   172→| Cotisants actifs inclus | 150 | 800 | 3 000 |
+   173→   173→| Application agent hors ligne | Oui | Oui | Oui |
+   174→   174→| Reçus SMS | Facturés à l'usage | Facturés à l'usage | Facturés à l'usage |
+   175→   175→| Paiement mobile money | Oui | Oui | Oui |
+   176→   176→| Clôture de caisse et audit | Oui | Oui | Oui |
+   177→   177→| Export Excel et PDF | Oui | Oui | Oui |
+   178→   178→| Rappels WhatsApp | Non | Oui | Oui |
+   179→   179→| Rapports réglementaires | Non | Non | Oui |
+   180→   180→| Multi-agences | Non | Non | Oui |
+   181→   181→| Accès API | Non | Non | Oui |
+   182→   182→| Support | E-mail | WhatsApp, 24 h | Dédié, 4 h ouvrées |
+   183→   183→
+   184→   184→### Éléments variables
+   185→   185→
+   186→   186→- Cotisant actif au-delà du quota : 50 FCFA par mois.
+   187→   187→- Agent supplémentaire : 2 000 FCFA par mois.
+   188→   188→- SMS : prix coûtant de la passerelle plus 20 % de marge.
+   189→   189→- Mise en service avec paramétrage et formation des agents : 50 000 FCFA, offerte aux pilotes.
+   190→   190→
+   191→   191→### Offres de lancement
+   192→   192→
+   193→   193→- Pilotes : 60 jours gratuits, puis tarif fondateur de moins 30 % pendant 12 mois.
+   194→   194→- Paiement annuel : 2 mois offerts.
+   195→   195→
+   196→   196→### Projection de revenu récurrent
+   197→   197→
+   198→   198→| Palier | Structures | Revenu mensuel |
+   199→   199→| --- | --- | --- |
+   200→   200→| Démarrage | 50 | 750 000 FCFA |
+   201→   201→| Pro | 35 | 1 225 000 FCFA |
+   202→   202→| Institution | 15 | 1 125 000 FCFA |
+   203→   203→| Total pour 100 structures | 100 | 3 100 000 FCFA |
+   204→   204→
+   205→   205→Ce total exclut les SMS, les agents supplémentaires et les frais de mise en service. Marge brute cible : 75 %, après coûts d'hébergement, de SMS et de support.
+   206→   206→
+   207→   207→## 12. Prochaines décisions
+   208→   208→
+   209→   209→1. Valider le nom TontiHelm et réserver le domaine.
+   210→   210→2. Signer 3 structures pilotes avant la semaine 4.
+   211→   211→3. Obtenir l'avis écrit d'un avocat et un premier échange avec l'ANSIFD avant la semaine 8.
+   212→   212→
+   213→   213→## 13. Copywriting (landing page et micro-copy)
+   214→   214→
+   215→   215→### 13.1 Principes éditoriaux
+   216→   216→
+   217→   217→1. Le problème passe avant la vision. Le hero parle de la peur du carnet perdu, pas de la technologie.
+   218→   218→2. Un seul bouton par section.
+   219→   219→3. Les chiffres arrivent avant les arguments.
+   220→   220→4. Chaque section ouvre une tension avant de la résoudre.
+   221→   221→5. Chaque message système est écrit. Le développeur n'improvise aucun texte.
+   222→   222→6. Aucun texte générique. Un concurrent ne peut pas copier une phrase telle quelle.
+   223→   223→7. Tutoiement partout. Une variante au vouvoiement est à tester pour les SFD institutionnels.
+   224→   224→8. Zéro statistique et zéro témoignage inventés. Les marqueurs \[PILOTE\] se remplissent avec les chiffres réels après les 90 jours.
+   225→   225→9. Toute phrase qui touche à la réglementation passe chez l'avocat avant la mise en ligne.
+   226→   226→
+   227→   227→### 13.2 Navigation
+   228→   228→
+   229→   229→| ÉLÉMENT | TEXTE FINAL |
+   230→   230→| --- | --- |
+   231→   231→| Lien 1 | Problème |
+   232→   232→| Lien 2 | Fonctionnalités |
+   233→   233→| Lien 3 | Tarifs |
+   234→   234→| Lien 4 | Questions |
+   235→   235→| Bouton | Essayer 60 jours → |
+   236→   236→
+   237→   237→Note de production : barre blanche, logo lisible sur fond clair, bouton en couleur d'accent. Le bouton reste visible au défilement sur mobile.
+   238→   238→
+   239→   239→### Section 1 · Hero · #accueil
+   240→   240→
+   241→   241→Contexte stratégique. Le gérant de microfinance connaît la peur du carnet perdu avant de connaître le mot logiciel. Le hero nomme cette peur, puis promet un résultat que le gérant mesure lui-même en 60 jours. Aucun jargon technique au-dessus de la ligne de flottaison.
+   242→   242→
+   243→   243→| ÉLÉMENT | TEXTE FINAL |
+   244→   244→| --- | --- |
+   245→   245→| Surtitre | Logiciel de gestion de tontine · Bénin |
+   246→   246→| H1 | Un carnet perdu, ce sont des mois de cotisations envolés. |
+   247→   247→| Sous-titre | TontiHelm remplace le carnet papier par une application qui marche sans réseau. Tes agents encaissent en 10 secondes, tes clients reçoivent leur reçu, ta caisse se clôture chaque soir. |
+   248→   248→| Bouton unique | Essayer 60 jours gratuitement → |
+   249→   249→| Micro-ligne sous le bouton | Aucun paiement pour démarrer. Aucun engagement. |
+   250→   250→
+   251→   251→Note de production : H1 en grande taille, une seule couleur d'accent sur « mois de cotisations ». Capture de l'écran agent à droite sur ordinateur, sous le bouton sur mobile.
+   252→   252→
+   253→   253→### Section 2 · Chiffres · #chiffres
+   254→   254→
+   255→   255→Contexte stratégique. Quatre chiffres, tous vrais par construction du produit. Ils arrivent avant les arguments pour installer la crédibilité. Chaque chiffre répond à une objection : lenteur, réseau, confiance, risque.
+   256→   256→
+   257→   257→| CHIFFRE | LABEL | SENS ÉMOTIONNEL |
+   258→   258→| --- | --- | --- |
+   259→   259→| 10 s | par encaissement | Ton agent passe vite à la maison suivante |
+   260→   260→| 100 % | des fonctions hors réseau | Une coupure ne bloque plus la tournée |
+   261→   261→| 0 FCFA | détenu par nous | Ton argent reste dans ta structure |
+   262→   262→| 60 jours | d'essai gratuit | Tu juges sur tes propres chiffres |
+   263→   263→
+   264→   264→Note de production : compteurs animés au défilement, une seule fois.
+   265→   265→
+   266→   266→### Section 3 · Problème · #probleme
+   267→   267→
+   268→   268→Contexte stratégique. Cette section fait reconnaître au gérant sa propre semaine. Chaque carte décrit une scène vécue, sans solution. La solution arrive à la section suivante.
+   269→   269→
+   270→   270→| ÉLÉMENT | TEXTE FINAL |
+   271→   271→| --- | --- |
+   272→   272→| H2 | Ton carnet fonctionne jusqu'au jour où il disparaît. |
+   273→   273→| Carte 1, titre | Le carnet mouillé |
+   274→   274→| Carte 1, corps | Une tournée sous la pluie, une page illisible, un client qui conteste 12 versements. Tu n'as aucune trace à lui montrer. |
+   275→   275→| Carte 2, titre | L'écart découvert trop tard |
+   276→   276→| Carte 2, corps | Tu constates la différence de caisse en fin de mois. L'agent ne se souvient plus du jour exact. |
+   277→   277→| Carte 3, titre | Le client qui doute |
+   278→   278→| Carte 3, corps | Sans reçu, chaque cotisant garde un doute. Ce doute coûte des clients à ta structure. |
+   279→   279→| Carte 4, titre | Le gérant aveugle |
+   280→   280→| Carte 4, corps | Tu ne sais pas combien tes agents ont encaissé hier. Tu l'apprends quand ils rapportent les carnets. |
+   281→   281→
+   282→   282→Note de production : quatre cartes sur fond sombre, icône simple par carte, aucune illustration décorative.
+   283→   283→
+   284→   284→### Section 4 · Fonctionnalités · #fonctionnalites
+   285→   285→
+   286→   286→Contexte stratégique. Chaque fonctionnalité répond à une carte de la section Problème, dans le même ordre. Le visiteur retrouve sa douleur et voit sa réponse immédiate. Un seul bouton clôt la section.
+   287→   287→
+   288→   288→| ÉLÉMENT | TEXTE FINAL |
+   289→   289→| --- | --- |
+   290→   290→| H2 | Chaque problème du carnet a sa réponse dans l'application. |
+   291→   291→| Fonction 1, titre | Collecte sans réseau |
+   292→   292→| Fonction 1, hook | Le réseau coupe, la tournée continue. |
+   293→   293→| Fonction 1, corps | L'application enregistre chaque encaissement sur le téléphone de l'agent et l'envoie dès le retour du réseau. Rien ne se perd, rien ne s'écrase. |
+   294→   294→| Fonction 2, titre | Reçu immédiat |
+   295→   295→| Fonction 2, hook | Ton client garde une trace dans sa poche. |
+   296→   296→| Fonction 2, corps | Chaque versement déclenche un SMS avec le montant, le jour du cycle et le solde cumulé. Le doute disparaît. |
+   297→   297→| Fonction 3, titre | Clôture de caisse |
+   298→   298→| Fonction 3, hook | L'écart se voit le soir même. |
+   299→   299→| Fonction 3, corps | L'agent déclare ce qu'il remet. L'application compare avec ses encaissements et affiche la différence. Une fois validée, la journée est verrouillée. |
+   300→   300→| Fonction 4, titre | Tableau de bord gérant |
+   301→   301→| Fonction 4, hook | Tu sais ce que chaque agent a encaissé avant qu'il rentre. |
+   302→   302→| Fonction 4, corps | Encaissements du jour, carnets en retard, écarts non résolus. Export Excel et PDF en un clic. |
+   303→   303→| Fonction 5, titre | Paiement mobile money |
+   304→   304→| Fonction 5, hook | Le client paie depuis son téléphone. |
+   305→   305→| Fonction 5, corps | L'agent envoie un lien de paiement. L'argent arrive directement sur le compte de ta structure. |
+   306→   306→| Fonction 6, titre | Journal d'audit |
+   307→   307→| Fonction 6, hook | Chaque ligne a un auteur et une heure. |
+   308→   308→| Fonction 6, corps | Une correction ajoute une ligne et n'efface jamais la précédente. Ton contrôleur exporte le journal quand il veut. |
+   309→   309→| Bouton unique | Voir l'application en action → |
+   310→   310→
+   311→   311→Note de production : six cartes en grille, deux colonnes sur mobile. Le bouton ouvre la démonstration vidéo de 90 secondes.
+   312→   312→
+   313→   313→### Section 5 · Méthode · #methode
+   314→   314→
+   315→   315→Contexte stratégique. Le gérant se demande combien de temps la mise en route lui prendra. Quatre étapes courtes répondent à cette question.
+   316→   316→
+   317→   317→| ÉLÉMENT | TEXTE FINAL |
+   318→   318→| --- | --- |
+   319→   319→| H2 | Quatre étapes entre ton carnet et ta première clôture numérique. |
+   320→   320→| Étape 1 | Tu inscris ta structure et tu joins ton justificatif d'agrément. |
+   321→   321→| Étape 2 | Nous configurons tes agents, tes carnets et tes règles de commission. |
+   322→   322→| Étape 3 | Tes agents encaissent avec l'application dès la tournée suivante. |
+   323→   323→| Étape 4 | Tu clôtures la caisse le soir et tu compares avec ton ancien carnet. |
+   324→   324→| Bouton unique | Démarrer mon inscription → |
+   325→   325→
+   326→   326→### Section 6 · Confiance · #confiance
+   327→   327→
+   328→   328→Contexte stratégique. Les épargnants confient leur argent à la structure, et la structure nous confie ses registres. Cette section dit clairement où passe l'argent et qui voit quoi. Elle s'ouvre sur un chiffre.
+   329→   329→
+   330→   330→| ÉLÉMENT | TEXTE FINAL |
+   331→   331→| --- | --- |
+   332→   332→| Chiffre d'ouverture | 0 FCFA |
+   333→   333→| H2 | TontiHelm ne touche jamais à l'argent de tes clients. |
+   334→   334→| Corps 1 | Les fonds vont du cotisant à ta structure, en espèces ou par mobile money. Nous tenons le registre, pas la caisse. |
+   335→   335→| Corps 2 | Nous vérifions ton agrément avant d'activer ton compte. Une structure sans justificatif ne passe pas. |
+   336→   336→| Corps 3 | Tes données restent isolées de celles des autres structures. Chaque ligne du journal est horodatée et attribuée. |
+   337→   337→| Bouton unique | Lire comment nous protégeons tes données → |
+   338→   338→
+   339→   339→Note de production : toute formule réglementaire est à valider par l'avocat avant publication. Ne jamais écrire « conforme ANSIFD » sans avis écrit.
+   340→   340→
+   341→   341→### Section 7 · Tarifs · #tarifs
+   342→   342→
+   343→   343→Contexte stratégique. Le prix se juge face à la valeur. On ancre d'abord le flux d'argent que la structure manipule, puis on montre l'abonnement.
+   344→   344→
+   345→   345→| ÉLÉMENT | TEXTE FINAL |
+   346→   346→| --- | --- |
+   347→   347→| H2 | Un abonnement fixe. Aucune commission sur tes collectes. |
+   348→   348→| Repère de valeur | 300 clients à 500 FCFA par jour représentent environ 4,5 millions de FCFA par mois. L'abonnement Pro en représente moins de 1 %. |
+   349→   349→| Carte Démarrage | 15 000 FCFA par mois. Pour démarrer avec 2 agents et 150 cotisants. |
+   350→   350→| Carte Pro | 35 000 FCFA par mois. Pour structurer une équipe de 10 agents et 800 cotisants. Rappels WhatsApp inclus. |
+   351→   351→| Carte Institution | 75 000 FCFA par mois. Pour les SFD multi-agences, 40 agents et 3 000 cotisants. Rapports réglementaires et accès API. |
+   352→   352→| Ligne sous les cartes | Paiement annuel : 2 mois offerts. Les SMS sont facturés à l'usage, tarif affiché avant envoi. |
+   353→   353→| Bouton unique | Essayer 60 jours gratuitement → |
+   354→   354→
+   355→   355→### Section 8 · Questions · #questions
+   356→   356→
+   357→   357→Contexte stratégique. Chaque réponse désamorce une objection réelle d'achat. Les réponses restent courtes et factuelles.
+   358→   358→
+   359→   359→| QUESTION | RÉPONSE |
+   360→   360→| --- | --- |
+   361→   361→| TontiHelm garde-t-il l'argent ? | Non. L'argent va du cotisant à ta structure. Nous enregistrons les opérations et nous produisons les rapports. |
+   362→   362→| Dois-je être agréé ? | La loi béninoise exige l'agrément du ministre de l'Économie et des Finances pour collecter l'épargne. Nous demandons ton justificatif à l'inscription. |
+   363→   363→| Ça marche sans internet ? | Oui. Tout l'écran agent fonctionne hors réseau. La synchronisation part automatiquement au retour du signal. |
+   364→   364→| Mes agents ne sont pas à l'aise avec le téléphone. | Un encaissement tient en 2 touches. Nous formons tes agents lors de la mise en service. |
+   365→   365→| Mes clients ont-ils besoin d'un smartphone ? | Non. Ils reçoivent leur reçu par SMS sur n'importe quel téléphone. |
+   366→   366→| Mes données restent-elles à moi si j'arrête ? | Oui. Tu exportes tout en Excel à tout moment. En cas d'impayé, ton compte passe en lecture seule, sans suppression. |
+   367→   367→| Où sont stockées mes données ? | Chez un hébergeur sécurisé, avec sauvegarde quotidienne. Chaque structure accède uniquement à ses propres données. |
+   368→   368→
+   369→   369→### Section 9 · Appel final · #essai
+   370→   370→
+   371→   371→Contexte stratégique. Dernier écran de la page. Il réduit l'effort au minimum : un agent, un carnet à comparer, 60 jours.
+   372→   372→
+   373→   373→| ÉLÉMENT | TEXTE FINAL |
+   374→   374→| --- | --- |
+   375→   375→| H2 | Ferme ton carnet papier ce mois-ci. |
+   376→   376→| Sous-titre | Installe TontiHelm chez un agent. Compare avec ton carnet pendant 60 jours. |
+   377→   377→| Bouton unique | Démarrer l'essai gratuit → |
+   378→   378→| Micro-ligne | Nous te répondons sous 24 heures ouvrées. |
+   379→   379→
+   380→   380→Note de production : confirmer la capacité de réponse avant de publier la promesse des 24 heures.
+   381→   381→
+   382→   382→### Pied de page
+   383→   383→
+   384→   384→| ÉLÉMENT | TEXTE FINAL |
+   385→   385→| --- | --- |
+   386→   386→| Signature | TontiHelm, un produit YEHI OR Tech · Parakou, Bénin |
+   387→   387→| Contact | \[WhatsApp\] · \[e-mail\] |
+   388→   388→| Liens | Conditions d'utilisation · Confidentialité · Mentions légales |
+   389→   389→
+   390→   390→Note de production : fond noir profond légèrement teinté, logo jamais posé sur sa propre couleur d'accent.
+   391→   391→
+   392→   392→### 13.3 SEO
+   393→   393→
+   394→   394→|  |  |
+   395→   395→| --- | --- |
+   396→   396→| Meta title | TontiHelm : logiciel de gestion de tontine au Bénin |
+   397→   397→| Meta description | Remplace le carnet papier par une app qui marche sans réseau. Encaissement en 10 secondes, caisse clôturée chaque soir. Essai gratuit 60 jours. |
+   398→   398→| H1 unique | Un carnet perdu, ce sont des mois de cotisations envolés. |
+   399→   399→| Locale | fr\_BJ |
+   400→   400→| Schema.org | SoftwareApplication avec offres par palier |
+   401→   401→| Canonical | URL du domaine à confirmer |
+   402→   402→
+   403→   403→| PRIORITÉ | MOT-CLÉ | SECTION CIBLÉE |
+   404→   404→| --- | --- | --- |
+   405→   405→| P1 | logiciel gestion tontine | H1, meta, Fonctionnalités |
+   406→   406→| P1 | application tontine Bénin | Meta, Hero |
+   407→   407→| P2 | logiciel microfinance Bénin | Confiance, Tarifs |
+   408→   408→| P2 | carnet de collecte numérique | Problème |
+   409→   409→| P3 | logiciel collecteur épargne journalière | Article de blog |
+   410→   410→| P3 | gérer une tontine journalière | Article de blog |
+   411→   411→
+   412→   412→### 13.4 Micro-copy de l'application
+   413→   413→
+   414→   414→| CONTEXTE | TEXTE FINAL |
+   415→   415→| --- | --- |
+   416→   416→| Inscription envoyée | Demande reçue. Nous vérifions ton justificatif d'agrément et nous te répondons sous 24 heures ouvrées. |
+   417→   417→| Numéro invalide | Numéro invalide. Saisis ton numéro complet, sans espace. |
+   418→   418→| Bannière hors réseau | Pas de réseau. Continue ta tournée, tout est enregistré sur ton téléphone. |
+   419→   419→| Envoi en attente | {n} encaissements en attente d'envoi. Ils partent dès le retour du réseau. |
+   420→   420→| Synchronisation réussie | Tout est synchronisé. |
+   421→   421→| Encaissement validé | {montant} FCFA encaissés chez {nom}. |
+   422→   422→| Écart de caisse | Écart de {montant} FCFA entre ta déclaration et tes encaissements. Vérifie la tournée avant de valider. |
+   423→   423→| Clôture validée | Clôture validée. Les encaissements du jour sont verrouillés. |
+   424→   424→| Paiement en attente | En attente de confirmation du client sur son téléphone. |
+   425→   425→| Paiement non abouti | Paiement non abouti. Renvoie le lien ou encaisse en espèces. |
+   426→   426→| Abonnement en retard | Ton abonnement est impayé depuis {n} jours. Dans {x} jours, ton compte passe en lecture seule. Tes données restent intactes. |
+   427→   427→| Lecture seule | Compte en lecture seule. Règle ton abonnement pour reprendre les encaissements. |
+   428→   428→
+   429→   429→### 13.5 SMS aux cotisants
+   430→   430→
+   431→   431→Les SMS s'écrivent sans accent pour rester dans la limite de 160 caractères par message.
+   432→   432→
+   433→   433→| CONTEXTE | TEXTE FINAL |
+   434→   434→| --- | --- |
+   435→   435→| Reçu de cotisation | {Structure} : {montant} FCFA recus le {date}. Carnet {numero}, jour {n}/{total}. Solde cumule : {solde} FCFA. |
+   436→   436→| Rappel de retard | {Structure} : ton carnet {numero} a {n} jours sans versement. Passe voir {agent} ou paie ici : {lien} |
+   437→   437→| Fin de cycle | {Structure} : ton cycle est termine. Total verse : {total} FCFA. Presente-toi a {lieu} avec ta piece d'identite. |
+   438→   438→
+   439→   439→### 13.6 Messages de prospection et d'accueil
+   440→   440→
+   441→   441→Message WhatsApp pré-rempli du bouton de contact :
+   442→   442→
+   443→   443→```
+   444→   444→Bonjour YEHI OR Tech,
+   445→   445→Je m'appelle {nom}. Je gère {structure}.
+   446→   446→Je veux essayer TontiHelm.
+   447→   447→Nous avons environ {nombre} clients et {nombre} agents.
+   448→   448→Mon numéro : {téléphone}
+   449→   449→```
+   450→   450→
+   451→   451→Message de premier contact envoyé par YEHI OR Tech à un gérant :
+   452→   452→
+   453→   453→```
+   454→   454→Bonjour {nom}. Je m'appelle Dawes, fondateur de YEHI OR Tech à Parakou.
+   455→   455→Nous avons construit une application qui remplace le carnet de tontine papier.
+   456→   456→Elle marche sans réseau, envoie un reçu SMS à chaque versement et clôture la caisse chaque soir.
+   457→   457→Je te propose 60 jours d'essai gratuit avec un de tes agents.
+   458→   458→Tu as 10 minutes cette semaine pour que je te montre ?
+   459→   459→```
+   460→   460→
+   461→   461→Séquence d'accueil après inscription :
+   462→   462→
+   463→   463→| MOMENT | MESSAGE |
+   464→   464→| --- | --- |
+   465→   465→| Jour 0 | Bienvenue {nom}. Ton compte est actif. Premier objectif : enregistrer les carnets d'un agent aujourd'hui. Je t'accompagne par WhatsApp. |
+   466→   466→| Jour 7 | Une semaine d'usage. Ouvre ton tableau de bord et compare les encaissements de la semaine avec ton carnet papier. Dis-moi ce qui diffère. |
+   467→   467→| Jour 45 | Il reste 15 jours d'essai. Tes agents ont saisi {n} encaissements. Pour garder ton historique, choisis ton palier avant la fin de l'essai. |
+   468→   468→
+   469→   469→## 14. Spécifications techniques
+   470→   470→
+   471→   471→### 14.1 Principes d'architecture
+   472→   472→
+   473→   473→1. Les encaissements sont des événements en ajout seul. Une erreur se corrige par une écriture d'annulation, jamais par une modification. Ce choix supprime les conflits de synchronisation et rend l'audit naturel.
+   474→   474→2. L'application agent fonctionne d'abord hors ligne. Le réseau améliore l'expérience, il ne conditionne rien.
+   475→   475→3. Chaque requête porte l'identité de la structure. La base refuse l'accès à toute autre donnée, même en cas de bug applicatif.
+   476→   476→4. Aucun montant n'est stocké en décimal. Le FCFA n'a pas de centimes, donc tous les montants sont des entiers.
+   477→   477→5. Les fournisseurs externes (SMS, paiement, WhatsApp) passent derrière des interfaces. Un changement de fournisseur ne touche pas le métier.
+   478→   478→
+   479→   479→### 14.2 Stack et composants
+   480→   480→
+   481→   481→| COUCHE | CHOIX | RÔLE |
+   482→   482→| --- | --- | --- |
+   483→   483→| Frontend | Next.js 15, React 19, TypeScript, Tailwind 4, shadcn/ui | Back-office gérant et site vitrine |
+   484→   484→| Application agent | PWA dans le même projet, Serwist pour le service worker, Dexie pour IndexedDB | Collecte hors ligne |
+   485→   485→| API | Route Handlers Next.js, validation Zod, tRPC ou REST typé | Logique métier exposée |
+   486→   486→| Base de données | PostgreSQL 16 managé avec sauvegarde à la minute (PITR) | Source de vérité |
+   487→   487→| ORM et migrations | Drizzle ou Prisma avec migrations versionnées | Schéma maîtrisé |
+   488→   488→| Tâches de fond | pg-boss (file de tâches dans PostgreSQL) | SMS, webhooks, facturation, rapprochement |
+   489→   489→| Paiement | FedaPay (principal), KkiaPay (secours) derrière une interface PaymentProvider | Liens de paiement mobile money |
+   490→   490→| SMS | Passerelle locale derrière une interface SmsProvider | Reçus et rappels |
+   491→   491→| WhatsApp | API Cloud de Meta, modèles de messages pré-approuvés | Rappels des paliers Pro et Institution |
+   492→   492→| Surveillance | Sentry, journaux structurés (pino), contrôle de disponibilité externe | Détection des pannes |
+   493→   493→| CI/CD | GitHub Actions, déploiements de prévisualisation, trois environnements | Livraison continue |
+   494→   494→
+   495→   495→L'hébergeur et la région de la base se choisissent avec l'avocat, car ils fixent la localisation des données personnelles.
+   496→   496→
+   497→   497→### 14.3 Organisation du code
+   498→   498→
+   499→   499→```
+   500→   500→tontihelm/
+   501→   501→├── apps/
+   502→   502→│   └── web/                 Next.js (site, back-office, PWA agent)
+   503→   503→├── packages/
+   504→   504→│   ├── db/                  schéma, migrations, politiques RLS
+   505→   505→│   ├── domain/              règles métier pures (solde, commission, clôture)
+   506→   506→│   ├── providers/           interfaces et adaptateurs (paiement, SMS, WhatsApp)
+   507→   507→│   ├── sync/                protocole de synchronisation partagé client et serveur
+   508→   508→│   └── ui/                  composants partagés
+   509→   509→├── infra/                   scripts de déploiement et de sauvegarde
+   510→   510→└── .github/workflows/       intégration continue
+   511→   511→```
+   512→   512→
+   513→   513→Le paquet domain ne dépend d'aucune bibliothèque externe. Il se teste en isolation avec des cas chiffrés.
+   514→   514→
+   515→   515→### 14.4 Isolation multi-structure (multi-tenant)
+   516→   516→
+   517→   517→Chaque table métier porte une colonne tenant\_id. À chaque requête, l'API ouvre une transaction et fixe la structure courante.
+   518→   518→
+   519→   519→```sql
+   520→   520→SET LOCAL app.tenant_id = '<uuid de la structure>';
+   521→   521→SET LOCAL app.user_id = '<uuid de l utilisateur>';
+   522→   522→SET LOCAL app.role = 'agent';
+   523→   523→
+   524→   524→ALTER TABLE collections ENABLE ROW LEVEL SECURITY;
+   525→   525→ALTER TABLE collections FORCE ROW LEVEL SECURITY;
+   526→   526→
+   527→   527→CREATE POLICY tenant_isolation ON collections
+   528→   528→  USING (tenant_id = current_setting('app.tenant_id')::uuid);
+   529→   529→
+   530→   530→CREATE POLICY agent_own_rows ON collections
+   531→   531→  AS RESTRICTIVE
+   532→   532→  USING (current_setting('app.role') <> 'agent'
+   533→   533→         OR agent_id = current_setting('app.user_id')::uuid);
+   534→   534→```
+   535→   535→
+   536→   536→L'application se connecte avec un rôle de base de données sans droit de contournement des politiques. Un jeu de tests automatisé tente chaque requête depuis une structure A vers les données d'une structure B et doit échouer à chaque fois.
+   537→   537→
+   538→   538→### 14.5 Modèle de données
+   539→   539→
+   540→   540→Tous les identifiants sont des UUID version 7 (triables dans le temps). Les identifiants des encaissements sont générés par l'application agent, ce qui garantit l'idempotence à la synchronisation.
+   541→   541→
+   542→   542→```sql
+   543→   543→CREATE TABLE structures (
+   544→   544→  id uuid PRIMARY KEY,
+   545→   545→  name text NOT NULL,
+   546→   546→  kind text NOT NULL CHECK (kind IN ('sfd','groupement','pme')),
+   547→   547→  license_ref text NOT NULL,
+   548→   548→  license_doc_url text,
+   549→   549→  status text NOT NULL DEFAULT 'pending'
+   550→   550→    CHECK (status IN ('pending','active','suspended','closed')),
+   551→   551→  commission_rule jsonb NOT NULL DEFAULT '{"type":"days","value":1}',
+   552→   552→  created_at timestamptz NOT NULL DEFAULT now()
+   553→   553→);
+   554→   554→
+   555→   555→CREATE TABLE contributors (
+   556→   556→  id uuid PRIMARY KEY,
+   557→   557→  tenant_id uuid NOT NULL REFERENCES structures(id),
+   558→   558→  full_name text NOT NULL,
+   559→   559→  phone text,
+   560→   560→  neighborhood text,
+   561→   561→  id_number_enc bytea,
+   562→   562→  agent_id uuid NOT NULL,
+   563→   563→  status text NOT NULL DEFAULT 'active',
+   564→   564→  created_at timestamptz NOT NULL DEFAULT now()
+   565→   565→);
+   566→   566→
+   567→   567→CREATE TABLE passbooks (
+   568→   568→  id uuid PRIMARY KEY,
+   569→   569→  tenant_id uuid NOT NULL REFERENCES structures(id),
+   570→   570→  contributor_id uuid NOT NULL REFERENCES contributors(id),
+   571→   571→  agent_id uuid NOT NULL,
+   572→   572→  daily_amount bigint NOT NULL CHECK (daily_amount > 0),
+   573→   573→  cycle_days int NOT NULL CHECK (cycle_days BETWEEN 1 AND 366),
+   574→   574→  starts_on date NOT NULL,
+   575→   575→  status text NOT NULL DEFAULT 'active'
+   576→   576→    CHECK (status IN ('active','late','closed','withdrawn')),
+   577→   577→  closed_at timestamptz
+   578→   578→);
+   579→   579→
+   580→   580→CREATE TABLE collections (
+   581→   581→  id uuid PRIMARY KEY,
+   582→   582→  tenant_id uuid NOT NULL REFERENCES structures(id),
+   583→   583→  passbook_id uuid NOT NULL REFERENCES passbooks(id),
+   584→   584→  agent_id uuid NOT NULL,
+   585→   585→  device_id uuid,
+   586→   586→  amount bigint NOT NULL,
+   587→   587→  method text NOT NULL CHECK (method IN ('cash','mobile_money')),
+   588→   588→  reverses_id uuid REFERENCES collections(id),
+   589→   589→  payment_id uuid,
+   590→   590→  closing_id uuid,
+   591→   591→  collected_at timestamptz NOT NULL,
+   592→   592→  received_at timestamptz NOT NULL DEFAULT now(),
+   593→   593→  CHECK ((reverses_id IS NULL AND amount > 0)
+   594→   594→      OR (reverses_id IS NOT NULL AND amount < 0))
+   595→   595→);
+   596→   596→
+   597→   597→CREATE TABLE audit_log (
+   598→   598→  seq bigserial PRIMARY KEY,
+   599→   599→  tenant_id uuid NOT NULL,
+   600→   600→  actor_id uuid,
+   601→   601→  action text NOT NULL,
+   602→   602→  entity text NOT NULL,
+   603→   603→  entity_id uuid,
+   604→   604→  payload jsonb NOT NULL,
+   605→   605→  prev_hash bytea,
+   606→   606→  hash bytea NOT NULL,
+   607→   607→  at timestamptz NOT NULL DEFAULT now()
+   608→   608→);
+   609→   609→
+   610→   610→REVOKE UPDATE, DELETE ON audit_log, collections FROM app_role;
+   611→   611→```
+   612→   612→
+   613→   613→Autres tables, avec leurs colonnes principales :
+   614→   614→
+   615→   615→| TABLE | COLONNES PRINCIPALES |
+   616→   616→| --- | --- |
+   617→   617→| users | id, tenant\_id, phone, role, pin\_hash (Argon2id), totp\_secret\_enc, status, last\_login\_at |
+   618→   618→| devices | id, user\_id, label, registered\_at, revoked\_at, last\_sync\_at, clock\_offset\_ms |
+   619→   619→| closings | id, tenant\_id, agent\_id, day, declared\_cash, expected\_cash, gap, status (open, declared, validated, disputed), validated\_by, validated\_at |
+   620→   620→| payments | id, tenant\_id, passbook\_id, provider, provider\_ref, amount, status (created, pending, approved, declined, expired, canceled), raw\_event jsonb, created\_at, settled\_at |
+   621→   621→| notifications | id, tenant\_id, channel (sms, whatsapp, email), template, to\_phone, status, provider\_ref, cost\_fcfa, created\_at |
+   622→   622→| subscriptions | id, tenant\_id, plan, status (trial, active, past\_due, read\_only, canceled), trial\_ends\_at, period\_start, period\_end |
+   623→   623→| invoices | id, tenant\_id, period, base\_amount, extras jsonb, vat\_rate, total, status, paid\_at |
+   624→   624→| webhook\_events | id, provider, event\_id (unique), received\_at, processed\_at, outcome |
+   625→   625→
+   626→   626→### 14.6 Règles de calcul
+   627→   627→
+   628→   628→- Solde d'un carnet : somme des montants des encaissements du carnet, annulations incluses (elles sont négatives).
+   629→   629→- Jours payés : solde divisé par la mise journalière, arrondi à l'entier inférieur.
+   630→   630→- Jours manqués : jours écoulés depuis le début du cycle moins jours payés, plancher à zéro.
+   631→   631→- Statut en retard : jours manqués supérieurs ou égaux à 3 (seuil réglable par structure).
+   632→   632→- Commission de fin de cycle, règle jours : valeur multipliée par la mise journalière. Exemple : 31 jours à 500 FCFA donnent 15 500 FCFA cotisés, la commission d'un jour est de 500 FCFA, le montant restitué est de 15 000 FCFA.
+   633→   633→- Écart de clôture : espèces déclarées moins espèces attendues, où espèces attendues égale la somme des encaissements en espèces de l'agent pour le jour, hors mobile money.
+   634→   634→- Cotisant actif pour la facturation : au moins un encaissement non annulé dans le mois civil.
+   635→   635→
+   636→   636→Ces règles vivent dans le paquet domain et se couvrent par des tests chiffrés, dont les cas limites (paiement d'avance, annulation, cycle de 1 jour, changement d'agent en cours de cycle).
+   637→   637→
+   638→   638→### 14.7 Synchronisation hors ligne
+   639→   639→
+   640→   640→Snapshot local. Au démarrage et après chaque synchronisation, l'application télécharge la tournée de l'agent : cotisants, carnets, soldes, jours manqués. Le tout se range dans IndexedDB.
+   641→   641→
+   642→   642→File d'envoi (outbox). Chaque encaissement saisi s'écrit localement avec son UUID, son horodatage local et l'identifiant de l'appareil. La ligne reste en statut « en attente » jusqu'à l'accusé du serveur.
+   643→   643→
+   644→   644→Envoi. L'application pousse les lignes par lots de 50 vers le serveur, dans l'ordre de saisie. Le serveur traite chaque événement de façon idempotente grâce à l'UUID : un doublon retourne le même accusé sans nouvelle écriture. En cas d'échec réseau, reprise avec attente croissante (2, 4, 8, 16 secondes, plafond 5 minutes).
+   645→   645→
+   646→   646→Déclenchement. Synchronisation en arrière-plan quand le navigateur la propose (Background Sync sur Android Chrome), à l'ouverture de l'application, au retour du réseau et sur bouton manuel.
+   647→   647→
+   648→   648→Horloge. Le serveur calcule le décalage entre l'horloge de l'appareil et la sienne à chaque synchronisation. Un décalage supérieur à 10 minutes lève une alerte au gérant et marque les lignes concernées.
+   649→   649→
+   650→   650→Limites. Durée maximale hors ligne : 7 jours. Passé ce délai, l'application bloque la saisie et demande une synchronisation. Un appareil révoqué efface ses données locales à sa prochaine connexion.
+   651→   651→
+   652→   652→Protection locale. Les données IndexedDB sont chiffrées avec une clé dérivée du code PIN de l'agent (AES-GCM par la Web Crypto API). Un téléphone perdu ne livre pas les carnets.
+   653→   653→
+   654→   654→Cohérence. Les encaissements ne se modifient pas, donc aucun conflit de fusion n'existe. Les seuls conflits possibles concernent les données de référence (nouveau cotisant, changement d'agent), où la version du serveur gagne.
+   655→   655→
+   656→   656→### 14.8 Authentification et autorisations
+   657→   657→
+   658→   658→| ÉLÉMENT | SPÉCIFICATION |
+   659→   659→| --- | --- |
+   660→   660→| Identifiant | Numéro de téléphone |
+   661→   661→| Secret | Code PIN à 6 chiffres, haché avec Argon2id |
+   662→   662→| Premier appareil | Code SMS à usage unique pour enregistrer l'appareil |
+   663→   663→| Double facteur | Propriétaire et gérant : code SMS ou application TOTP à chaque nouvelle session |
+   664→   664→| Verrouillage | 5 essais erronés, blocage de 15 minutes, alerte au gérant |
+   665→   665→| Sessions web | Jeton d'accès de 15 minutes, jeton de renouvellement à rotation, cookie httpOnly et SameSite |
+   666→   666→| Sessions agent | Jeton lié à l'appareil, durée 30 jours, révocation à distance par le gérant |
+   667→   667→| Administrateur YEHI OR Tech | Compte séparé, double facteur obligatoire, chaque accès aux données d'une structure s'inscrit au journal d'audit |
+   668→   668→
+   669→   669→Matrice des droits :
+   670→   670→
+   671→   671→| ACTION | AGENT | CONTRÔLEUR | GÉRANT | PROPRIÉTAIRE |
+   672→   672→| --- | --- | --- | --- | --- |
+   673→   673→| Voir ses propres clients | Oui | Oui | Oui | Oui |
+   674→   674→| Voir tous les clients | Non | Oui | Oui | Oui |
+   675→   675→| Enregistrer un encaissement | Oui | Non | Oui | Oui |
+   676→   676→| Annuler un encaissement | Non | Non | Oui | Oui |
+   677→   677→| Déclarer sa clôture | Oui | Non | Non | Non |
+   678→   678→| Valider une clôture | Non | Non | Oui | Oui |
+   679→   679→| Exporter le journal d'audit | Non | Oui | Oui | Oui |
+   680→   680→| Gérer agents et appareils | Non | Non | Oui | Oui |
+   681→   681→| Changer de palier et payer | Non | Non | Non | Oui |
+   682→   682→
+   683→   683→### 14.9 Interface de programmation (API)
+   684→   684→
+   685→   685→Toutes les routes passent par HTTPS, portent le préfixe /v1 et exigent un jeton. Les réponses d'erreur suivent un format unique avec un code lisible par machine et un message en français.
+   686→   686→
+   687→   687→| MÉTHODE ET ROUTE | RÔLE MINIMAL | DESCRIPTION |
+   688→   688→| --- | --- | --- |
+   689→   689→| POST /auth/login | public | Connexion par téléphone et PIN |
+   690→   690→| POST /auth/otp/verify | public | Validation du code SMS |
+   691→   691→| POST /auth/refresh | connecté | Renouvellement du jeton |
+   692→   692→| POST /structures | public | Demande d'inscription avec justificatif |
+   693→   693→| GET /me/route | agent | Tournée du jour et soldes |
+   694→   694→| POST /sync/push | agent | Envoi d'un lot d'événements, réponse idempotente |
+   695→   695→| GET /sync/pull | agent | Données de référence depuis un curseur |
+   696→   696→| GET /contributors | agent | Liste filtrée par agent ou quartier |
+   697→   697→| POST /contributors | gérant | Nouveau cotisant |
+   698→   698→| POST /passbooks | gérant | Nouveau carnet |
+   699→   699→| POST /collections/{id}/reverse | gérant | Annulation d'un encaissement |
+   700→   700→| POST /payments/link | agent | Génération d'un lien de paiement |
+   701→   701→| POST /webhooks/fedapay | public signé | Réception des événements de paiement |
+   702→   702→| POST /closings/declare | agent | Déclaration de caisse |
+   703→   703→| POST /closings/{id}/validate | gérant | Validation ou contestation |
+   704→   704→| GET /dashboard/summary | gérant | Indicateurs du jour, de la semaine, du mois |
+   705→   705→| GET /exports/{type} | gérant | Export Excel ou PDF |
+   706→   706→| GET /audit | contrôleur | Journal d'audit paginé et exportable |
+   707→   707→| GET /billing/invoices | propriétaire | Factures et état de l'abonnement |
+   708→   708→| POST /admin/structures/{id}/approve | administrateur | Validation d'une structure en attente |
+   709→   709→
+   710→   710→Limites de débit : 60 requêtes par minute et par utilisateur, 10 par minute sur les routes d'authentification, 300 par minute sur la route de synchronisation.
+   711→   711→
+   712→   712→### 14.10 Paiement mobile money
+   713→   713→
+   714→   714→Parcours.
+   715→   715→
+   716→   716→1. L'agent demande un lien de paiement pour un carnet. L'API écrit une ligne payments au statut created, puis appelle le fournisseur et passe à pending.
+   717→   717→2. Le cotisant règle sur son téléphone.
+   718→   718→3. Le fournisseur appelle le webhook. L'API vérifie la signature de l'en-tête selon la documentation du fournisseur, enregistre l'événement dans webhook\_events (clé unique sur event\_id) et répond immédiatement.
+   719→   719→4. Une tâche de fond traite l'événement. Si le statut est approved, elle écrit l'encaissement correspondant avec method égal à mobile\_money et envoie le reçu SMS.
+   720→   720→5. Un rapprochement nocturne interroge le fournisseur pour chaque paiement resté pending depuis plus de 30 minutes et corrige le statut.
+   721→   721→
+   722→   722→Règles. Le montant d'un paiement approuvé doit correspondre exactement au montant demandé, sinon le paiement passe en revue manuelle. Un événement reçu deux fois ne produit qu'une écriture. Le contrat exact des webhooks et des signatures se relit dans la documentation du fournisseur avant l'implémentation.
+   723→   723→
+   724→   724→Les fonds ne transitent jamais par un compte TontiHelm. Le compte marchand appartient à la structure cliente, qui l'ouvre auprès du fournisseur. L'ouverture du compte marchand est une étape de l'inscription pour les structures qui veulent le mobile money.
+   725→   725→
+   726→   726→### 14.11 Notifications
+   727→   727→
+   728→   728→- Chaque envoi passe par la table notifications et une tâche de fond avec trois essais.
+   729→   729→- Le coût de chaque SMS s'enregistre en FCFA pour la refacturation mensuelle.
+   730→   730→- Un quota quotidien par structure évite les envois en boucle (valeur de départ : 3 SMS par cotisant et par jour).
+   731→   731→- Les modèles WhatsApp se soumettent à l'approbation de Meta avant le lancement du palier Pro. Le SMS sert de secours si l'envoi WhatsApp échoue.
+   732→   732→- Les textes des modèles figurent à la section 13.5.
+   733→   733→
+   734→   734→### 14.12 Journal d'audit
+   735→   735→
+   736→   736→- Chaque écriture métier (encaissement, annulation, clôture, changement de droits, export) crée une ligne dans audit\_log dans la même transaction que l'écriture.
+   737→   737→- Chaque ligne stocke le hash de la ligne précédente de la même structure. Le hash se calcule sur le contenu et le hash précédent. Toute altération casse la chaîne.
+   738→   738→- Une tâche quotidienne recalcule la chaîne et alerte l'administrateur en cas de rupture.
+   739→   739→- Le rôle de base de données de l'application n'a aucun droit de modification ni de suppression sur cette table.
+   740→   740→
+   741→   741→### 14.13 Facturation de l'abonnement
+   742→   742→
+   743→   743→États de l'abonnement : essai, actif, en retard, lecture seule, annulé.
+   744→   744→
+   745→   745→| TRANSITION | DÉCLENCHEUR |
+   746→   746→| --- | --- |
+   747→   747→| essai vers actif | Paiement de la première facture avant la fin des 60 jours |
+   748→   748→| essai vers lecture seule | Fin de l'essai sans paiement |
+   749→   749→| actif vers en retard | Facture non réglée à l'échéance |
+   750→   750→| en retard vers lecture seule | 15 jours après l'échéance |
+   751→   751→| lecture seule vers actif | Règlement de la facture |
+   752→   752→| tout état vers annulé | Demande du propriétaire, export complet proposé avant |
+   753→   753→
+   754→   754→Calendrier de relance : message à l'échéance, puis aux jours 5, 10 et 14. Le mode lecture seule conserve toutes les données et autorise les exports. Il bloque la saisie d'encaissements.
+   755→   755→
+   756→   756→Facture mensuelle : montant du palier, cotisants actifs au-delà du quota multipliés par 50 FCFA, agents supplémentaires multipliés par 2 000 FCFA, SMS consommés avec marge, TVA au taux en vigueur (à confirmer avec le comptable). Les quotas se mesurent au dernier jour du mois.
+   757→   757→
+   758→   758→### 14.14 Sécurité
+   759→   759→
+   760→   760→| SUJET | SPÉCIFICATION |
+   761→   761→| --- | --- |
+   762→   762→| Transport | TLS 1.2 minimum, HSTS, redirection forcée vers HTTPS |
+   763→   763→| Stockage | Chiffrement au repos par l'hébergeur, chiffrement applicatif AES-256-GCM pour les numéros de pièce d'identité |
+   764→   764→| Clés | Stockées dans le coffre de secrets de l'hébergeur, rotation annuelle |
+   765→   765→| Web | Politique CSP stricte, protection CSRF, en-têtes de sécurité, validation Zod sur chaque entrée |
+   766→   766→| Dépendances | Analyse automatique à chaque requête de fusion, mises à jour hebdomadaires |
+   767→   767→| Accès base | Aucune connexion directe depuis l'extérieur, comptes nominatifs pour les administrateurs, journal des accès |
+   768→   768→| Sauvegardes | Sauvegarde continue avec restauration à la minute sur 7 jours, test de restauration mensuel documenté |
+   769→   769→| Incident | Procédure écrite : détection, isolement, information des structures concernées, analyse après coup |
+   770→   770→| Données personnelles | Registre des traitements, base légale par traitement, durée de conservation fixée avec le juriste, export et suppression sur demande d'une structure |
+   771→   771→
+   772→   772→### 14.15 Performance et dimensionnement
+   773→   773→
+   774→   774→| MESURE | CIBLE |
+   775→   775→| --- | --- |
+   776→   776→| Envoi de 50 événements de synchronisation | 95e centile sous 500 ms |
+   777→   777→| Chargement du tableau de bord | Sous 2 secondes avec 100 000 encaissements |
+   778→   778→| Première ouverture de l'application agent sur 3G | Sous 4 secondes |
+   779→   779→| Poids du paquet JavaScript de l'application agent | Sous 200 Ko compressés |
+   780→   780→| Capacité de départ | 1 000 agents, 300 000 encaissements par jour |
+   781→   781→| Index obligatoires | collections (tenant\_id, collected\_at), collections (passbook\_id), passbooks (agent\_id, status), audit\_log (tenant\_id, seq) |
+   782→   782→
+   783→   783→Un test de charge avec k6 simule 500 agents qui se synchronisent en même temps après une coupure de réseau. Il passe avant la mise en production.
+   784→   784→
+   785→   785→### 14.16 Observabilité
+   786→   786→
+   787→   787→- Journaux structurés avec identifiant de requête et identifiant de structure, sans donnée personnelle en clair.
+   788→   788→- Alertes : taux d'erreur de synchronisation supérieur à 2 %, webhooks de paiement en échec, file de tâches en retard de plus de 10 minutes, rupture de la chaîne d'audit, espace disque de la base.
+   789→   789→- Tableau de bord interne : structures actives, encaissements par jour, SMS envoyés, paiements approuvés, abonnements par état.
+   790→   790→
+   791→   791→### 14.17 Back-office YEHI OR Tech
+   792→   792→
+   793→   793→- File de validation des structures avec visualisation du justificatif et boutons d'approbation, de refus avec motif et de demande de complément.
+   794→   794→- Fiche structure : palier, quotas, consommation de SMS, factures, appareils.
+   795→   795→- Suspension immédiate d'une structure avec motif consigné.
+   796→   796→- Prise de contrôle en lecture seule pour le support, consignée au journal d'audit.
+   797→   797→
+   798→   798→### 14.18 Environnements et livraison
+   799→   799→
+   800→   800→| ENVIRONNEMENT | USAGE | DONNÉES |
+   801→   801→| --- | --- | --- |
+   802→   802→| Développement | Poste du développeur | Données fictives |
+   803→   803→| Préproduction | Recette et démonstrations | Données fictives réalistes, fournisseurs en mode test |
+   804→   804→| Production | Clients | Données réelles |
+   805→   805→
+   806→   806→Pipeline à chaque modification : analyse de style, vérification des types, tests unitaires du paquet domain, tests d'intégration sur une vraie base PostgreSQL, tests de bout en bout avec Playwright (dont le scénario hors ligne), déploiement de prévisualisation. Les migrations de base passent d'abord en préproduction et doivent pouvoir se défaire.
+   807→   807→
+   808→   808→### 14.19 Critères de recette
+   809→   809→
+   810→   810→1. Un agent hors ligne enregistre 100 encaissements, retrouve le réseau et le serveur contient exactement 100 lignes, sans doublon, même après 3 envois répétés.
+   811→   811→2. Un agent d'une structure A n'obtient jamais une donnée de la structure B, sur toutes les routes testées.
+   812→   812→3. Un encaissement annulé laisse deux lignes dans la base et un solde correct.
+   813→   813→4. Une clôture validée refuse toute modification des encaissements de la journée.
+   814→   814→5. Un webhook de paiement reçu deux fois produit un seul encaissement et un seul SMS.
+   815→   815→6. Un paiement approuvé au montant différent passe en revue manuelle.
+   816→   816→7. Un téléphone révoqué efface ses données locales à la connexion suivante.
+   817→   817→8. Une modification manuelle d'une ligne d'audit en base est détectée par la tâche de contrôle de la chaîne.
+   818→   818→9. Une facture impayée à 15 jours place la structure en lecture seule sans suppression de données.
+   819→   819→10. Le test de charge de 500 agents respecte les cibles de la section 14.15.
+   820→   820→11. La restauration d'une sauvegarde à un instant donné se réalise en moins de 2 heures lors du test mensuel.
+   821→   821→12. L'export Excel d'une structure de 100 000 encaissements se termine en moins de 60 secondes.
+   822→   822→
+   823→   823→### 14.20 Hors périmètre technique du MVP
+   824→   824→
+   825→   825→Application iOS native, portail cotisant, module de crédit, comptabilité générale, scoring par IA, API publique pour partenaires. Chacun de ces blocs s'ajoute sans refonte, car le modèle en événements et les interfaces de fournisseurs sont prévus pour cela.
+   826→   826→
+   827→   827→## 15. Document de design (design system, composants, responsivité)
+   828→   828→
+   829→   829→### 15.1 Principes de design
+   830→   830→
+   831→   831→1. Lisible en plein soleil. L'agent travaille dehors sur un téléphone Android d'entrée de gamme. Contrastes forts, texte de 16 px minimum, aucune information portée par la couleur seule.
+   832→   832→2. Une main, un pouce. Sur mobile, les actions principales se placent dans le tiers bas de l'écran, avec des cibles tactiles de 48 px minimum.
+   833→   833→3. Le montant au centre. Les chiffres sont le contenu. Ils s'affichent grands, alignés, en chiffres tabulaires.
+   834→   834→4. Sobre et institutionnel. La cible gère l'argent d'autrui. L'interface inspire la rigueur : peu de couleurs, aucune décoration gratuite, aucun emoji.
+   835→   835→5. Léger. Chaque composant ajouté pèse sur le budget JavaScript de 200 Ko de l'application agent. Un composant spectaculaire mais lourd est refusé.
+   836→   836→6. Mobile d'abord. Chaque écran se conçoit à 360 px de large, puis s'enrichit pour la tablette et le bureau.
+   837→   837→
+   838→   838→### 15.2 Trois surfaces, trois usages
+   839→   839→
+   840→   840→| SURFACE | UTILISATEUR | APPAREIL PRINCIPAL | PRIORITÉ DE DESIGN |
+   841→   841→| --- | --- | --- | --- |
+   842→   842→| Site vitrine | Gérant, dirigeant de SFD | Smartphone, puis ordinateur | Conviction et lisibilité |
+   843→   843→| Back-office | Gérant, propriétaire, contrôleur | Ordinateur et tablette | Densité d'information et rapidité de lecture |
+   844→   844→| Application agent (PWA) | Agent collecteur | Smartphone Android | Vitesse de saisie et robustesse hors ligne |
+   845→   845→
+   846→   846→### 15.3 Identité visuelle
+   847→   847→
+   848→   848→La palette ci-dessous est une palette de travail. Elle se confirme dès que le logo TontiHelm existe, et les couleurs se lisent alors sur le logo lui-même, sans approximation. Le logo ne se pose jamais sur une couleur issue de sa propre palette.
+   849→   849→
+   850→   850→| ROLE | NOM | VALEUR | USAGE | CONTRASTE |
+   851→   851→| --- | --- | --- | --- | --- |
+   852→   852→| Primaire | Vert institution | #0F6B4A | Boutons, liens, états actifs | 6,5 à 1 sur blanc |
+   853→   853→| Accent | Or | #C8962E | Détails sur fond sombre, chiffres clés du hero | 6,7 à 1 sur l'encre, insuffisant sur blanc |
+   854→   854→| Encre | Noir vert | #0B1A14 | Texte principal, pied de page, hero sombre | Base |
+   855→   855→| Fond | Papier | #F7F8F5 | Fond des pages | Base |
+   856→   856→| Surface | Blanc | #FFFFFF | Cartes, tableaux, formulaires | Base |
+   857→   857→| Bordure | Gris vert | #DDE3DC | Séparateurs, contours | Décoratif |
+   858→   858→| Texte secondaire | Gris encre | #4A5A50 | Légendes, aides | 7,3 à 1 sur blanc |
+   859→   859→| Succès | Vert franc | #167A3E | Carnet à jour, clôture validée | 5,4 à 1 sur blanc |
+   860→   860→| Alerte | Ambre foncé | #B45309 | Retard léger, vérification | 5,0 à 1 sur blanc |
+   861→   861→| Danger | Rouge profond | #B42318 | Écart de caisse, erreur | 6,6 à 1 sur blanc |
+   862→   862→| Information | Bleu | #1D5FA8 | Synchronisation, aide | 6,5 à 1 sur blanc |
+   863→   863→
+   864→   864→Règles d'usage : l'or ne porte jamais de texte sur fond clair. Chaque statut combine une couleur, une icône et un mot, jamais la couleur seule. Les ratios se revérifient avec le contrôleur de contraste WebAIM avant la livraison.
+   865→   865→
+   866→   866→Jetons de design (Tailwind 4) :
+   867→   867→
+   868→   868→```css
+   869→   869→@import "tailwindcss";
+   870→   870→
+   871→   871→@theme {
+   872→   872→  --color-primary: #0F6B4A;
+   873→   873→  --color-primary-foreground: #FFFFFF;
+   874→   874→  --color-accent: #C8962E;
+   875→   875→  --color-ink: #0B1A14;
+   876→   876→  --color-canvas: #F7F8F5;
+   877→   877→  --color-surface: #FFFFFF;
+   878→   878→  --color-border: #DDE3DC;
+   879→   879→  --color-muted: #4A5A50;
+   880→   880→  --color-success: #167A3E;
+   881→   881→  --color-warning: #B45309;
+   882→   882→  --color-danger: #B42318;
+   883→   883→  --color-info: #1D5FA8;
+   884→   884→  --radius-md: 8px;
+   885→   885→  --radius-lg: 12px;
+   886→   886→  --font-sans: "Inter", system-ui, sans-serif;
+   887→   887→  --font-display: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+   888→   888→}
+   889→   889→```
+   890→   890→
+   891→   891→Les variables sémantiques de shadcn/ui (background, foreground, primary, muted, destructive, ring) se branchent sur ces jetons dans le fichier global. Tous les composants installés héritent ainsi de la palette sans modification locale.
+   892→   892→
+   893→   893→### 15.4 Typographie et format des montants
+   894→   894→
+   895→   895→Polices : Plus Jakarta Sans pour les titres, Inter pour le texte et les chiffres. Chargement par next/font, sous-ensemble latin, deux graisses par police au maximum. Les montants utilisent les chiffres tabulaires (font-variant-numeric: tabular-nums) pour aligner les colonnes.
+   896→   896→
+   897→   897→| RÔLE | MOBILE | TABLETTE | BUREAU |
+   898→   898→| --- | --- | --- | --- |
+   899→   899→| Titre principal du site (H1) | 32 px | 40 px | 56 px |
+   900→   900→| Titre de section (H2) | 24 px | 28 px | 36 px |
+   901→   901→| Titre de carte (H3) | 20 px | 22 px | 24 px |
+   902→   902→| Corps | 16 px | 16 px | 17 px |
+   903→   903→| Texte secondaire | 14 px | 14 px | 14 px |
+   904→   904→| Montant saisi par l'agent | 40 px | 48 px | non applicable |
+   905→   905→| Cellule de tableau | 14 px | 14 px | 14 px |
+   906→   906→
+   907→   907→Le corps ne descend jamais sous 16 px sur les écrans de saisie, pour éviter le zoom automatique des navigateurs mobiles dans les champs.
+   908→   908→
+   909→   909→Format des montants, une seule fonction pour toute l'application :
+   910→   910→
+   911→   911→```ts
+   912→   912→export const formatFCFA = (n: number) =>
+   913→   913→  new Intl.NumberFormat("fr-FR").format(n) + "\u00A0FCFA";
+   914→   914→// 15500 devient "15 500 FCFA" avec espaces insécables
+   915→   915→```
+   916→   916→
+   917→   917→### 15.5 Grille, espacements et points de rupture
+   918→   918→
+   919→   919→Échelle d'espacement : multiples de 4 px (4, 8, 12, 16, 24, 32, 48, 64). Rayons : 8 px pour les champs et boutons, 12 px pour les cartes. Ombres légères, uniquement sur les surfaces flottantes (menus, dialogues).
+   920→   920→
+   921→   921→| APPAREIL | LARGEUR | PRÉFIXE TAILWIND | COLONNES | MARGES | CONTENU MAXIMUM |
+   922→   922→| --- | --- | --- | --- | --- | --- |
+   923→   923→| Mobile | moins de 768 px | base | 4 | 16 px | pleine largeur |
+   924→   924→| Tablette | 768 à 1023 px | md | 8 | 24 px | pleine largeur |
+   925→   925→| Bureau | 1024 px et plus | lg | 12 | 32 px | 1200 px au site, pleine largeur au back-office |
+   926→   926→| Grand écran | 1280 px et plus | xl | 12 | 32 px | 1200 px |
+   927→   927→
+   928→   928→Largeurs de test obligatoires : 360, 390, 768, 820, 1024, 1280 et 1440 px, en portrait et en paysage pour la tablette.
+   929→   929→
+   930→   930→### 15.6 Stratégie des composants avec 21st.dev
+   931→   931→
+   932→   932→Principe. La base est shadcn/ui, déjà dans la stack. 21st.dev complète cette base avec des composants communautaires, tous écrits en React, Tailwind et compatibles shadcn. Chaque composant publié sur 21st.dev affiche un aperçu interactif et son code TSX complet, et s'installe par la commande shadcn ou se récupère dans Cursor et Claude Code par MCP.
+   933→   933→
+   934→   934→Procédure d'adoption d'un composant :
+   935→   935→
+   936→   936→1. Chercher sur 21st.dev par famille (voir tableau ci-dessous) et retenir 2 candidats.
+   937→   937→2. Appliquer la grille de contrôle : code TSX lisible, dépendances limitées, licence compatible avec un usage commercial, clavier et lecteur d'écran fonctionnels, aucun emoji dans le rendu, aucun effet WebGL ou animation permanente, poids ajouté inférieur à 15 Ko compressés.
+   938→   938→3. Installer avec la commande shadcn en collant l'adresse du composant copiée depuis sa page 21st.dev.
+   939→   939→4. Rebrancher sur les jetons de design de la section 15.3. Aucune couleur écrite en dur.
+   940→   940→5. Ranger le composant dans packages/ui, le déclarer dans le fichier COMPONENTS.md (nom, source, date, version, modifications faites) et fixer sa version.
+   941→   941→6. Le tester aux largeurs de la section 15.5.
+   942→   942→
+   943→   943→L'adresse exacte de chaque composant retenu se relève sur sa page 21st.dev au moment de l'installation et s'inscrit dans COMPONENTS.md. Ce document ne fige aucune adresse, car le catalogue évolue.
+   944→   944→
+   945→   945→Correspondance besoin, primitive et famille à chercher :
+   946→   946→
+   947→   947→| BESOIN | PRIMITIVE SHADCN/UI | FAMILLE 21ST.DEV À CHERCHER | SURFACE |
+   948→   948→| --- | --- | --- | --- |
+   949→   949→| Navigation latérale | Sidebar, Sheet, Breadcrumb | sidebar, navbar | Back-office |
+   950→   950→| Barre du bas pour l'agent | composant maison sur Tabs | bottom navigation, tab bar | Application agent |
+   951→   951→| Liste de cotisants et d'encaissements | Table, Data Table (TanStack), Pagination | data table | Back-office |
+   952→   952→| Cartes de chiffres | Card | stats, kpi | Back-office |
+   953→   953→| Graphiques | Chart (Recharts) | charts | Back-office |
+   954→   954→| Formulaires | Form, Input, Select, Combobox, Calendar | form, input | Toutes |
+   955→   955→| Code SMS à saisir | Input OTP | otp input | Connexion |
+   956→   956→| Messages de retour | Sonner, Alert, Badge | toast, alert | Toutes |
+   957→   957→| Chargement | Skeleton | skeleton | Toutes |
+   958→   958→| Fenêtres de confirmation | Dialog, Drawer | dialog, drawer | Toutes |
+   959→   959→| Section d'accueil du site | Button, Badge | hero | Site vitrine |
+   960→   960→| Grille de fonctionnalités | Card | features | Site vitrine |
+   961→   961→| Tarifs | Card, Badge, Toggle | pricing | Site vitrine |
+   962→   962→| Questions fréquentes | Accordion | faq | Site vitrine |
+   963→   963→| Pied de page | aucune | footer | Site vitrine |
+   964→   964→| Étapes d'inscription | composant maison | stepper | Inscription |
+   965→   965→| État vide | composant maison | empty state | Back-office |
+   966→   966→
+   967→   967→Composants refusés d'office : tout rendu WebGL, shader, animation de fond permanente, curseur personnalisé, effet de particules. Ils alourdissent le téléphone de l'agent et brouillent un produit financier.
+   968→   968→
+   969→   969→### 15.7 Catalogue des composants du produit
+   970→   970→
+   971→   971→Composants maison, construits sur les primitives ci-dessus et rangés dans packages/ui.
+   972→   972→
+   973→   973→| COMPOSANT | BASE | PROPRIÉTÉS PRINCIPALES | ÉTATS |
+   974→   974→| --- | --- | --- | --- |
+   975→   975→| AmountKeypad | Button | value, onChange, defaultAmount, maxAmount | normal, erreur de dépassement, désactivé |
+   976→   976→| CollectionRow | Card | contributorName, passbookNo, dayIndex, cycleDays, status, amountDue | à faire, encaissé, en retard, en attente d'envoi |
+   977→   977→| PassbookCard | Card | contributor, balance, paidDays, missedDays, status | actif, en retard, clos |
+   978→   978→| SyncStatusPill | Badge | state, pendingCount | synchronisé, en attente, hors réseau, erreur |
+   979→   979→| OfflineBanner | Alert | pendingCount | visible seulement hors réseau |
+   980→   980→| ClosingSummary | Card | declared, expected, gap | à déclarer, écart nul, écart à vérifier, validée |
+   981→   981→| GapBadge | Badge | gap | nul, positif, négatif |
+   982→   982→| KpiCard | Card | label, value, delta, trend | chargement, vide, normal |
+   983→   983→| ReceiptPreview | Card | structure, amount, date, passbook, balance | aperçu du SMS |
+   984→   984→| ResponsiveTable | Table | columns, rows, priorityColumns, cardRenderer | tableau à partir de 768 px, cartes en dessous |
+   985→   985→| StatusBadge | Badge | status | chaque statut avec icône, couleur et mot |
+   986→   986→
+   987→   987→États communs à tout composant de données : chargement (squelette), vide (message et action), erreur (message en français et bouton de reprise), hors réseau (indication claire), désactivé.
+   988→   988→
+   989→   989→Icônes : lucide-react, trait de 1,75 px, tailles 16, 20 et 24 px. Aucun emoji dans l'interface, les messages affichés ni les modèles de SMS.
+   990→   990→
+   991→   991→### 15.8 Disposition par surface et par appareil
+   992→   992→
+   993→   993→Application agent (PWA)
+   994→   994→
+   995→   995→| ÉLÉMENT | MOBILE | TABLETTE |
+   996→   996→| --- | --- | --- |
+   997→   997→| Navigation | Barre du bas à 4 entrées : Tournée, Encaisser, Clôture, Compte | Rail latéral compact à gauche |
+   998→   998→| Écran Tournée | Liste verticale de CollectionRow, filtre par quartier en haut | Deux volets en paysage : liste à gauche, détail du carnet à droite |
+   999→   999→| Écran Encaissement | Clavier numérique en bas, bouton Encaisser pleine largeur collé en bas | Clavier centré dans une carte de 420 px, détail du carnet à côté |
+  1000→  1000→| Indicateur de synchronisation | SyncStatusPill dans la barre du haut | Même emplacement |
+  1001→  1001→| Bannière hors réseau | Sous la barre du haut | Sous la barre du haut |
+  1002→  1002→| Cible tactile minimale | 48 px | 48 px |
+  1003→  1003→
+  1004→  1004→Back-office du gérant
+  1005→  1005→
+  1006→  1006→| ÉLÉMENT | MOBILE | TABLETTE | BUREAU |
+  1007→  1007→| --- | --- | --- | --- |
+  1008→  1008→| Navigation | Barre du haut et menu en tiroir (Sheet) | Sidebar réduite à des icônes, 72 px | Sidebar étendue, 256 px |
+  1009→  1009→| Cartes de chiffres | 1 colonne, défilement vertical | 2 colonnes | 4 colonnes |
+  1010→  1010→| Tableaux | Cartes empilées par ligne, 3 informations clés visibles | Tableau avec colonnes prioritaires, défilement horizontal limité au tableau | Tableau complet |
+  1011→  1011→| Filtres | Tiroir du bas (Drawer) | Barre de filtres repliable | Barre de filtres fixe |
+  1012→  1012→| Graphiques | Un graphique par écran, légende sous le graphique | 2 graphiques côte à côte | 2 à 3 graphiques en grille |
+  1013→  1013→| Actions de ligne | Menu à trois points | Menu à trois points | Boutons visibles au survol et menu |
+  1014→  1014→
+  1015→  1015→Site vitrine
+  1016→  1016→
+  1017→  1017→| SECTION | MOBILE | TABLETTE | BUREAU |
+  1018→  1018→| --- | --- | --- | --- |
+  1019→  1019→| Hero | Texte puis capture d'écran dessous | Texte puis capture dessous, grande taille | Texte à gauche, capture à droite |
+  1020→  1020→| Chiffres | Grille 2 par 2 | 4 en ligne | 4 en ligne |
+  1021→  1021→| Problème | 1 colonne | 2 colonnes | 4 colonnes |
+  1022→  1022→| Fonctionnalités | 1 colonne | 2 colonnes | 3 colonnes |
+  1023→  1023→| Tarifs | Cartes empilées, palier Pro en premier | 3 cartes côte à côte, resserrées | 3 cartes, Pro mise en avant |
+  1024→  1024→| Questions | Accordéon pleine largeur | Accordéon, largeur limitée à 720 px | Accordéon centré, 720 px |
+  1025→  1025→| Navigation | Menu en tiroir, bouton d'essai toujours visible | Menu complet en ligne | Menu complet en ligne |
+  1026→  1026→
+  1027→  1027→### 15.9 Maquette de l'écran d'encaissement (mobile, 360 px)
+  1028→  1028→
+  1029→  1029→```
+  1030→  1030→+--------------------------------+
+  1031→  1031→|  <  Carnet 0142    [Synchronisé]|
+  1032→  1032→|  Adjovi Marie                  |
+  1033→  1033→|  Jour 12 sur 31                |
+  1034→  1034→|                                |
+  1035→  1035→|  Solde cumulé      6 000 FCFA  |
+  1036→  1036→|  [ Carnet à jour ]             |
+  1037→  1037→|                                |
+  1038→  1038→|  Montant                       |
+  1039→  1039→|  +--------------------------+  |
+  1040→  1040→|  |        500 FCFA          |  |
+  1041→  1041→|  +--------------------------+  |
+  1042→  1042→|   [ 1 ]    [ 2 ]    [ 3 ]      |
+  1043→  1043→|   [ 4 ]    [ 5 ]    [ 6 ]      |
+  1044→  1044→|   [ 7 ]    [ 8 ]    [ 9 ]      |
+  1045→  1045→|   [ 0 ]    [ 00 ]   [ eff ]    |
+  1046→  1046→|                                |
+  1047→  1047→|  [  Encaisser 500 FCFA      ]  |
+  1048→  1048→+--------------------------------+
+  1049→  1049→```
+  1050→  1050→
+  1051→  1051→Règles de l'écran : le montant par défaut est la mise du carnet, validé en une touche. Le bouton Encaisser reste collé au bas de l'écran. Après validation, un retour visuel et une vibration courte confirment l'écriture, puis l'écran revient à la tournée.
+  1052→  1052→
+  1053→  1053→### 15.10 Écrans à maquetter
+  1054→  1054→
+  1055→  1055→| # | ÉCRAN | SURFACE | PRIORITÉ |
+  1056→  1056→| --- | --- | --- | --- |
+  1057→  1057→| 1 | Connexion par téléphone et PIN | Agent, back-office | MVP |
+  1058→  1058→| 2 | Tournée du jour | Agent | MVP |
+  1059→  1059→| 3 | Fiche carnet et encaissement | Agent | MVP |
+  1060→  1060→| 4 | Déclaration de clôture | Agent | MVP |
+  1061→  1061→| 5 | Tableau de bord du gérant | Back-office | MVP |
+  1062→  1062→| 6 | Liste des cotisants et fiche cotisant | Back-office | MVP |
+  1063→  1063→| 7 | Validation des clôtures et écarts | Back-office | MVP |
+  1064→  1064→| 8 | Journal d'audit | Back-office | MVP |
+  1065→  1065→| 9 | Abonnement et factures | Back-office | MVP |
+  1066→  1066→| 10 | Inscription d'une structure avec justificatif | Site, back-office | MVP |
+  1067→  1067→| 11 | Landing page (sections 1 à 9 du copywriting) | Site vitrine | MVP |
+  1068→  1068→| 12 | File de validation des structures | Administrateur | MVP |
+  1069→  1069→
+  1070→  1070→Chaque écran se livre en trois tailles (360, 768, 1280 px) avec ses états : chargement, vide, erreur, hors réseau.
+  1071→  1071→
+  1072→  1072→### 15.11 Accessibilité
+  1073→  1073→
+  1074→  1074→- Norme visée : WCAG 2.2 niveau AA.
+  1075→  1075→- Contraste du texte : 4,5 à 1 minimum, 3 à 1 pour les grands textes et les composants d'interface.
+  1076→  1076→- Focus clavier toujours visible, avec un anneau de 2 px dans la couleur primaire.
+  1077→  1077→- Cibles tactiles de 48 px minimum dans l'application agent, 40 px au back-office.
+  1078→  1078→- Chaque champ possède une étiquette visible. Les erreurs s'affichent sous le champ, en texte, et se lisent par les technologies d'assistance (aria-describedby).
+  1079→  1079→- La synchronisation et les confirmations s'annoncent dans une région aria-live polie.
+  1080→  1080→- Les statuts combinent icône, couleur et mot.
+  1081→  1081→- Le texte se zoome à 200 % sans perte de contenu ni défilement horizontal.
+  1082→  1082→- Les animations respectent la préférence de réduction de mouvement du système.
+  1083→  1083→- Langue de la page déclarée en français, noms accessibles pour chaque icône-bouton.
+  1084→  1084→
+  1085→  1085→### 15.12 Mouvement
+  1086→  1086→
+  1087→  1087→- Durées de 150 à 250 ms, courbe d'accélération douce, aucune animation en boucle.
+  1088→  1088→- Site vitrine : apparition progressive des sections au défilement et compteurs animés une seule fois, avec Framer Motion, désactivés si la réduction de mouvement est demandée.
+  1089→  1089→- Application agent : retour visuel court à l'encaissement, aucune autre animation.
+  1090→  1090→- Back-office : transitions de tiroirs et de dialogues uniquement.
+  1091→  1091→
+  1092→  1092→### 15.13 Performance du design
+  1093→  1093→
+  1094→  1094→| RÈGLE | SEUIL |
+  1095→  1095→| --- | --- |
+  1096→  1096→| Polices | 2 familles, sous-ensemble latin, chargement par next/font |
+  1097→  1097→| Images | WebP ou AVIF, composant next/image, dimensions déclarées |
+  1098→  1098→| JavaScript de l'application agent | Moins de 200 Ko compressés |
+  1099→  1099→| Composants lourds du back-office (graphiques, tableaux) | Chargement différé |
+  1100→  1100→| Décalage de mise en page | Inférieur à 0,1 |
+  1101→  1101→| Plus grand élément affiché (LCP) | Inférieur à 2,5 s sur le site vitrine |
+  1102→  1102→
+  1103→  1103→### 15.14 Matrice de tests responsive
+  1104→  1104→
+  1105→  1105→| APPAREIL | RÉSOLUTION | ORIENTATION | À VÉRIFIER |
+  1106→  1106→| --- | --- | --- | --- |
+  1107→  1107→| Android d'entrée de gamme | 360 par 640 | Portrait | Saisie à une main, lisibilité au soleil, fluidité |
+  1108→  1108→| Smartphone courant | 390 par 844 | Portrait | Barre du bas, clavier numérique, zone sûre |
+  1109→  1109→| Tablette | 768 par 1024 | Portrait et paysage | Rail latéral, deux volets, tableaux |
+  1110→  1110→| Tablette large | 820 par 1180 | Portrait et paysage | Même contrôle, grille à 8 colonnes |
+  1111→  1111→| Petit portable | 1024 par 768 | Paysage | Sidebar étendue, tableaux complets |
+  1112→  1112→| Ordinateur | 1280 et 1440 | Paysage | Largeur maximale, graphiques en grille |
+  1113→  1113→
+  1114→  1114→Contrôles à chaque livraison : aucun défilement horizontal de la page, aucune cible tactile sous 48 px dans l'application agent, texte lisible à 200 %, changement d'orientation sans perte de saisie, fonctionnement correct en mode hors réseau.
+  1115→  1115→
+  1116→  1116→### 15.15 Livrables et planning du design
+  1117→  1117→
+  1118→  1118→| LIVRABLE | FORMAT | SEMAINE |
+  1119→  1119→| --- | --- | --- |
+  1120→  1120→| Palette confirmée sur le logo, jetons de design | Fichier CSS et page de référence | 1 |
+  1121→  1121→| Choix des composants 21st.dev et fichier COMPONENTS.md | Document | 1 et 2 |
+  1122→  1122→| Maquettes des écrans 1 à 4 en trois tailles | Prototype cliquable | 2 |
+  1123→  1123→| Catalogue des composants maison | Storybook avec vues à 360, 768 et 1280 px | 3 à 4 |
+  1124→  1124→| Maquettes des écrans 5 à 12 | Prototype cliquable | 3 à 5 |
+  1125→  1125→| Landing page assemblée avec le copywriting de la section 13 | Site déployé en préproduction | 6 à 7 |
+  1126→  1126→| Audit d'accessibilité et rapport Lighthouse | PDF avec captures | 11 |
+  1127→  1127→
+  1128→  1128→Le design et le développement avancent en parallèle : chaque composant validé dans Storybook s'intègre aussitôt aux écrans.
+  1129→  1129→

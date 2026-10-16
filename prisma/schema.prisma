@@ -1,0 +1,212 @@
+// TontiHelm — schéma de données (adapté du cahier des charges §14.5)
+// SQLite : les montants restent des entiers (le FCFA n'a pas de centimes),
+// les payloads JSON sont stockés en texte, l'isolation multi-structure
+// est appliquée au niveau applicatif (tenantId sur chaque table métier).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Structure {
+  id             String   @id @default(cuid())
+  name           String
+  kind           String // 'sfd' | 'groupement' | 'pme'
+  licenseRef     String
+  licenseDocName String?
+  city           String?
+  status         String   @default("pending") // pending | active | suspended | closed
+  commissionDays Int      @default(1) // règle jours : valeur × mise journalière
+  lateThreshold  Int      @default(3) // jours manqués avant statut « en retard »
+  rejectionNote  String?
+  createdAt      DateTime @default(now())
+
+  users         User[]
+  contributors  Contributor[]
+  passbooks     Passbook[]
+  collections   Collection[]
+  closings      Closing[]
+  payments      Payment[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  subscription  Subscription?
+  invoices      Invoice[]
+}
+
+model User {
+  id          String    @id @default(cuid())
+  tenantId    String?
+  phone       String    @unique
+  fullName    String
+  role        String // 'owner' | 'manager' | 'agent' | 'controller' | 'admin'
+  pinHash     String
+  status      String    @default("active")
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  structure           Structure?           @relation(fields: [tenantId], references: [id])
+  sessions            Session[]
+  agentContributors   Contributor[]        @relation("AgentContributors")
+  agentPassbooks      Passbook[]           @relation("AgentPassbooks")
+  agentCollections    Collection[]         @relation("AgentCollections")
+  agentClosings       Closing[]            @relation("AgentClosings")
+  auditEntries        AuditLog[]           @relation("AuditActor")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Contributor {
+  id          String   @id @default(cuid())
+  tenantId    String
+  fullName    String
+  phone       String?
+  neighborhood String?
+  idNumber    String?
+  agentId     String
+  status      String   @default("active") // active | inactive
+  createdAt   DateTime @default(now())
+
+  structure Structure  @relation(fields: [tenantId], references: [id])
+  agent     User       @relation("AgentContributors", fields: [agentId], references: [id])
+  passbooks Passbook[]
+}
+
+model Passbook {
+  id            String    @id @default(cuid())
+  tenantId      String
+  contributorId String
+  agentId       String
+  number        String
+  dailyAmount   Int
+  cycleDays     Int
+  startsOn      DateTime
+  status        String    @default("active") // active | late | closed | withdrawn
+  closedAt      DateTime?
+  createdAt     DateTime  @default(now())
+
+  contributor Contributor  @relation(fields: [contributorId], references: [id])
+  agent       User         @relation("AgentPassbooks", fields: [agentId], references: [id])
+  structure   Structure    @relation(fields: [tenantId], references: [id])
+  collections Collection[]
+  payments    Payment[]
+}
+
+model Collection {
+  id          String   @id // UUID généré par l'application agent (idempotence)
+  tenantId    String
+  passbookId  String
+  agentId     String
+  amount      Int // positif ; négatif si écriture d'annulation
+  method      String // 'cash' | 'mobile_money'
+  dayIndex    Int // jour du cycle au moment de l'encaissement
+  reversesId  String? // référence à l'encaissement annulé
+  closingId   String?
+  collectedAt DateTime // horodatage de la collecte sur le terrain
+  receivedAt  DateTime @default(now()) // réception serveur
+
+  passbook Passbook @relation(fields: [passbookId], references: [id])
+  agent    User     @relation("AgentCollections", fields: [agentId], references: [id])
+  structure Structure @relation(fields: [tenantId], references: [id])
+}
+
+model Closing {
+  id           String    @id @default(cuid())
+  tenantId     String
+  agentId      String
+  day          DateTime
+  declaredCash Int
+  expectedCash Int
+  gap          Int
+  status       String    @default("open") // open | declared | validated | disputed
+  validatedBy  String?
+  validatedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  agent User @relation("AgentClosings", fields: [agentId], references: [id])
+  structure Structure @relation(fields: [tenantId], references: [id])
+}
+
+model Payment {
+  id            String    @id @default(cuid())
+  tenantId      String
+  passbookId    String
+  contributorId String
+  provider      String    @default("fedapay")
+  providerRef   String?
+  amount        Int
+  status        String    @default("created") // created | pending | approved | declined | expired | canceled
+  linkUrl       String?
+  createdAt     DateTime  @default(now())
+  settledAt     DateTime?
+
+  passbook Passbook @relation(fields: [passbookId], references: [id])
+  structure Structure @relation(fields: [tenantId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  tenantId  String
+  channel   String // 'sms' | 'whatsapp'
+  template  String // 'receipt' | 'late_reminder' | 'cycle_end'
+  toPhone   String?
+  content   String
+  status    String   @default("sent") // queued | sent | failed
+  costFcfa  Int      @default(0)
+  createdAt DateTime @default(now())
+  structure Structure @relation(fields: [tenantId], references: [id])
+}
+
+model AuditLog {
+  seq      Int      @id @default(autoincrement()) // ordre déterministe de la chaîne (§14.5 : bigserial PRIMARY KEY)
+  tenantId String
+  actorId  String?
+  action   String // 'login' | 'collection' | 'reverse' | 'closing_declared' | 'closing_validated' | 'structure_approved' | ...
+  entity   String
+  entityId String?
+  payload  String // JSON texte
+  prevHash String?
+  hash     String
+  at       DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id])
+  structure Structure @relation(fields: [tenantId], references: [id])
+}
+
+model Subscription {
+  id          String    @id @default(cuid())
+  tenantId    String    @unique
+  plan        String // 'demarrage' | 'pro' | 'institution'
+  status      String // 'trial' | 'active' | 'past_due' | 'read_only' | 'canceled'
+  trialEndsAt DateTime?
+  periodStart DateTime?
+  periodEnd   DateTime?
+  createdAt   DateTime  @default(now())
+
+  structure Structure @relation(fields: [tenantId], references: [id])
+}
+
+model Invoice {
+  id         String    @id @default(cuid())
+  tenantId   String
+  period     String // '2026-09'
+  baseAmount Int
+  extras     String // JSON texte : dépassements quota, SMS, agents supplémentaires
+  total      Int
+  status     String    @default("pending") // pending | paid
+  paidAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  structure Structure @relation(fields: [tenantId], references: [id])
+}
