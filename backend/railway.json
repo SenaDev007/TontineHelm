@@ -5,7 +5,7 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "bun src/index.ts",
+    "startCommand": "sh -c \"bunx prisma db push --skip-generate || echo '[startup] prisma db push a échoué'; bun src/scripts/bootstrap-admin.ts || echo '[startup] admin non amorcé'; exec bun src/index.ts\"",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
