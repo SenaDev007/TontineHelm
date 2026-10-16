@@ -85,8 +85,14 @@ pour éviter les conflits de prepared statements.
 ### 2. Backend — Railway
 
 1. Sur [Railway](https://railway.app), crée un service **à partir du dépôt GitHub** et
-   renseigne le **Root Directory = `backend`** (le `railway.json` et le `Procfile` y sont
-   déjà prêts).
+   renseigne le **Root Directory = `backend`** (le `Dockerfile`, le `railway.json`
+   — builder `DOCKERFILE` — et le `Procfile` y sont déjà prêts).
+   > Le build utilise une image Docker officielle Bun (`oven/bun:1`) plutôt que
+   > Nixpacks : le pin nixpkgs de Nixpacks v1.41 référence `nodejs_18`, qui a atteint
+   > sa fin de vie et a été retiré (`error: Node.js 18.x has reached End-Of-Life and
+   > has been removed`). Le Dockerfile reproduit exactement le même plan
+   > (`bun install` → `bunx prisma generate` → `bun src/index.ts`) sans dépendre de
+   > nixpkgs.
 2. Variables d'environnement du service — **tableau de référence complet** :
 
    | Variable | Obligatoire | Valeur d'exemple | Rôle |
@@ -145,6 +151,11 @@ PostgreSQL Neon (DATABASE_URL)
 
 ### 5. Pièges fréquents
 
+- **build Railway en échec** avec `Node.js 18.x has reached End-Of-Life and has been
+  removed` ? C'est le pin nixpkgs de Nixpacks qui est périmé ; le dépôt embarque
+  désormais un `backend/Dockerfile` (builder `DOCKERFILE` dans `railway.json`) qui
+  contourne définitivement le problème. Alternative rapide sans Dockerfile : variable
+  de service `NIXPACKS_NODE_VERSION=22` ;
 - `CORS_ORIGINS` : URL complètes avec `https://`, **sans barre finale**, séparées par des
   virgules sans espace (`https://a.vercel.app,https://b.vercel.app`) ;
 - le frontend affiche des erreurs réseau ? Vérifie que `/api/health` répond sur l'URL
