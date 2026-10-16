@@ -86,6 +86,56 @@ sans limite autre que les bornes du cycle — et rattraper les jours manqués. C
 
 ---
 
+## Mode hors ligne (offline-first) et synchronisation
+
+TontiHelm fonctionne **sans réseau de bout en bout** — du site vitrine jusqu'aux back-offices —
+et synchronise tout vers la base distante au retour de la connexion. Le patron est celui rodé
+sur Academia Helm, adapté à la taille de TontiHelm :
+
+| Brique | Fichier | Rôle |
+| --- | --- | --- |
+| Service worker | `public/sw.js` | Pages du site (`/`, pages légales) en NetworkFirst avec repli cache — le site se recharge hors ligne ; chunks `/_next/static` et images en CacheFirst. Les appels API ne sont **pas** interceptés (gérés par la couche applicative). |
+| Cache de lectures | `src/lib/offline/idb.ts` (store `response_cache`) | Chaque réponse GET réussie est mise en miroir dans IndexedDB, cloisonnée par utilisateur (empreinte du jeton) ; panne réseau → la réponse est servie depuis le cache (dernier état connu). |
+| File d'envoi | même fichier (store `outbox`) | Les mutations faites hors ligne sont mises en file avec leur requête exacte (URL, verbe, corps) ; l'interface reçoit un accusé `__offlineQueued` et continue normalement. |
+| Moteur de sync | `src/lib/offline/sync.ts` | Déclencheurs : retour du réseau (anti-rebond 1,5 s), chargement, cycle de 30 s. Rejeu FIFO exact vers les endpoints d'origine. **4xx = refus métier définitif** (conservé et affiché), **5xx/réseau = transitoire** (backoff 2/5/15/45/60 s avec gigue). |
+| Interface | `src/components/offline/OfflineLayer.tsx` | Bannière hors ligne (en flux, toutes les vues), pastille « N en attente d'envoi » (clic = forcer la sync), toast « Tout est synchronisé », bouton d'oubli des échecs. |
+
+- **Routes jamais mises en file** : `/api/auth/*` (la session doit exister), `/api/agent/sync`
+  (c'est elle le vidage de l'outbox agent), `/api/structures/register` (pièce jointe),
+  `/api/payments/*` (lien de paiement réel requis).
+- La **tournée de l'agent** garde son outbox dédié (localStorage, sync idempotente par
+  lots de 50) — inchangé et éprouvé en recette E2E.
+- **Purge à la déconnexion** : cache et file sont vidés (`clearOfflineData`) — aucune fuite
+  de données entre comptes sur un appareil partagé.
+- Les listes se rafraîchissent automatiquement après chaque passe de synchronisation
+  (hook `useSyncDone`).
+
+## Demandes de démonstration (aucun mode gratuit)
+
+Il n'existe **pas de mode gratuit** : la découverte du produit passe par une démonstration
+accompagnée, demandée depuis le site.
+
+- `POST /api/demo/request` (public, anti-abus 5 req/10 min par IP) — enregistre une demande
+  (nom, téléphone, structure, ville, taille approximative, message) dans la table
+  `DemoRequest` ; fonctionne même hors ligne (mise en file + envoi au retour du réseau).
+- `GET /api/admin/demo-requests` — file des demandes dans le back-office administrateur
+  (statuts : nouvelle / contactée / convertie / clôturée, bouton WhatsApp direct).
+- Relais direct : bouton **WhatsApp** sur le site (`wa.me/2290141360803`, message pré-rempli).
+
+## Pages légales
+
+Trois pages réelles, conformes au droit béninois, servies et pré-cachées par le service
+worker :
+
+- `/conditions-utilisation` — CGU : Code du numérique (loi n° 2017-20), cadre SFD/agément,
+  abonnements, hors ligne et responsabilité ;
+- `/confidentialite` — loi n° 2009-09 (protection des données personnelles), APDP,
+  finalités, durées, droits, sous-traitants ;
+- `/mentions-legales` — éditeur YEHI OR Tech (Parakou), directeur de publication,
+  hébergeurs (Vercel / Railway / Neon), propriété intellectuelle.
+
+---
+
 ## Déploiement
 
 ### 1. Base de données — PostgreSQL Neon

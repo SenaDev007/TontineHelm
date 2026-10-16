@@ -218,6 +218,19 @@ export interface AdminStructure {
   counts: { contributors: number; users: number; collections: number };
 }
 
+export interface DemoRequestRow {
+  id: string;
+  fullName: string;
+  phone: string;
+  structure: string;
+  city: string | null;
+  contributors: number | null;
+  agents: number | null;
+  message: string | null;
+  status: "new" | "contacted" | "converted" | "closed";
+  createdAt: string;
+}
+
 export interface OutboxEvent {
   id: string;
   passbookId: string;

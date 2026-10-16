@@ -1,6 +1,6 @@
 "use client";
-// TontiHelm — back-office YEHI OR Tech (§14.17, écran 12) : file de validation des structures,
-// visualisation du justificatif, approbation (essai 60 jours activé), refus avec motif, suspension.
+// TontiHelm — back-office YEHI OR Tech (§14.17, écran 12) : demandes de démonstration,
+// file de validation des structures, visualisation du justificatif, approbation, refus avec motif, suspension.
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,15 +8,23 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { AdminStructure, KIND_LABELS } from "@/lib/types";
-import { get, post } from "@/lib/client";
+import { AdminStructure, DemoRequestRow, KIND_LABELS } from "@/lib/types";
+import { get, isOfflineQueued, post } from "@/lib/client";
 import { LogoWordmark } from "../Logo";
 import { StatusBadge } from "../StatusBadge";
-import { ShieldCheck, ShieldAlert, FileText, LogOut, Inbox, Building2, Users, Receipt } from "lucide-react";
+import { ShieldCheck, ShieldAlert, FileText, LogOut, Inbox, Building2, Users, Receipt, CalendarClock, Phone, MessageSquare } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+
+const DEMO_STATUS: Record<string, { label: string; tone: "info" | "success" | "warning" | "neutral" }> = {
+  new: { label: "Nouvelle", tone: "info" },
+  contacted: { label: "Contactée", tone: "warning" },
+  converted: { label: "Convertie", tone: "success" },
+  closed: { label: "Clôturée", tone: "neutral" },
+};
 
 export function AdminApp({ onLogout }: { onLogout: () => void }) {
   const [structures, setStructures] = useState<AdminStructure[] | null>(null);
+  const [demoRequests, setDemoRequests] = useState<DemoRequestRow[] | null>(null);
   const [refuseTarget, setRefuseTarget] = useState<AdminStructure | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -28,6 +36,12 @@ export function AdminApp({ onLogout }: { onLogout: () => void }) {
     } catch {
       toast({ title: "File indisponible", description: "Impossible de charger les structures." });
     }
+    try {
+      const r = await get<{ requests: DemoRequestRow[] }>("/api/admin/demo-requests");
+      setDemoRequests(r.requests);
+    } catch {
+      setDemoRequests([]);
+    }
   }, []);
 
   useEffect(() => {
@@ -38,10 +52,27 @@ export function AdminApp({ onLogout }: { onLogout: () => void }) {
     setBusy(structureId);
     try {
       const res = await post<{ message: string }>("/api/admin/structures", { structureId, action, note });
-      toast({ title: res.message });
+      if (isOfflineQueued(res)) {
+        toast({ title: "Décision enregistrée hors ligne.", description: "Elle partira au serveur dès le retour du réseau." });
+      } else {
+        toast({ title: res.message });
+        await load();
+      }
       setRefuseTarget(null);
       setNote("");
-      await load();
+    } catch (err) {
+      toast({ title: "Action impossible", description: err instanceof Error ? err.message : "Réessaie." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function setDemoStatus(id: string, status: "contacted" | "converted" | "closed") {
+    setBusy(id);
+    try {
+      await post("/api/admin/demo-requests", { id, status });
+      setDemoRequests((prev) => prev?.map((r) => (r.id === id ? { ...r, status } : r)) ?? null);
+      toast({ title: "Statut mis à jour." });
     } catch (err) {
       toast({ title: "Action impossible", description: err instanceof Error ? err.message : "Réessaie." });
     } finally {
@@ -51,6 +82,7 @@ export function AdminApp({ onLogout }: { onLogout: () => void }) {
 
   const pending = structures?.filter((s) => s.status === "pending") ?? [];
   const others = structures?.filter((s) => s.status !== "pending") ?? [];
+  const newDemos = demoRequests?.filter((r) => r.status === "new") ?? [];
 
   return (
     <div className="min-h-screen bg-canvas">
@@ -69,6 +101,87 @@ export function AdminApp({ onLogout }: { onLogout: () => void }) {
       </header>
 
       <main className="mx-auto max-w-5xl space-y-8 px-4 py-8 md:px-6">
+        {/* Demandes de démonstration */}
+        <section>
+          <h1 className="font-display flex items-center gap-2 text-xl font-bold text-ink">
+            <CalendarClock className="h-5 w-5 tontihelm-icon text-primary" aria-hidden />
+            Demandes de démonstration ({newDemos.length})
+          </h1>
+          <p className="mt-1 text-sm text-subtle">
+            Gérants qui ont demandé à voir l'application avant de s'inscrire. Contacte-les sous 24 heures ouvrées.
+          </p>
+
+          {!demoRequests && (
+            <div className="mt-4 space-y-3">{[...Array(2)].map((_, i) => <Skeleton key={i} className="h-28 rounded-lg" />)}</div>
+          )}
+
+          <div className="mt-4 space-y-3">
+            {demoRequests && demoRequests.length === 0 && (
+              <Card className="border-line">
+                <CardContent className="p-6 text-sm text-subtle">
+                  Aucune demande de démonstration pour le moment.
+                </CardContent>
+              </Card>
+            )}
+            {demoRequests?.map((r) => (
+              <Card key={r.id} className="border-line">
+                <CardContent className="p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-ink">{r.structure}</p>
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-subtle">
+                        <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" aria-hidden /> {r.fullName}</span>
+                        <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" aria-hidden /> {r.phone}</span>
+                        {r.city && <span>{r.city}</span>}
+                        {r.contributors != null && <span>≈ {r.contributors} cotisants</span>}
+                        {r.agents != null && <span>{r.agents} agents</span>}
+                      </p>
+                      {r.message && <p className="mt-2 rounded-md bg-[#F4F7FB] p-2.5 text-xs text-subtle">« {r.message} »</p>}
+                      <p className="mt-1.5 text-[11px] text-subtle">
+                        Reçue le {new Date(r.createdAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <StatusBadge label={DEMO_STATUS[r.status]?.label ?? r.status} tone={DEMO_STATUS[r.status]?.tone ?? "neutral"} />
+                      <div className="flex flex-wrap gap-1.5">
+                        {r.status === "new" && (
+                          <a
+                            href={`https://wa.me/${r.phone.replace(/[^0-9]/g, "")}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#25D366]/60 bg-[#E9F9EF] px-2.5 text-xs font-semibold text-[#128C4A] transition-colors hover:bg-[#D2F2DE]"
+                          >
+                            <MessageSquare className="h-3.5 w-3.5" aria-hidden /> Contacter
+                          </a>
+                        )}
+                        {r.status !== "converted" && r.status !== "closed" && (
+                          <>
+                            {r.status === "new" && (
+                              <Button variant="outline" size="sm" disabled={busy === r.id} onClick={() => setDemoStatus(r.id, "contacted")} className="h-8 border-line text-xs">
+                                Marquer contactée
+                              </Button>
+                            )}
+                            {r.status === "contacted" && (
+                              <Button size="sm" disabled={busy === r.id} onClick={() => setDemoStatus(r.id, "converted")} className="h-8 bg-primary text-xs text-primary-foreground hover:bg-primary-hover">
+                                Convertie
+                              </Button>
+                            )}
+                          </>
+                        )}
+                        {r.status !== "closed" && (
+                          <Button variant="outline" size="sm" disabled={busy === r.id} onClick={() => setDemoStatus(r.id, "closed")} className="h-8 border-line text-xs">
+                            Clôturer
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+
         {/* File de validation */}
         <section>
           <h1 className="font-display flex items-center gap-2 text-xl font-bold text-ink">
@@ -124,7 +237,7 @@ export function AdminApp({ onLogout }: { onLogout: () => void }) {
                       disabled={busy === s.id}
                       className="bg-primary text-primary-foreground hover:bg-primary-hover"
                     >
-                      <ShieldCheck className="h-4 w-4" aria-hidden /> Valider et activer l'essai
+                      <ShieldCheck className="h-4 w-4" aria-hidden /> Valider et activer
                     </Button>
                     <Button
                       variant="outline"

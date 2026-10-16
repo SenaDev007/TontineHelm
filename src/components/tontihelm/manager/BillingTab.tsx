@@ -59,7 +59,7 @@ export function BillingTab({ user }: { user: SessionUser }) {
               {sub.status === "trial" && sub.trialEndsAt && (
                 <p className="mt-3 flex items-center gap-2 rounded-lg bg-[#E8F1FD] px-3 py-2 text-sm text-[#0B6BCB]">
                   <Clock className="h-4 w-4" aria-hidden />
-                  Fin de l'essai le {new Date(sub.trialEndsAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}.
+                  Active ton abonnement avant le {new Date(sub.trialEndsAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} pour garder les encaissements actifs.
                 </p>
               )}
               {sub.status === "past_due" && (

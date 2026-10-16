@@ -8,7 +8,9 @@ import { Hero } from "@/components/tontihelm/landing/Hero";
 import { Stats } from "@/components/tontihelm/landing/Stats";
 import { Problem, Features, Method, Trust } from "@/components/tontihelm/landing/Sections";
 import { Pricing } from "@/components/tontihelm/landing/Pricing";
-import { Faq, FinalCta, Footer } from "@/components/tontihelm/landing/Faq";
+import { Faq, FinalCta } from "@/components/tontihelm/landing/Faq";
+import { DemoSection } from "@/components/tontihelm/landing/DemoSection";
+import { Footer } from "@/components/tontihelm/landing/Footer";
 import { LoginScreen } from "@/components/tontihelm/auth/LoginScreen";
 import { PendingScreen } from "@/components/tontihelm/auth/PendingScreen";
 import { RegisterScreen } from "@/components/tontihelm/register/RegisterScreen";
@@ -16,10 +18,16 @@ import { AgentApp } from "@/components/tontihelm/agent/AgentApp";
 import { ManagerApp } from "@/components/tontihelm/manager/ManagerApp";
 import { AdminApp } from "@/components/tontihelm/admin/AdminApp";
 import { LogoAnimated } from "@/components/tontihelm/Logo";
-import { get, post, setToken } from "@/lib/client";
+import { OfflineLayer } from "@/components/offline/OfflineLayer";
+import { clearOfflineData, get, post, setToken } from "@/lib/client";
 import { SessionUser, SubscriptionInfo } from "@/lib/types";
 
 type View = "landing" | "login" | "register";
+
+/** Défilement doux vers la section Démonstration (pas de mode gratuit : démo accompagnée). */
+function scrollToDemo() {
+  document.getElementById("demonstration")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 
 export default function TontiHelmApp() {
   const [booting, setBooting] = useState(true);
@@ -45,6 +53,8 @@ export default function TontiHelmApp() {
       /* la session expire de toute façon */
     }
     setToken(null);
+    // Purge des données locales (cache IndexedDB + file d'envoi) : isolation par compte.
+    void clearOfflineData();
     setUser(null);
     setSubscription(null);
     setView("landing");
@@ -58,8 +68,10 @@ export default function TontiHelmApp() {
       .catch(() => undefined);
   }, []);
 
+  let content: React.ReactNode;
+
   if (booting) {
-    return (
+    content = (
       <div className="flex min-h-screen items-center justify-center bg-canvas" role="status" aria-live="polite">
         <div className="text-center animate-fade-in">
           <div className="flex justify-center">
@@ -73,46 +85,49 @@ export default function TontiHelmApp() {
         </div>
       </div>
     );
-  }
-
-  // ── Utilisateur connecté ──
-  if (user) {
-    // Structure en attente de validation ou suspendue : écran d'attente.
+  } else if (user) {
+    // ── Utilisateur connecté ──
     if (user.tenantId && user.structureStatus !== "active") {
-      return <PendingScreen user={user} onLogout={handleLogout} />;
+      // Structure en attente de validation ou suspendue : écran d'attente.
+      content = <PendingScreen user={user} onLogout={handleLogout} />;
+    } else if (user.role === "admin") {
+      content = <AdminApp onLogout={handleLogout} />;
+    } else if (user.role === "agent") {
+      content = <AgentApp user={user} onLogout={handleLogout} />;
+    } else {
+      content = <ManagerApp user={user} subscription={subscription} onLogout={handleLogout} />;
     }
-    if (user.role === "admin") {
-      return <AdminApp onLogout={handleLogout} />;
-    }
-    if (user.role === "agent") {
-      return <AgentApp user={user} onLogout={handleLogout} />;
-    }
-    return <ManagerApp user={user} subscription={subscription} onLogout={handleLogout} />;
+  } else if (view === "login") {
+    // ── Visiteur non connecté ──
+    content = <LoginScreen onBack={() => setView("landing")} onLoggedIn={handleLoggedIn} />;
+  } else if (view === "register") {
+    content = <RegisterScreen onBack={() => setView("landing")} onDone={() => setView("landing")} />;
+  } else {
+    content = (
+      <div className="flex min-h-screen flex-col bg-canvas">
+        <Navbar onDemoRequest={scrollToDemo} />
+        <main className="flex-1">
+          <Hero onDemoRequest={scrollToDemo} onStartTrial={() => setView("register")} />
+          <Stats />
+          <Problem />
+          <Features onDemoRequest={scrollToDemo} />
+          <Method onStartTrial={() => setView("register")} />
+          <Trust />
+          <Pricing onDemoRequest={scrollToDemo} />
+          <DemoSection />
+          <Faq />
+          <FinalCta onDemoRequest={scrollToDemo} />
+        </main>
+        <Footer />
+      </div>
+    );
   }
 
-  // ── Visiteur non connecté ──
-  if (view === "login") {
-    return <LoginScreen onBack={() => setView("landing")} onLoggedIn={handleLoggedIn} />;
-  }
-  if (view === "register") {
-    return <RegisterScreen onBack={() => setView("landing")} onDone={() => setView("landing")} />;
-  }
-
+  // La couche offline (service worker, bannière hors ligne, file d'envoi) couvre TOUTES les vues.
   return (
-    <div className="flex min-h-screen flex-col bg-canvas">
-      <Navbar onStartTrial={() => setView("register")} />
-      <main className="flex-1">
-        <Hero onStartTrial={() => setView("register")} />
-        <Stats />
-        <Problem />
-        <Features onDemo={() => setView("login")} />
-        <Method onStartTrial={() => setView("register")} />
-        <Trust />
-        <Pricing onStartTrial={() => setView("register")} />
-        <Faq />
-        <FinalCta onStartTrial={() => setView("register")} />
-      </main>
-      <Footer />
-    </div>
+    <>
+      <OfflineLayer />
+      {content}
+    </>
   );
 }

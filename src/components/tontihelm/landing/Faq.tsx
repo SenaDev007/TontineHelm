@@ -5,9 +5,12 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
 import { ArrowRight } from "lucide-react";
-import { LogoStacked } from "../Logo";
 
 const FAQ = [
+  {
+    q: "Puis-je voir l'application avant de m'inscrire ?",
+    a: "Oui. Demande une démonstration : un conseiller installe l'application avec toi et configure un carnet réel de ta structure, agent par agent. Aucune inscription n'est nécessaire à cette étape.",
+  },
   {
     q: "TontiHelm garde-t-il l'argent ?",
     a: "Non. L'argent va du cotisant à ta structure. Nous enregistrons les opérations et nous produisons les rapports.",
@@ -62,19 +65,20 @@ export function Faq() {
   );
 }
 
-export function FinalCta({ onStartTrial }: { onStartTrial: () => void }) {
+export function FinalCta({ onDemoRequest }: { onDemoRequest: () => void }) {
   return (
-    <section id="essai" className="bg-ink text-white">
+    <section id="contact" className="bg-ink text-white">
       <div className="mx-auto max-w-[1200px] px-4 py-16 text-center md:px-6 lg:px-8 lg:py-24">
         <h2 className="font-display mx-auto max-w-2xl text-[24px] font-bold leading-tight tracking-tight md:text-[28px] lg:text-[36px]">
           Ferme ton carnet papier ce mois-ci.
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-[#AFC2DE] md:text-lg">
-          Installe TontiHelm chez un agent. Compare avec ton carnet pendant 60 jours.
+          Demande une démonstration : un conseiller installe l&apos;application chez un de tes agents et
+          configure tes carnets avec toi.
         </p>
         <div className="mt-8">
-          <Button size="lg" onClick={onStartTrial} className="bg-primary text-primary-foreground hover:bg-primary-hover h-12 px-6 text-base">
-            Démarrer l'essai gratuit <ArrowRight className="h-5 w-5" aria-hidden />
+          <Button size="lg" onClick={onDemoRequest} className="bg-primary text-primary-foreground hover:bg-primary-hover h-12 px-6 text-base">
+            Demander une démonstration <ArrowRight className="h-5 w-5" aria-hidden />
           </Button>
           <p className="mt-3 text-sm text-[#7C90B0]">Nous te répondons sous 24 heures ouvrées.</p>
         </div>
@@ -83,26 +87,3 @@ export function FinalCta({ onStartTrial }: { onStartTrial: () => void }) {
   );
 }
 
-export function Footer() {
-  return (
-    <footer className="bg-[#0A1428] text-[#AFC2DE]">
-      <div className="mx-auto max-w-[1200px] px-4 py-10 md:px-6 lg:px-8">
-        <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
-          {/* Logo officiel « nom en bas » sur pastille blanche — lisible sur fond nuit. */}
-          <div className="mx-auto flex h-[104px] w-52 items-center justify-center rounded-2xl bg-white p-4 shadow-lg shadow-black/25 md:mx-0">
-            <LogoStacked size={68} />
-          </div>
-          <div className="text-center md:text-left">
-            <p className="text-sm">TontiHelm, un produit YEHI OR Tech · Parakou, Bénin</p>
-            <p className="mt-1 text-sm text-[#7C90B0]">WhatsApp · e-mail</p>
-          </div>
-          <nav className="flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm" aria-label="Liens légaux">
-            <a href="#questions" className="transition-colors hover:text-white">Conditions d'utilisation</a>
-            <a href="#questions" className="transition-colors hover:text-white">Confidentialité</a>
-            <a href="#questions" className="transition-colors hover:text-white">Mentions légales</a>
-          </nav>
-        </div>
-      </div>
-    </footer>
-  );
-}

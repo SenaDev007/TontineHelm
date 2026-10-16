@@ -8,7 +8,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ClosingStatusBadge, GapBadge } from "../StatusBadge";
 import { ClosingRow, formatFCFA } from "@/lib/types";
-import { get, post } from "@/lib/client";
+import { get, isOfflineQueued, post } from "@/lib/client";
+import { useSyncDone } from "@/lib/offline/hooks";
 import { ShieldCheck, ShieldAlert } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -29,12 +30,18 @@ export function ClosingsTab({ readOnly }: { readOnly: boolean }) {
     load();
   }, [load]);
 
+  useSyncDone(load);
+
   async function act(closingId: string, action: "validate" | "contest") {
     setBusy(closingId);
     try {
       const res = await post<{ message: string }>("/api/manager/closings", { action, closingId });
-      toast({ title: res.message });
-      await load();
+      if (isOfflineQueued(res)) {
+        toast({ title: "Décision enregistrée hors ligne.", description: "Elle partira au serveur dès le retour du réseau." });
+      } else {
+        toast({ title: res.message });
+        await load();
+      }
     } catch (err) {
       toast({ title: "Action impossible", description: err instanceof Error ? err.message : "Réessaie." });
     } finally {

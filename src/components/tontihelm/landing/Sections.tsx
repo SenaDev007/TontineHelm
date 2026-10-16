@@ -95,7 +95,7 @@ const FEATURES = [
   },
 ];
 
-export function Features({ onDemo }: { onDemo: () => void }) {
+export function Features({ onDemoRequest }: { onDemoRequest: () => void }) {
   return (
     <section id="fonctionnalites" className="bg-canvas">
       <div className="mx-auto max-w-[1200px] px-4 py-16 md:px-6 lg:px-8 lg:py-24">
@@ -117,8 +117,8 @@ export function Features({ onDemo }: { onDemo: () => void }) {
           ))}
         </div>
         <div className="mt-10 text-center">
-          <Button size="lg" variant="outline" onClick={onDemo} className="border-primary text-primary hover:bg-[#E8F1FD] hover:text-primary h-12 px-6 text-base">
-            Voir l'application en action <ArrowRight className="h-5 w-5" aria-hidden />
+          <Button size="lg" variant="outline" onClick={onDemoRequest} className="border-primary text-primary hover:bg-[#E8F1FD] hover:text-primary h-12 px-6 text-base">
+            Demander une démonstration <ArrowRight className="h-5 w-5" aria-hidden />
           </Button>
         </div>
       </div>
@@ -198,7 +198,7 @@ export function Trust() {
             </div>
             <div className="mt-8">
               <Button variant="link" className="h-auto p-0 text-primary underline-offset-4" asChild>
-                <a href="#questions">
+                <a href="/confidentialite">
                   Lire comment nous protégeons tes données <ArrowRight className="h-4 w-4" aria-hidden />
                 </a>
               </Button>

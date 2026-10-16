@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PassbookStatusBadge } from "../StatusBadge";
 import { ContributorRow, formatFCFA } from "@/lib/types";
-import { get, post } from "@/lib/client";
+import { get, isOfflineQueued, post } from "@/lib/client";
+import { useSyncDone } from "@/lib/offline/hooks";
 import { UserPlus, Search, Phone, MapPin, IdCard } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -23,15 +24,22 @@ export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
   const [form, setForm] = useState({ fullName: "", phone: "", neighborhood: "", idNumber: "", agentId: "" });
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
+  const load = () => {
     get<{ contributors: ContributorRow[] }>("/api/manager/contributors")
       .then((d) => setRows(d.contributors))
       .catch(() => toast({ title: "Liste indisponible", description: "Impossible de charger les cotisants." }));
+  };
+
+  useEffect(() => {
+    load();
     // Agents de la structure pour le formulaire de création.
     get<{ users: { id: string; fullName: string }[] }>("/api/manager/agents")
       .then((d) => setAgents(d.users))
       .catch(() => undefined);
   }, []);
+
+  // Rafraîchissement automatique quand la file d'envoi a été synchronisée.
+  useSyncDone(load);
 
   const filtered = useMemo(() => {
     if (!rows) return [];
@@ -42,12 +50,18 @@ export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
   async function submit() {
     setSubmitting(true);
     try {
-      await post("/api/manager/contributors", form);
-      toast({ title: "Cotisant enregistré.", description: `${form.fullName} est rattaché à l'agent choisi.` });
+      const res = await post("/api/manager/contributors", form);
+      if (isOfflineQueued(res)) {
+        toast({
+          title: "Enregistré hors ligne.",
+          description: `${form.fullName} partira au serveur dès le retour du réseau.`,
+        });
+      } else {
+        toast({ title: "Cotisant enregistré.", description: `${form.fullName} est rattaché à l'agent choisi.` });
+        load();
+      }
       setOpen(false);
       setForm({ fullName: "", phone: "", neighborhood: "", idNumber: "", agentId: "" });
-      const d = await get<{ contributors: ContributorRow[] }>("/api/manager/contributors");
-      setRows(d.contributors);
     } catch (err) {
       toast({ title: "Enregistrement impossible", description: err instanceof Error ? err.message : "Réessaie." });
     } finally {

@@ -106,7 +106,8 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
               </div>
               <CardTitle className="font-display text-xl font-bold">Inscrire ma structure</CardTitle>
               <p className="text-sm text-subtle">
-                Période d'essai de 60 jours activée à la validation de ton justificatif.
+                Ton espace est activé après vérification de ton justificatif d&apos;agrément. Un conseiller
+                peut d&apos;abord te faire une démonstration.
               </p>
               {/* Stepper */}
               <div className="mt-4 flex items-center gap-2" aria-hidden>

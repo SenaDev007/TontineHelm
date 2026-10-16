@@ -13,7 +13,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PassbookStatusBadge } from "../StatusBadge";
 import { CarnetCalendar } from "./CarnetCalendar";
 import { ContributorRow, PassbookRow, formatFCFA } from "@/lib/types";
-import { get, post } from "@/lib/client";
+import { get, isOfflineQueued, post } from "@/lib/client";
+import { useSyncDone } from "@/lib/offline/hooks";
 import { BookOpen, Search, CalendarDays, User } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -28,14 +29,20 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
     contributorId: "", dailyAmount: "", cycleDays: "31", startsOn: new Date().toISOString().slice(0, 10),
   });
 
-  useEffect(() => {
+  const load = () => {
     get<{ passbooks: PassbookRow[] }>("/api/manager/passbooks")
       .then((d) => setRows(d.passbooks))
       .catch(() => toast({ title: "Liste indisponible", description: "Impossible de charger les carnets." }));
+  };
+
+  useEffect(() => {
+    load();
     get<{ contributors: ContributorRow[] }>("/api/manager/contributors")
       .then((d) => setContributors(d.contributors))
       .catch(() => undefined);
   }, []);
+
+  useSyncDone(load);
 
   const filtered = useMemo(() => {
     if (!rows) return [];
@@ -46,17 +53,20 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
   async function submit() {
     setSubmitting(true);
     try {
-      await post("/api/manager/passbooks", {
+      const res = await post("/api/manager/passbooks", {
         contributorId: form.contributorId,
         dailyAmount: parseInt(form.dailyAmount, 10) || 0,
         cycleDays: parseInt(form.cycleDays, 10) || 0,
         startsOn: form.startsOn,
       });
-      toast({ title: "Carnet créé.", description: "Il apparaît dans la tournée de l'agent référent." });
+      if (isOfflineQueued(res)) {
+        toast({ title: "Enregistré hors ligne.", description: "Le carnet partira au serveur dès le retour du réseau." });
+      } else {
+        toast({ title: "Carnet créé.", description: "Il apparaît dans la tournée de l'agent référent." });
+        load();
+      }
       setOpen(false);
       setForm({ ...form, contributorId: "", dailyAmount: "" });
-      const d = await get<{ passbooks: PassbookRow[] }>("/api/manager/passbooks");
-      setRows(d.passbooks);
     } catch (err) {
       toast({ title: "Création impossible", description: err instanceof Error ? err.message : "Réessaie." });
     } finally {

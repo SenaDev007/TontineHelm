@@ -10,6 +10,7 @@ import adminRoutes from "./routes/admin";
 import agentRoutes from "./routes/agent";
 import managerRoutes from "./routes/manager";
 import paymentsRoutes from "./routes/payments";
+import demoRoutes from "./routes/demo";
 import { apiErrorHandler, getCurrentUser } from "./lib/auth";
 
 const app = express();
@@ -44,6 +45,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/agent", agentRoutes);
 app.use("/api/manager", managerRoutes);
 app.use("/api/payments", paymentsRoutes);
+app.use("/api/demo", demoRoutes);
 
 // 404 JSON uniforme pour toute route inconnue.
 app.use((_req, res) => {

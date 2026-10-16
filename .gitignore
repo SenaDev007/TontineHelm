@@ -68,3 +68,6 @@ Caddyfile
 agent-ctx/
 backend/node_modules/
 /scripts/
+
+# Analyse offline-first — clone de référence hors dépôt
+/academia-Helm/

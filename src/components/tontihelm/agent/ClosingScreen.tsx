@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClosingStatusBadge, GapBadge } from "../StatusBadge";
 import { OutboxEvent, TourData, formatFCFA } from "@/lib/types";
-import { post } from "@/lib/client";
+import { isOfflineQueued, post } from "@/lib/client";
 import { Lock, Scale, ShieldCheck } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -49,10 +49,20 @@ export function ClosingScreen({
       const res = await post<{ message: string; closing: { gap: number } }>("/api/agent/closing", {
         declaredCash: declaredValue,
       });
-      setResult({ gap: res.closing.gap, message: res.message });
-      setDeclared("");
-      toast({ title: res.message });
-      onDeclared();
+      if (isOfflineQueued(res)) {
+        setResult({
+          gap: gapNow,
+          message:
+            "Déclaration enregistrée sur ton téléphone. Elle part au serveur dès le retour du réseau.",
+        });
+        setDeclared("");
+        toast({ title: "Clôture enregistrée hors ligne." });
+      } else {
+        setResult({ gap: res.closing.gap, message: res.message });
+        setDeclared("");
+        toast({ title: res.message });
+        onDeclared();
+      }
     } catch (err) {
       toast({
         title: "Déclaration impossible",

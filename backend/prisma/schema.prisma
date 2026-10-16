@@ -210,6 +210,21 @@ model AuditLog {
   @@index([tenantId, seq])
 }
 
+model DemoRequest {
+  id           String   @id @default(cuid())
+  fullName     String
+  phone        String
+  structure    String
+  city         String?
+  contributors Int? // taille approximative du portefeuille de cotisants
+  agents       Int? // nombre approximatif d'agents de collecte
+  message      String?
+  status       String   @default("new") // new | contacted | converted | closed
+  createdAt    DateTime @default(now())
+
+  @@index([status, createdAt])
+}
+
 model Subscription {
   id          String    @id @default(cuid())
   tenantId    String    @unique

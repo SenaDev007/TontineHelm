@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MethodBadge } from "../StatusBadge";
 import { CollectionsPage, formatFCFA } from "@/lib/types";
-import { get, post } from "@/lib/client";
+import { get, isOfflineQueued, post } from "@/lib/client";
+import { useSyncDone } from "@/lib/offline/hooks";
 import { Search, ChevronLeft, ChevronRight, Undo2, Download } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,6 +38,8 @@ export function CollectionsTab({ readOnly }: { readOnly: boolean }) {
     load(page, method);
   }, [load, page, method]);
 
+  useSyncDone(() => load(page, method));
+
   const filtered = (data?.collections ?? []).filter((c) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -52,10 +55,14 @@ export function CollectionsTab({ readOnly }: { readOnly: boolean }) {
         collectionId: reversalTarget.id,
         reason,
       });
-      toast({ title: res.message });
+      if (isOfflineQueued(res)) {
+        toast({ title: "Annulation enregistrée hors ligne.", description: "Elle partira au serveur dès le retour du réseau." });
+      } else {
+        toast({ title: res.message });
+        load(page, method);
+      }
       setReversalTarget(null);
       setReason("");
-      load(page, method);
     } catch (err) {
       toast({ title: "Annulation impossible", description: err instanceof Error ? err.message : "Réessaie." });
     } finally {

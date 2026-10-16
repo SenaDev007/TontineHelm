@@ -1,102 +1,273 @@
 "use client";
-// TontiHelm — hero (§13.2, section 1) : la peur du carnet perdu avant la technologie.
-// Fond encre bleu nuit : l'or de marque reste très lisible (≈7:1) sur « mois de cotisations ».
+// TontiHelm — hero animé (§13.2, section 1) : fond nuit vivant (orbes + grille),
+// texte en cascade, écran smartphone montrant de VRAIES captures de l'application
+// (tournée, encaissement, tableau de bord) qui se relaient en fondu.
+// Aucun mode gratuit : la découverte passe par une démonstration (#demonstration).
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, ShieldCheck } from "lucide-react";
-import { motion, useReducedMotion } from "framer-motion";
+import { ArrowRight, WifiOff, MessageSquareText, CheckCheck } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
-export function PhoneMockup() {
+const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
+const SCREENS = [
+  { src: "/app-screens/screen-collect.png", label: "Encaissement — écran agent" },
+  { src: "/app-screens/screen-tour.png", label: "Tournée du jour — écran agent" },
+  { src: "/app-screens/screen-dashboard.png", label: "Tableau de bord — back-office" },
+];
+
+/* ── Orbe décoratif animé (lent, infini) ── */
+function Orb({
+  className,
+  duration = 14,
+  children,
+}: {
+  className?: string;
+  duration?: number;
+  children?: React.ReactNode;
+}) {
   const reduce = useReducedMotion();
   return (
+    <div className={`pointer-events-none absolute ${className ?? ""}`} aria-hidden>
+      <motion.div
+        className="h-full w-full rounded-full blur-3xl"
+        animate={reduce ? undefined : { x: [0, 26, -18, 0], y: [0, -20, 14, 0], scale: [1, 1.08, 0.95, 1] }}
+        transition={{ duration, repeat: Infinity, ease: "easeInOut" }}
+      >
+        {children}
+      </motion.div>
+    </div>
+  );
+}
+
+/* ── Écran smartphone : vraies captures de l'application, rotation en fondu ── */
+function PhoneMockup() {
+  const reduce = useReducedMotion();
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setIndex((i) => (i + 1) % SCREENS.length), 4800);
+    return () => clearInterval(id);
+  }, []);
+
+  const current = SCREENS[index];
+
+  return (
     <motion.div
-      initial={reduce ? false : { opacity: 0, y: 24 }}
-      whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
+      initial={reduce ? false : { opacity: 0, y: 32, rotate: 2 }}
+      whileInView={reduce ? undefined : { opacity: 1, y: 0, rotate: 0 }}
       viewport={{ once: true }}
-      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: 0.7, ease: EASE }}
       className="relative mx-auto w-full max-w-[300px]"
-      aria-label="Aperçu de l'écran d'encaissement de l'application agent"
       role="img"
+      aria-label={`Aperçu réel de l'application : ${current.label}`}
     >
-      <div className="rounded-[28px] border border-[#233350] bg-[#0D1B33] p-3 shadow-2xl shadow-black/40">
-        <div className="overflow-hidden rounded-[18px] bg-white">
-          {/* Barre du haut */}
-          <div className="flex items-center justify-between border-b border-line px-4 py-3">
-            <span className="text-sm font-medium text-subtle" aria-hidden>‹</span>
-            <span className="text-sm font-semibold text-ink">Carnet 0142</span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#DFF6F4] px-2 py-0.5 text-[10px] font-medium text-[#00806B]">
-              <ShieldCheck className="h-3 w-3" aria-hidden /> Synchronisé
-            </span>
+      {/* Halo lumineux derrière le téléphone */}
+      <div className="pointer-events-none absolute -inset-10 rounded-full bg-[radial-gradient(circle,rgba(0,143,245,0.22),transparent_65%)] blur-2xl" aria-hidden />
+
+      {/* Téléphone flottant */}
+      <motion.div
+        animate={reduce ? undefined : { y: [0, -12, 0] }}
+        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+        className="relative rounded-[36px] border border-[#2A3B5C] bg-[#0D1B33] p-[10px] shadow-2xl shadow-black/50"
+      >
+        {/* Écran */}
+        <div className="relative overflow-hidden rounded-[26px] bg-white">
+          <div className="aspect-[390/812] w-full">
+            <AnimatePresence mode="popLayout">
+              <motion.img
+                key={current.src}
+                src={current.src}
+                alt={current.label}
+                className="absolute inset-0 h-full w-full object-cover object-top"
+                initial={reduce ? undefined : { opacity: 0, scale: 1.04 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={reduce ? undefined : { opacity: 0, scale: 0.99 }}
+                transition={{ duration: 0.65, ease: EASE }}
+              />
+            </AnimatePresence>
           </div>
-          {/* Fiche */}
-          <div className="space-y-1 px-4 pt-4">
-            <p className="font-display text-lg font-bold text-ink">Adjovi Marie</p>
-            <p className="text-sm text-subtle">Jour 12 sur 31 · Albarika</p>
-            <div className="mt-3 flex items-center justify-between rounded-lg border border-line bg-[#F4F7FB] px-3 py-2.5">
-              <span className="text-sm text-subtle">Solde cumulé</span>
-              <span className="amount text-base font-semibold text-ink">6 000 FCFA</span>
-            </div>
-            <p className="pt-1 text-xs font-medium text-success">Carnet à jour</p>
-          </div>
-          {/* Montant */}
-          <div className="px-4 pt-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-subtle">Montant</p>
-            <div className="mt-1 rounded-lg border-2 border-primary bg-[#EEF4FD] py-3 text-center">
-              <span className="amount font-display text-2xl font-bold text-primary">500 FCFA</span>
-            </div>
-          </div>
-          {/* Clavier */}
-          <div className="grid grid-cols-3 gap-2 p-4" aria-hidden>
-            {["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "00", "eff"].map((k) => (
-              <div
-                key={k}
-                className="flex h-11 items-center justify-center rounded-lg border border-line bg-white text-base font-semibold text-ink"
-              >
-                {k}
-              </div>
-            ))}
-          </div>
-          {/* Bouton Encaisser */}
-          <div className="px-4 pb-5">
-            <div className="flex h-12 w-full items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
-              Encaisser 500 FCFA
-            </div>
-          </div>
+
+          {/* Reflet diagonal sur l'écran */}
+          <div
+            className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(255,255,255,0.16)_0%,transparent_28%,transparent_72%,rgba(255,255,255,0.05)_100%)]"
+            aria-hidden
+          />
+          {/* Encoche */}
+          <div className="absolute left-1/2 top-2 h-5 w-24 -translate-x-1/2 rounded-full bg-[#0D1B33]" aria-hidden />
         </div>
+
+        {/* Boutons latéraux */}
+        <div className="absolute -right-[2px] top-24 h-12 w-[3px] rounded-full bg-[#2A3B5C]" aria-hidden />
+        <div className="absolute -right-[2px] top-40 h-8 w-[3px] rounded-full bg-[#2A3B5C]" aria-hidden />
+      </motion.div>
+
+      {/* Pastille : vraie capture */}
+      <motion.div
+        initial={reduce ? false : { opacity: 0, y: 10 }}
+        whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ delay: 0.5, duration: 0.5, ease: EASE }}
+        className="absolute -bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-[#2A3B5C] bg-[#0D1B33]/95 px-3.5 py-1.5 shadow-lg backdrop-blur"
+      >
+        <CheckCheck className="h-3.5 w-3.5 text-gold" aria-hidden />
+        <span className="whitespace-nowrap text-[11px] font-medium text-[#DCE6F5]">
+          Captures réelles de l&apos;application
+        </span>
+      </motion.div>
+
+      {/* Indicateurs d'écran */}
+      <div className="absolute -bottom-12 left-1/2 flex -translate-x-1/2 gap-1.5" aria-hidden>
+        {SCREENS.map((s, i) => (
+          <button
+            key={s.src}
+            type="button"
+            onClick={() => setIndex(i)}
+            className={`h-1.5 rounded-full transition-all duration-300 ${
+              i === index ? "w-6 bg-gold" : "w-1.5 bg-[#3A4C6E] hover:bg-[#5A6E93]"
+            }`}
+            aria-label={`Voir : ${s.label}`}
+          />
+        ))}
       </div>
     </motion.div>
   );
 }
 
-export function Hero({ onStartTrial }: { onStartTrial: () => void }) {
+/* ── Puce de preuve (animée au survol) ── */
+function ProofChip({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
   return (
-    <section id="accueil" className="bg-ink text-white">
-      <div className="mx-auto grid max-w-[1200px] gap-12 px-4 py-16 md:px-6 md:py-24 lg:grid-cols-2 lg:items-center lg:gap-16 lg:px-8">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-gold">
-            Logiciel de gestion de tontine · Bénin
-          </p>
-          <h1 className="font-display mt-4 text-[32px] font-bold leading-[1.15] tracking-tight md:text-[40px] lg:text-[56px]">
+    <motion.li
+      variants={{
+        hidden: { opacity: 0, y: 12 },
+        show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: EASE } },
+      }}
+      className="flex items-center gap-2 rounded-full border border-[#2A3B5C] bg-[#101F3A]/80 px-3.5 py-1.5 text-[13px] font-medium text-[#C9D6EA] backdrop-blur transition-colors hover:border-gold/50 hover:text-white"
+    >
+      <Icon className="h-3.5 w-3.5 text-gold" aria-hidden />
+      {children}
+    </motion.li>
+  );
+}
+
+export function Hero({
+  onDemoRequest,
+  onStartTrial,
+}: {
+  onDemoRequest: () => void;
+  onStartTrial: () => void;
+}) {
+  const reduce = useReducedMotion();
+
+  const container = {
+    hidden: {},
+    show: { transition: { staggerChildren: 0.12, delayChildren: 0.15 } },
+  };
+  const item = {
+    hidden: { opacity: 0, y: 22 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE } },
+  };
+
+  return (
+    <section id="accueil" className="relative overflow-hidden bg-ink text-white">
+      {/* Fond animé : grille + orbes */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.35]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(35,51,80,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(35,51,80,0.5) 1px, transparent 1px)",
+          backgroundSize: "44px 44px",
+          maskImage: "radial-gradient(ellipse 90% 70% at 50% 0%, black 35%, transparent 100%)",
+          WebkitMaskImage: "radial-gradient(ellipse 90% 70% at 50% 0%, black 35%, transparent 100%)",
+        }}
+        aria-hidden
+      />
+      <Orb className="left-[-8%] top-[-12%] h-72 w-72" duration={16}>
+        <div className="h-full w-full bg-[radial-gradient(circle,rgba(0,184,176,0.28),transparent_70%)]" />
+      </Orb>
+      <Orb className="right-[-6%] top-[18%] h-96 w-96" duration={13}>
+        <div className="h-full w-full bg-[radial-gradient(circle,rgba(0,143,245,0.20),transparent_70%)]" />
+      </Orb>
+      <Orb className="bottom-[-22%] left-[30%] h-80 w-80" duration={18}>
+        <div className="h-full w-full bg-[radial-gradient(circle,rgba(255,184,0,0.12),transparent_70%)]" />
+      </Orb>
+
+      <div className="relative mx-auto grid max-w-[1200px] items-center gap-14 px-4 pb-24 pt-16 md:px-6 md:pt-24 lg:grid-cols-2 lg:gap-16 lg:px-8">
+        <motion.div variants={container} initial={reduce ? false : "hidden"} animate="show">
+          <motion.p
+            variants={item}
+            className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-4 py-1.5 text-[13px] font-semibold uppercase tracking-[0.14em] text-gold"
+          >
+            <span className="relative flex h-2 w-2" aria-hidden>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gold opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-gold" />
+            </span>
+            Application de gestion de tontine · Bénin
+          </motion.p>
+
+          <motion.h1
+            variants={item}
+            className="font-display mt-5 text-[32px] font-bold leading-[1.15] tracking-tight md:text-[40px] lg:text-[56px]"
+          >
             Un carnet perdu, ce sont des <span className="text-gold">mois de cotisations</span> envolés.
-          </h1>
-          <p className="mt-6 max-w-xl text-base leading-relaxed text-[#AFC2DE] md:text-lg">
+          </motion.h1>
+
+          <motion.p
+            variants={item}
+            className="mt-6 max-w-xl text-base leading-relaxed text-[#AFC2DE] md:text-lg"
+          >
             TontiHelm remplace le carnet papier par une application qui marche sans réseau. Tes agents
             encaissent en 10 secondes, tes clients reçoivent leur reçu, ta caisse se clôture chaque soir.
-          </p>
-          <div className="mt-8">
+          </motion.p>
+
+          <motion.div variants={item} className="mt-8 flex flex-wrap items-center gap-3">
             <Button
               size="lg"
-              onClick={onStartTrial}
-              className="bg-primary text-primary-foreground hover:bg-primary-hover h-12 px-6 text-base"
+              onClick={onDemoRequest}
+              className="h-12 px-6 text-base"
             >
-              Essayer 60 jours gratuitement <ArrowRight className="h-5 w-5" aria-hidden />
+              Demander une démonstration <ArrowRight className="h-5 w-5" aria-hidden />
             </Button>
-            <p className="mt-3 text-sm text-[#7C90B0]">Aucun paiement pour démarrer. Aucun engagement.</p>
-          </div>
-        </div>
-        <div className="lg:pl-6">
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={onStartTrial}
+              className="h-12 border-[#4A5E80] bg-white/5 px-6 text-base text-white hover:border-gold/70 hover:bg-[#15243E] hover:text-white"
+            >
+              Inscrire ma structure
+            </Button>
+          </motion.div>
+
+          <motion.p variants={item} className="mt-3 text-sm text-[#7C90B0]">
+            Démonstration avec un conseiller · Réponse sous 24 heures ouvrées
+          </motion.p>
+
+          <motion.ul
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.9 } } }}
+            initial={reduce ? false : "hidden"}
+            animate="show"
+            className="mt-8 flex flex-wrap gap-2"
+          >
+            <ProofChip icon={WifiOff}>Fonctionne sans réseau</ProofChip>
+            <ProofChip icon={MessageSquareText}>Reçu SMS immédiat</ProofChip>
+            <ProofChip icon={CheckCheck}>Caisse clôturée chaque soir</ProofChip>
+          </motion.ul>
+        </motion.div>
+
+        <div className="relative lg:pl-4">
           <PhoneMockup />
         </div>
       </div>
+
+      {/* Vague de transition vers la section suivante */}
+      <svg
+        className="relative -mb-px block w-full text-canvas"
+        viewBox="0 0 1440 72"
+        preserveAspectRatio="none"
+        aria-hidden
+      >
+        <path fill="currentColor" d="M0,32 C240,72 480,72 720,48 C960,24 1200,24 1440,48 L1440,72 L0,72 Z" />
+      </svg>
     </section>
   );
 }

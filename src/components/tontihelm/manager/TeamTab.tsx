@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { get, post } from "@/lib/client";
+import { get, isOfflineQueued, post } from "@/lib/client";
+import { useSyncDone } from "@/lib/offline/hooks";
 import { UserPlus, Users, Phone, Wallet } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -24,28 +25,40 @@ export function TeamTab({ readOnly }: { readOnly: boolean }) {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ fullName: "", phone: "", pin: "" });
 
-  useEffect(() => {
+  const load = () => {
     get<{ users: AgentRow[] }>("/api/manager/agents")
       .then((d) => setAgents(d.users))
       .catch(() => toast({ title: "Équipe indisponible", description: "Impossible de charger les agents." }));
+  };
+
+  useEffect(() => {
+    load();
   }, []);
+
+  useSyncDone(load);
 
   async function submit() {
     setSubmitting(true);
     try {
-      await post("/api/manager/agents", {
+      const res = await post("/api/manager/agents", {
         fullName: form.fullName,
         phone: form.phone,
         pin: form.pin,
       });
-      toast({
-        title: "Agent créé.",
-        description: "Transmets-lui son numéro et son code PIN : il se connecte comme agent collecteur.",
-      });
+      if (isOfflineQueued(res)) {
+        toast({
+          title: "Enregistré hors ligne.",
+          description: "La création de l'agent partira au serveur dès le retour du réseau.",
+        });
+      } else {
+        toast({
+          title: "Agent créé.",
+          description: "Transmets-lui son numéro et son code PIN : il se connecte comme agent collecteur.",
+        });
+        load();
+      }
       setOpen(false);
       setForm({ fullName: "", phone: "", pin: "" });
-      const d = await get<{ users: AgentRow[] }>("/api/manager/agents");
-      setAgents(d.users);
     } catch (err) {
       toast({ title: "Création impossible", description: err instanceof Error ? err.message : "Réessaie." });
     } finally {

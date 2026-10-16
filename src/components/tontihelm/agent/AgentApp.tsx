@@ -8,12 +8,13 @@ import { LogoMark } from "../Logo";
 import { SyncStatusPill } from "../StatusBadge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { get, post } from "@/lib/client";
+import { useSyncDone } from "@/lib/offline/hooks";
 import { OutboxEvent, SessionUser, TourData, TourStop, formatFCFA } from "@/lib/types";
 import { TourScreen } from "./TourScreen";
 import { CollectScreen, CollectAllocation } from "./CollectScreen";
 import { ClosingScreen } from "./ClosingScreen";
 import { AccountScreen } from "./AccountScreen";
-import { MapPin, Wallet, Scale, User, WifiOff, ArrowLeft, RefreshCw } from "lucide-react";
+import { MapPin, Wallet, Scale, User, ArrowLeft, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
@@ -80,6 +81,10 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
   useEffect(() => {
     refreshTour();
   }, [refreshTour, reloadKey]);
+
+  // Rechargement de la tournée quand une passe de synchronisation se termine
+  // (les données du serveur ont pu évoluer).
+  useSyncDone(() => { if (navigator.onLine) setReloadKey((k) => k + 1); });
 
   // ── Synchronisation : envoi de l'outbox par lots de 50, idempotent ──
   // Chaque événement porte la journée réelle qu'il couvre (coversOn) :
@@ -248,17 +253,7 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
             <SyncStatusPill state={syncState} pendingCount={pendingCount} />
           </div>
         </div>
-        {/* Bannière hors réseau (§13.4) — visible seulement hors réseau */}
-        {!online && (
-          <div className="mx-auto max-w-2xl px-4 pb-3">
-            <Alert className="border-[#F0D48A] bg-[#FFF4D6]">
-              <WifiOff className="h-4 w-4 text-warning" aria-hidden />
-              <AlertDescription className="text-[13px] font-medium text-[#A66A00]">
-                Pas de réseau. Continue ta tournée, tout est enregistré sur ton téléphone.
-              </AlertDescription>
-            </Alert>
-          </div>
-        )}
+        {/* Bannière hors ligne globale (OfflineLayer) — ici, seul l'état d'envoi : */}
         {online && pendingCount > 0 && (
           <div className="mx-auto max-w-2xl px-4 pb-3">
             <Alert className="border-[#C5D8ED] bg-[#E8F1FD]">

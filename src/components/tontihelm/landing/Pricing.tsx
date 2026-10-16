@@ -33,7 +33,7 @@ const PLANS = [
   },
 ];
 
-export function Pricing({ onStartTrial }: { onStartTrial: () => void }) {
+export function Pricing({ onDemoRequest }: { onDemoRequest: () => void }) {
   return (
     <section id="tarifs" className="bg-surface">
       <div className="mx-auto max-w-[1200px] px-4 py-16 md:px-6 lg:px-8 lg:py-24">
@@ -82,12 +82,13 @@ export function Pricing({ onStartTrial }: { onStartTrial: () => void }) {
         </div>
 
         <p className="mt-6 text-center text-sm text-subtle">
-          Paiement annuel : 2 mois offerts. Les SMS sont facturés à l'usage, tarif affiché avant envoi.
+          Paiement annuel : 2 mois inclus. Les SMS sont facturés à l'usage, tarif affiché avant envoi.
         </p>
         <div className="mt-8 text-center">
-          <Button size="lg" onClick={onStartTrial} className="bg-primary text-primary-foreground hover:bg-primary-hover h-12 px-6 text-base">
-            Essayer 60 jours gratuitement <ArrowRight className="h-5 w-5" aria-hidden />
+          <Button size="lg" onClick={onDemoRequest} className="bg-primary text-primary-foreground hover:bg-primary-hover h-12 px-6 text-base">
+            Demander une démonstration <ArrowRight className="h-5 w-5" aria-hidden />
           </Button>
+          <p className="mt-3 text-sm text-subtle">Un conseiller t'accompagne dans le choix de ton palier.</p>
         </div>
       </div>
     </section>

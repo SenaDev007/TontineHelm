@@ -48,7 +48,7 @@ export function Stats() {
         <Counter target={10} suffix=" s" label="par encaissement" sense="Ton agent passe vite à la maison suivante" />
         <Counter target={100} suffix=" %" label="des fonctions hors réseau" sense="Une coupure ne bloque plus la tournée" />
         <Counter target={0} suffix=" FCFA" label="détenu par nous" sense="Ton argent reste dans ta structure" />
-        <Counter target={60} suffix=" jours" label="d'essai gratuit" sense="Tu juges sur tes propres chiffres" />
+        <Counter target={1} suffix=" h" label="de démonstration avec un conseiller" sense="On configure un carnet réel avec toi, en direct" />
       </div>
     </section>
   );

@@ -34,8 +34,8 @@ export function PendingScreen({
           </p>
           {!suspended && (
             <p className="mt-2 text-xs text-subtle">
-              Structure : <span className="font-medium text-ink">{user.structureName}</span>. L'essai de
-              60 jours démarre dès la validation.
+              Structure : <span className="font-medium text-ink">{user.structureName}</span>. Ton espace
+              s'active dès la validation de ton justificatif.
             </p>
           )}
           <Button variant="outline" onClick={onLogout} className="mt-6 border-line">

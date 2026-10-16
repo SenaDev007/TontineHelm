@@ -1,5 +1,6 @@
 "use client";
-// TontiHelm — navigation vitrine (§13.2) : barre blanche, bouton d'essai visible au défilement sur mobile.
+// TontiHelm — navigation vitrine (§13.2) : barre blanche, logo officiel bien visible,
+// bouton « Demander une démo » visible au défilement sur mobile.
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -13,13 +14,18 @@ const LINKS = [
   { href: "#questions", label: "Questions" },
 ];
 
-export function Navbar({ onStartTrial }: { onStartTrial: () => void }) {
+export function Navbar({ onDemoRequest }: { onDemoRequest: () => void }) {
   const [open, setOpen] = useState(false);
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/90">
-      <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between gap-4 px-4 md:px-6 lg:px-8">
-        <a href="#accueil" aria-label="TontiHelm — retour à l'accueil">
-          <LogoWordmark size={34} priority />
+      <div className="mx-auto flex h-20 max-w-[1200px] items-center justify-between gap-3 px-4 md:h-24 md:gap-4 md:px-6 lg:px-8">
+        <a href="#accueil" aria-label="TontiHelm — retour à l'accueil" className="shrink-0 py-1">
+          <span className="inline-flex origin-left md:hidden max-[380px]:scale-[0.88]">
+            <LogoWordmark size={44} priority />
+          </span>
+          <span className="hidden md:inline-flex">
+            <LogoWordmark size={66} priority />
+          </span>
         </a>
 
         <nav className="hidden items-center gap-1 md:flex" aria-label="Navigation principale">
@@ -36,14 +42,14 @@ export function Navbar({ onStartTrial }: { onStartTrial: () => void }) {
 
         <div className="flex items-center gap-2">
           <Button
-            onClick={onStartTrial}
-            className="hidden bg-primary text-primary-foreground hover:bg-primary-hover md:inline-flex"
+            onClick={onDemoRequest}
+            className="hidden md:inline-flex"
           >
-            Essayer 60 jours <ArrowRight className="h-4 w-4" aria-hidden />
+            Demander une démo <ArrowRight className="h-4 w-4" aria-hidden />
           </Button>
-          {/* Bouton d'essai toujours visible sur mobile, même menu ouvert */}
-          <Button onClick={onStartTrial} size="sm" className="bg-primary text-primary-foreground hover:bg-primary-hover md:hidden">
-            Essayer 60 jours
+          {/* Bouton de démo toujours visible sur mobile, même menu ouvert */}
+          <Button onClick={onDemoRequest} size="sm" className="px-3 md:hidden max-[380px]:px-2.5 max-[380px]:text-xs">
+            Demander une démo
           </Button>
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
@@ -54,7 +60,7 @@ export function Navbar({ onStartTrial }: { onStartTrial: () => void }) {
             <SheetContent side="left" className="w-72 bg-white p-0">
               <div className="border-b border-line p-4">
                 <SheetTitle className="text-left">
-                  <LogoWordmark size={30} />
+                  <LogoWordmark size={52} />
                 </SheetTitle>
               </div>
               <nav className="flex flex-col gap-1 p-4" aria-label="Navigation mobile">

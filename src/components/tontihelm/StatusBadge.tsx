@@ -75,7 +75,7 @@ export function ClosingStatusBadge({ status }: { status: string }) {
 // Statuts d'abonnement (§14.13)
 export function SubscriptionStatusBadge({ status }: { status: string }) {
   switch (status) {
-    case "trial": return <StatusBadge label="Essai 60 jours" tone="info" />;
+    case "trial": return <StatusBadge label="Abonnement à activer" tone="info" />;
     case "active": return <StatusBadge label="Abonnement actif" tone="success" />;
     case "past_due": return <StatusBadge label="En retard de paiement" tone="warning" />;
     case "read_only": return <StatusBadge label="Lecture seule" tone="danger" />;
