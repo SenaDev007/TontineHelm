@@ -63,7 +63,8 @@ app.get("/api/health", async (_req, res) => {
       await Promise.race([db.$queryRaw`SELECT 1`, timeout]);
       report.db = "ok";
     } catch (err) {
-      report.db = `injoignable — ${err instanceof Error ? err.message.split("\n")[0] : String(err)}`;
+      const lines = (err instanceof Error ? err.message : String(err)).split("\n").map((l) => l.trim()).filter(Boolean);
+      report.db = `injoignable — ${lines[0] ?? "erreur inconnue"}`;
     } finally {
       if (timer) clearTimeout(timer);
     }
