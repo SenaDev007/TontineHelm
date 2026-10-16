@@ -32,14 +32,23 @@ export default function TontiHelmApp() {
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
 
   // Reprise de session au chargement (la connexion elle-même se fait sur /connexion).
+  // Boot express (900 ms max) : si l'API traîne ou est injoignable, on montre la
+  // vitrine — avec ses boutons « Se connecter » et « Démarrer mon inscription » —
+  // plutôt qu'un écran d'attente plein cadre. La session, quand elle arrive,
+  // bascule ensuite l'affichage vers l'espace connecté.
   useEffect(() => {
+    const guard = setTimeout(() => setBooting(false), 900);
     get<{ user: SessionUser | null; subscription: SubscriptionInfo | null }>("/api/auth/me")
       .then((d) => {
         setUser(d.user);
         setSubscription(d.subscription);
       })
       .catch(() => undefined)
-      .finally(() => setBooting(false));
+      .finally(() => {
+        clearTimeout(guard);
+        setBooting(false);
+      });
+    return () => clearTimeout(guard);
   }, []);
 
   const handleLogout = useCallback(async () => {

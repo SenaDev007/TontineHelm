@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, LogIn } from "lucide-react";
 
 const FAQ = [
   {
@@ -76,12 +76,23 @@ export function FinalCta({ onDemoRequest }: { onDemoRequest: () => void }) {
           Demande une démonstration : un conseiller installe l&apos;application chez un de tes agents et
           configure tes carnets avec toi.
         </p>
-        <div className="mt-8">
+        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button size="lg" onClick={onDemoRequest} className="bg-primary text-primary-foreground hover:bg-primary-hover h-12 px-6 text-base">
             Demander une démonstration <ArrowRight className="h-5 w-5" aria-hidden />
           </Button>
-          <p className="mt-3 text-sm text-[#7C90B0]">Nous te répondons sous 24 heures ouvrées.</p>
+          {/* Accès direct pour les structures déjà inscrites */}
+          <Button
+            size="lg"
+            variant="outline"
+            asChild
+            className="h-12 border-[#4A5E80] bg-white/5 px-6 text-base text-white hover:border-gold/70 hover:bg-[#15243E] hover:text-white"
+          >
+            <a href="/connexion">
+              J&apos;ai déjà un compte — Se connecter <LogIn className="h-5 w-5" aria-hidden />
+            </a>
+          </Button>
         </div>
+          <p className="mt-3 text-sm text-[#7C90B0]">Nous te répondons sous 24 heures ouvrées.</p>
       </div>
     </section>
   );
