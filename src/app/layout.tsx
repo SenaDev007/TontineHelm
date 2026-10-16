@@ -35,8 +35,10 @@ export const metadata: Metadata = {
     "carnet de collecte numérique",
   ],
   icons: {
+    // Le SVG officiel est une version monochrome noire : on ne le référence PAS
+    // (le navigateur privilégie le SVG s'il est déclaré → silhouette noire
+    // dans l'onglet). Les PNG plein cadre rendent l'emblème coloré reconnaissable.
     icon: [
-      { url: "/logo-tontihelm/logo-TontiHelm1.svg", type: "image/svg+xml" },
       { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icon-512.png", sizes: "512x512", type: "image/png" },

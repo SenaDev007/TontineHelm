@@ -11,24 +11,42 @@ const PLANS = [
     name: "Démarrage",
     price: "15 000 FCFA",
     period: "par mois",
-    description: "Pour démarrer avec 2 agents et 150 cotisants.",
-    features: ["Application agent hors ligne", "Reçus SMS facturés à l'usage", "Paiement mobile money", "Clôture de caisse et audit", "Export Excel et PDF"],
+    description: "Pour démarrer avec 1 agent et 50 cotisants.",
+    features: [
+      "1 agent et 50 cotisants inclus",
+      "Application agent hors ligne",
+      "Reçus SMS facturés à l'usage",
+      "Paiement mobile money",
+      "Clôture de caisse et audit",
+      "Export Excel et PDF",
+    ],
     highlight: false,
   },
   {
     name: "Pro",
     price: "35 000 FCFA",
     period: "par mois",
-    description: "Pour structurer une équipe de 10 agents et 800 cotisants. Rappels WhatsApp inclus.",
-    features: ["Tout le palier Démarrage", "Rappels WhatsApp", "Support WhatsApp sous 24 h"],
+    description: "Pour structurer une équipe de 2 à 10 agents et 51 à 300 cotisants.",
+    features: [
+      "2 à 10 agents, 51 à 300 cotisants",
+      "Tout le palier Démarrage",
+      "Rappels automatiques aux cotisants en retard",
+      "Support WhatsApp sous 24 h",
+    ],
     highlight: true,
   },
   {
     name: "Institution",
     price: "75 000 FCFA",
     period: "par mois",
-    description: "Pour les SFD multi-agences, 40 agents et 3 000 cotisants. Rapports réglementaires et accès API.",
-    features: ["Tout le palier Pro", "Rapports réglementaires", "Multi-agences", "Accès API", "Support dédié sous 4 h ouvrées"],
+    description: "Pour les SFD multi-agences : au-delà de 10 agents et 300 cotisants, jusqu'à 40 agents et 3 000 cotisants.",
+    features: [
+      "11 à 40 agents, 301 à 3 000 cotisants",
+      "Tout le palier Pro",
+      "Rapports réglementaires",
+      "Multi-agences",
+      "Support dédié sous 4 h ouvrées",
+    ],
     highlight: false,
   },
 ];
@@ -43,6 +61,10 @@ export function Pricing({ onDemoRequest }: { onDemoRequest: () => void }) {
         <p className="mt-4 max-w-2xl text-base leading-relaxed text-subtle">
           300 clients à 500 FCFA par jour représentent environ 4,5 millions de FCFA par mois. L'abonnement
           Pro en représente moins de 1&nbsp;%.
+        </p>
+        <p className="mt-2 max-w-2xl text-sm text-subtle">
+          Les paliers s'empilent : ce que Démarrage inclut, Pro l'inclut aussi, et Institution l'étend.
+          Chaque limite affichée est appliquée par l'application quand tu crées tes agents et tes cotisants.
         </p>
 
         <div className="mt-10 grid gap-4 md:grid-cols-3 md:items-stretch">

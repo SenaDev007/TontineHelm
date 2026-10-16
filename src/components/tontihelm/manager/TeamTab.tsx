@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { get, isOfflineQueued, post } from "@/lib/client";
 import { useSyncDone } from "@/lib/offline/hooks";
+import { usePlanQuota } from "./usePlanQuota";
 import { UserPlus, Users, Phone, Wallet } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -24,6 +25,9 @@ export function TeamTab({ readOnly }: { readOnly: boolean }) {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ fullName: "", phone: "", pin: "" });
+  const quota = usePlanQuota();
+  const agentsQuotaReached =
+    !readOnly && quota !== null && (agents?.length ?? 0) >= quota.usage.agentsQuota;
 
   const load = () => {
     get<{ users: AgentRow[] }>("/api/manager/agents")
@@ -36,7 +40,6 @@ export function TeamTab({ readOnly }: { readOnly: boolean }) {
   }, []);
 
   useSyncDone(load);
-
   async function submit() {
     setSubmitting(true);
     try {
@@ -78,12 +81,24 @@ export function TeamTab({ readOnly }: { readOnly: boolean }) {
           l&apos;application mobile, encaisse chez les cotisants et marque les carnets — même hors réseau.
         </p>
         {!readOnly && (
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-primary text-primary-foreground hover:bg-primary-hover">
-                <UserPlus className="h-4 w-4" aria-hidden /> Nouvel agent
-              </Button>
-            </DialogTrigger>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            {quota && (
+              <p className="text-xs font-medium text-subtle" aria-live="polite">
+                {agents?.length ?? 0} agent{(agents?.length ?? 0) > 1 ? "s" : ""} sur {quota.usage.agentsQuota} inclus
+                <span className="text-subtle"> · palier {quota.planLabel}</span>
+              </p>
+            )}
+            {agentsQuotaReached ? (
+              <p className="max-w-xs rounded-md border border-[#F0D48A] bg-[#FFF4D6] px-3 py-2 text-xs font-medium text-[#A66A00]">
+                Palier atteint : passe au palier supérieur (onglet Abonnement) pour ajouter d&apos;autres agents.
+              </p>
+            ) : (
+              <Dialog open={open} onOpenChange={setOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-primary text-primary-foreground hover:bg-primary-hover">
+                    <UserPlus className="h-4 w-4" aria-hidden /> Nouvel agent
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="font-display">Créer un compte agent</DialogTitle>
@@ -141,6 +156,8 @@ export function TeamTab({ readOnly }: { readOnly: boolean }) {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+            )}
+          </div>
         )}
       </div>
 

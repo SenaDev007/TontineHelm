@@ -16,7 +16,7 @@ model Structure {
   id             String   @id @default(cuid())
   name           String
   kind           String // 'sfd' | 'groupement' | 'pme'
-  licenseRef     String
+  licenseRef     String? // numéro d'agrément / récépissé / RC — facultatif à l'inscription
   licenseDocName String?
   city           String?
   status         String   @default("pending") // pending | active | suspended | closed

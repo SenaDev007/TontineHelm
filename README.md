@@ -122,6 +122,28 @@ accompagnée, demandée depuis le site.
   (statuts : nouvelle / contactée / convertie / clôturée, bouton WhatsApp direct).
 - Relais direct : bouton **WhatsApp** sur le site (`wa.me/2290141360803`, message pré-rempli).
 
+## Paliers d'abonnement et quotas
+
+Source de vérité unique : `backend/src/lib/plans.ts` — la page des tarifs, l'onglet
+Abonnement et les contrôles à la création lisent tous ces chiffres.
+
+| Palier | Prix | Agents | Cotisants | Rappels SMS aux retardataires |
+|---|---|---|---|---|
+| Démarrage | 15 000 FCFA/mois | 1 | 50 | — |
+| Pro | 35 000 FCFA/mois | 2 à 10 | 51 à 300 | inclus |
+| Institution | 75 000 FCFA/mois | 11 à 40 | 301 à 3 000 | inclus |
+
+- **Application réelle des quotas** : `POST /api/manager/agents` et
+  `POST /api/manager/contributors` refusent (`403`) tout dépassement avec un message
+  invitant à monter de palier ; les onglets Équipe et Cotisants affichent l'usage courant
+  (« 3 agents sur 10 inclus · palier Pro ») et le bouton de création laisse place à un
+  avertissement quand le palier est atteint.
+- **Rappels automatiques** (`POST /api/manager/passbooks/:id/remind`) : inclus à partir du
+  palier Pro uniquement — SMS au cotisant en retard (jours manqués + lien mobile money),
+  journalisé comme les autres notifications. Refus `403 plan_required` au palier Démarrage.
+- L'inscription ne demande **aucune pièce justificative** : l'agrément (facultatif) et la
+  conformité se vérifient avec le dirigeant avant la validation par l'administrateur.
+
 ## Pages légales
 
 Trois pages réelles, conformes au droit béninois, servies et pré-cachées par le service

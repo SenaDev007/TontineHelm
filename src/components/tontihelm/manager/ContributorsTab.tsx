@@ -13,6 +13,7 @@ import { PassbookStatusBadge } from "../StatusBadge";
 import { ContributorRow, formatFCFA } from "@/lib/types";
 import { get, isOfflineQueued, post } from "@/lib/client";
 import { useSyncDone } from "@/lib/offline/hooks";
+import { usePlanQuota } from "./usePlanQuota";
 import { UserPlus, Search, Phone, MapPin, IdCard } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -23,6 +24,9 @@ export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
   const [agents, setAgents] = useState<{ id: string; fullName: string }[]>([]);
   const [form, setForm] = useState({ fullName: "", phone: "", neighborhood: "", idNumber: "", agentId: "" });
   const [submitting, setSubmitting] = useState(false);
+  const quota = usePlanQuota();
+  const contributorsQuotaReached =
+    !readOnly && quota !== null && (rows?.length ?? 0) >= quota.usage.contributorsQuota;
 
   const load = () => {
     get<{ contributors: ContributorRow[] }>("/api/manager/contributors")
@@ -87,12 +91,24 @@ export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
           />
         </div>
         {!readOnly && (
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-primary text-primary-foreground hover:bg-primary-hover">
-                <UserPlus className="h-4 w-4" aria-hidden /> Nouveau cotisant
-              </Button>
-            </DialogTrigger>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            {quota && (
+              <p className="text-xs font-medium text-subtle" aria-live="polite">
+                {rows?.length ?? 0} cotisant{(rows?.length ?? 0) > 1 ? "s" : ""} sur {quota.usage.contributorsQuota} inclus
+                <span className="text-subtle"> · palier {quota.planLabel}</span>
+              </p>
+            )}
+            {contributorsQuotaReached ? (
+              <p className="max-w-xs rounded-md border border-[#F0D48A] bg-[#FFF4D6] px-3 py-2 text-xs font-medium text-[#A66A00]">
+                Palier atteint : passe au palier supérieur (onglet Abonnement) pour enregistrer d&apos;autres cotisants.
+              </p>
+            ) : (
+              <Dialog open={open} onOpenChange={setOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-primary text-primary-foreground hover:bg-primary-hover">
+                    <UserPlus className="h-4 w-4" aria-hidden /> Nouveau cotisant
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle className="font-display">Nouveau cotisant</DialogTitle>
@@ -140,6 +156,8 @@ export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+            )}
+          </div>
         )}
       </div>
 

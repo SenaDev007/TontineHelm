@@ -47,6 +47,8 @@ const PRODUCT_LINKS = [
   { label: "Tarifs", href: "#tarifs" },
   { label: "Demander une démonstration", href: "#demonstration" },
   { label: "Questions fréquentes", href: "#questions" },
+  { label: "Inscrire ma structure", href: "/inscription" },
+  { label: "Se connecter", href: "/connexion" },
 ];
 
 const LEGAL_LINKS = [

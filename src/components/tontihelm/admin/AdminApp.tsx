@@ -189,8 +189,8 @@ export function AdminApp({ onLogout }: { onLogout: () => void }) {
             File de validation ({pending.length})
           </h1>
           <p className="mt-1 text-sm text-subtle">
-            Chaque structure s'inscrit avec son justificatif d'agrément. Le compte reste en attente
-            jusqu'à validation manuelle.
+            Les structures s&apos;inscrivent sans pièce jointe : l&apos;agrément et la conformité se vérifient
+            avant la validation. Le compte reste en attente jusqu&apos;à validation manuelle.
           </p>
 
           {!structures && (
@@ -217,13 +217,15 @@ export function AdminApp({ onLogout }: { onLogout: () => void }) {
                   <div className="mt-4 grid gap-3 rounded-lg border border-line bg-[#F4F7FB] p-4 sm:grid-cols-2">
                     <div>
                       <p className="text-xs font-medium uppercase tracking-wide text-subtle">Référence de l'agrément</p>
-                      <p className="mt-1 text-sm font-medium text-ink">{s.licenseRef}</p>
+                      <p className="mt-1 text-sm font-medium text-ink">
+                        {s.licenseRef ?? <span className="text-subtle">Non renseignée — à vérifier avec le dirigeant avant d'activer</span>}
+                      </p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-subtle">Justificatif joint</p>
+                      <p className="text-xs font-medium uppercase tracking-wide text-subtle">Justificatif</p>
                       <p className="mt-1 flex items-center gap-2 text-sm text-ink">
                         <FileText className="h-4 w-4 tontihelm-icon text-primary" aria-hidden />
-                        {s.licenseDocName ?? "—"}
+                        {s.licenseDocName ?? <span className="text-subtle">Non joint (facultatif à l'inscription)</span>}
                       </p>
                       <p className="mt-0.5 text-xs text-subtle">
                         Demande envoyée le {new Date(s.createdAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}

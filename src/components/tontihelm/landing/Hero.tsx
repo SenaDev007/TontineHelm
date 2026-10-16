@@ -1,11 +1,14 @@
 "use client";
-// TontiHelm — hero animé (§13.2, section 1) : fond nuit vivant (orbes + grille),
-// texte en cascade, écran smartphone montrant de VRAIES captures de l'application
-// (tournée, encaissement, tableau de bord) qui se relaient en fondu.
+// TontiHelm — hero animé (§13.2, section 1) : fond photographique officiel
+// (Background desktop.png / Background mobile.png du dépôt), voile nuit pour la
+// lisibilité, texte en cascade, écran smartphone montrant de VRAIES captures de
+// l'application (tournée, encaissement, tableau de bord) qui se relaient en fondu.
+// Le téléphone respecte le ratio réel des captures (390×844) : barre d'état au-dessus,
+// indicateur d'accueil en dessous — AUCUNE partie de l'écran n'est rognée ou cachée.
 // Aucun mode gratuit : la découverte passe par une démonstration (#demonstration).
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, WifiOff, MessageSquareText, CheckCheck } from "lucide-react";
+import { ArrowRight, WifiOff, MessageSquareText, CheckCheck, Signal, Wifi, BatteryFull } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -40,7 +43,23 @@ function Orb({
   );
 }
 
-/* ── Écran smartphone : vraies captures de l'application, rotation en fondu ── */
+/* ── Barre d'état réaliste : horloge + réseau, l'îlot du téléphone au centre ── */
+function StatusBar() {
+  return (
+    <div className="relative flex h-11 items-center justify-between bg-white px-6 pt-1" aria-hidden>
+      <span className="font-display text-[13px] font-semibold tracking-tight text-ink">9:41</span>
+      {/* Îlot (encoche dynamique) : centré, ne recouvre aucune donnée de l'application */}
+      <span className="absolute left-1/2 top-1.5 h-[22px] w-[92px] -translate-x-1/2 rounded-full bg-[#0D1B33]" />
+      <span className="flex items-center gap-1.5 text-ink">
+        <Signal className="h-3 w-3" strokeWidth={2.5} />
+        <Wifi className="h-3 w-3" strokeWidth={2.5} />
+        <BatteryFull className="h-3.5 w-3.5" strokeWidth={2} />
+      </span>
+    </div>
+  );
+}
+
+/* ── Écran smartphone : vraies captures, ratio exact, rotation en fondu ── */
 function PhoneMockup() {
   const reduce = useReducedMotion();
   const [index, setIndex] = useState(0);
@@ -71,30 +90,34 @@ function PhoneMockup() {
         transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
         className="relative rounded-[36px] border border-[#2A3B5C] bg-[#0D1B33] p-[10px] shadow-2xl shadow-black/60 ring-1 ring-white/10"
       >
-        {/* Écran */}
+        {/* Écran : barre d'état + capture (ratio naturel, jamais rognée) + indicateur d'accueil */}
         <div className="relative overflow-hidden rounded-[26px] bg-white">
-          <div className="aspect-[390/812] w-full">
+          <StatusBar />
+          <div className="relative w-full">
             <AnimatePresence mode="popLayout">
+              {/* eslint-disable-next-line @next/next/no-img-element -- capture réelle de l'application, ratio 390×844 respecté */}
               <motion.img
                 key={current.src}
                 src={current.src}
                 alt={current.label}
-                className="absolute inset-0 h-full w-full object-cover object-top"
-                initial={reduce ? undefined : { opacity: 0, scale: 1.04 }}
+                className="block h-auto w-full"
+                initial={reduce ? undefined : { opacity: 0, scale: 1.02 }}
                 animate={{ opacity: 1, scale: 1 }}
-                exit={reduce ? undefined : { opacity: 0, scale: 0.99 }}
+                exit={reduce ? undefined : { opacity: 0, scale: 0.995 }}
                 transition={{ duration: 0.65, ease: EASE }}
               />
             </AnimatePresence>
           </div>
+          {/* Barre d'accueil : le geste de retour au home, sous l'application */}
+          <div className="flex h-6 items-center justify-center bg-white" aria-hidden>
+            <span className="h-[5px] w-24 rounded-full bg-[#0D1B33]/85" />
+          </div>
 
           {/* Reflet diagonal sur l'écran */}
           <div
-            className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(255,255,255,0.16)_0%,transparent_28%,transparent_72%,rgba(255,255,255,0.05)_100%)]"
+            className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(255,255,255,0.14)_0%,transparent_30%,transparent_88%,rgba(255,255,255,0.05)_100%)]"
             aria-hidden
           />
-          {/* Encoche */}
-          <div className="absolute left-1/2 top-2 h-5 w-24 -translate-x-1/2 rounded-full bg-[#0D1B33]" aria-hidden />
         </div>
 
         {/* Boutons latéraux */}
@@ -102,22 +125,8 @@ function PhoneMockup() {
         <div className="absolute -right-[2px] top-40 h-8 w-[3px] rounded-full bg-[#2A3B5C]" aria-hidden />
       </motion.div>
 
-      {/* Pastille : vraie capture */}
-      <motion.div
-        initial={reduce ? false : { opacity: 0, y: 10 }}
-        whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ delay: 0.5, duration: 0.5, ease: EASE }}
-        className="absolute -bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-[#2A3B5C] bg-[#0D1B33]/95 px-3.5 py-1.5 shadow-lg backdrop-blur"
-      >
-        <CheckCheck className="h-3.5 w-3.5 text-gold" aria-hidden />
-        <span className="whitespace-nowrap text-[11px] font-medium text-[#DCE6F5]">
-          Captures réelles de l&apos;application
-        </span>
-      </motion.div>
-
       {/* Indicateurs d'écran */}
-      <div className="absolute -bottom-12 left-1/2 flex -translate-x-1/2 gap-1.5" aria-hidden>
+      <div className="absolute -bottom-7 left-1/2 flex -translate-x-1/2 gap-1.5" aria-hidden>
         {SCREENS.map((s, i) => (
           <button
             key={s.src}
@@ -150,13 +159,7 @@ function ProofChip({ icon: Icon, children }: { icon: React.ElementType; children
   );
 }
 
-export function Hero({
-  onDemoRequest,
-  onStartTrial,
-}: {
-  onDemoRequest: () => void;
-  onStartTrial: () => void;
-}) {
+export function Hero({ onDemoRequest }: { onDemoRequest: () => void }) {
   const reduce = useReducedMotion();
 
   const container = {
@@ -170,10 +173,13 @@ export function Hero({
 
   return (
     <section id="accueil" className="relative overflow-hidden bg-ink text-white">
-      {/* Fond photographique officiel (assets du dépôt) — desktop / mobile */}
+      {/* Fond photographique officiel (assets du dépôt) — desktop / mobile.
+          NB : srcset sépare ses candidats par des espaces → l'URL qui contient
+          une espace DOIT être pourcentée (%20), sinon le candidat mobile est
+          invalide et le navigateur sert l'image desktop sur téléphone. */}
       <div className="absolute inset-0" aria-hidden>
         <picture>
-          <source media="(max-width: 767px)" srcSet="/Background mobile.png" />
+          <source media="(max-width: 767px)" srcSet="/Background%20mobile.png" />
           {/* eslint-disable-next-line @next/next/no-img-element -- décoratif, fond plein cadre */}
           <img
             src="/Background desktop.png"
@@ -248,13 +254,14 @@ export function Hero({
             >
               Demander une démonstration <ArrowRight className="h-5 w-5" aria-hidden />
             </Button>
+            {/* Inscription : vraie route /inscription */}
             <Button
               size="lg"
               variant="outline"
-              onClick={onStartTrial}
+              asChild
               className="h-12 border-[#4A5E80] bg-white/5 px-6 text-base text-white hover:border-gold/70 hover:bg-[#15243E] hover:text-white"
             >
-              Inscrire ma structure
+              <a href="/inscription">Démarrer mon inscription</a>
             </Button>
           </motion.div>
 

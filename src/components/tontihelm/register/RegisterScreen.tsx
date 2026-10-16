@@ -1,6 +1,8 @@
 "use client";
-// TontiHelm — inscription de la structure avec justificatif (M1, écran 10).
+// TontiHelm — inscription de la structure (M1, écran 10).
 // Stepper maison : identité de la structure, puis dirigeant et code PIN.
+// L'agrément et les pièces justificatives sont FACULTATIFS à cette étape :
+// la vérification réglementaire se fait avec le conseiller avant l'activation.
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LogoMark } from "../Logo";
 import { post } from "@/lib/client";
-import { ArrowLeft, ArrowRight, CheckCircle2, FileUp, PartyPopper } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, PartyPopper } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const KINDS = [
@@ -25,7 +27,7 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
   const [finished, setFinished] = useState(false);
 
   const [form, setForm] = useState({
-    structureName: "", kind: "", licenseRef: "", licenseDocName: "",
+    structureName: "", kind: "", licenseRef: "",
     city: "", ownerName: "", ownerPhone: "", pin: "", pinConfirm: "",
   });
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -35,8 +37,6 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
     if (step === 1) {
       if (form.structureName.trim().length < 2) return setError("Saisis le nom de ta structure.");
       if (!form.kind) return setError("Choisis le type de ta structure.");
-      if (form.licenseRef.trim().length < 3) return setError("Saisis ton numéro d'agrément ou de récépissé.");
-      if (!form.licenseDocName) return setError("Joins ton justificatif d'agrément.");
       if (form.city.trim().length < 2) return setError("Saisis ta ville.");
     }
     if (step === 2) {
@@ -52,18 +52,16 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
     setError(null);
     setLoading(true);
     try {
-      const res = await post<{ message: string }>("/api/structures/register", {
+      await post<{ message: string }>("/api/structures/register", {
         structureName: form.structureName.trim(),
         kind: form.kind,
-        licenseRef: form.licenseRef.trim(),
-        licenseDocName: form.licenseDocName,
+        licenseRef: form.licenseRef.trim() || undefined,
         city: form.city.trim(),
         ownerName: form.ownerName.trim(),
         ownerPhone: form.ownerPhone.replace(/\s+/g, ""),
         pin: form.pin,
       });
       setFinished(true);
-      if (res.message) setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Inscription impossible. Réessaie.");
     } finally {
@@ -91,11 +89,17 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
               </span>
               <h1 className="font-display mt-5 text-2xl font-bold text-ink">Inscription envoyée</h1>
               <p className="mt-3 text-base leading-relaxed text-subtle">
-                Demande reçue. Nous vérifions ton justificatif d'agrément et nous te répondons sous 24 heures ouvrées.
+                Demande reçue. Nous vérifions les informations de ta structure et nous te répondons sous
+                24 heures ouvrées.
               </p>
-              <Button onClick={onDone} className="mt-6 h-12 bg-primary px-6 text-primary-foreground hover:bg-primary-hover">
-                Retour à l'accueil
-              </Button>
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+                <Button onClick={onDone} className="h-12 bg-primary px-6 text-primary-foreground hover:bg-primary-hover">
+                  Retour à l&apos;accueil
+                </Button>
+                <Button variant="outline" asChild className="h-12 border-line px-6">
+                  <a href="/connexion">Se connecter</a>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ) : (
@@ -106,8 +110,8 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
               </div>
               <CardTitle className="font-display text-xl font-bold">Inscrire ma structure</CardTitle>
               <p className="text-sm text-subtle">
-                Ton espace est activé après vérification de ton justificatif d&apos;agrément. Un conseiller
-                peut d&apos;abord te faire une démonstration.
+                Aucune pièce à joindre pour démarrer : ton espace est activé après vérification de ta
+                structure, sous 24 heures ouvrées. Un conseiller peut d&apos;abord te faire une démonstration.
               </p>
               {/* Stepper */}
               <div className="mt-4 flex items-center gap-2" aria-hidden>
@@ -115,7 +119,7 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
                   <div key={s} className="flex flex-1 items-center gap-2">
                     <span className={cn(
                       "font-display flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold",
-                      s < step ? "bg-primary text-primary-foreground" : s === step ? "bg-primary text-primary-foreground" : "bg-[#EDF2F7] text-subtle"
+                      s <= step ? "bg-primary text-primary-foreground" : "bg-[#EDF2F7] text-subtle"
                     )}>
                       {s < step ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : s}
                     </span>
@@ -145,23 +149,21 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="lref">Numéro d'agrément, de récépissé ou de RC</Label>
-                    <Input id="lref" value={form.licenseRef} onChange={(e) => set("licenseRef", e.target.value)} className="h-12 border-line text-base" placeholder="Arrêté MEF/DC/SG/SFD n° 2021-087" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="doc">Justificatif d'agrément</Label>
-                    <label
-                      htmlFor="doc"
-                      className="flex h-14 cursor-pointer items-center gap-3 rounded-lg border border-dashed border-line bg-[#F4F7FB] px-4 text-sm text-subtle transition-colors hover:border-primary/50 hover:bg-[#EEF4FD]"
-                    >
-                      <FileUp className="h-5 w-5 tontihelm-icon text-primary" aria-hidden />
-                      {form.licenseDocName || "Choisis le fichier PDF ou l'image du justificatif"}
-                    </label>
-                    <input
-                      id="doc" type="file" accept=".pdf,.png,.jpg,.jpeg" className="sr-only"
-                      onChange={(e) => set("licenseDocName", e.target.files?.[0]?.name ?? "")}
+                    <Label htmlFor="lref">
+                      Numéro d&apos;agrément, de récépissé ou de RC{" "}
+                      <span className="font-normal text-subtle">(facultatif)</span>
+                    </Label>
+                    <Input
+                      id="lref"
+                      value={form.licenseRef}
+                      onChange={(e) => set("licenseRef", e.target.value)}
+                      className="h-12 border-line text-base"
+                      placeholder="Arrêté MEF/DC/SG/SFD n° 2021-087 — tu peux l'ajouter plus tard"
                     />
-                    <p className="text-xs text-subtle">Préproduction : seul le nom du fichier est conservé.</p>
+                    <p className="text-xs text-subtle">
+                      La loi exige l&apos;agrément pour collecter l&apos;épargne : nous le vérifions avec toi
+                      avant l&apos;activation, aucune pièce à joindre maintenant.
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="city">Ville</Label>
@@ -199,8 +201,7 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
                     {[
                       ["Structure", form.structureName],
                       ["Type", KINDS.find((k) => k.value === form.kind)?.label ?? ""],
-                      ["Agrément", form.licenseRef],
-                      ["Justificatif", form.licenseDocName],
+                      ...(form.licenseRef.trim() ? [["Agrément", form.licenseRef] as [string, string]] : []),
                       ["Ville", form.city],
                       ["Dirigeant", `${form.ownerName} · ${form.ownerPhone}`],
                     ].map(([k, v]) => (
@@ -211,8 +212,9 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
                     ))}
                   </dl>
                   <p className="text-sm leading-relaxed text-subtle">
-                    En envoyant cette demande, tu déclares détenir l'agrément affiché et rester responsable
-                    des fonds collectés. TontiHelm ne détient ni ne redistribue aucun fonds.
+                    En envoyant cette demande, tu déclares exercer une activité de collecte déclarée et
+                    rester responsable des fonds collectés. TontiHelm ne détient ni ne redistribue aucun
+                    fonds.
                   </p>
                 </div>
               )}
@@ -235,6 +237,13 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
                   </Button>
                 )}
               </div>
+
+              <p className="text-center text-sm text-subtle">
+                Déjà un compte ?{" "}
+                <a href="/connexion" className="font-medium text-primary underline-offset-4 hover:underline">
+                  Se connecter
+                </a>
+              </p>
             </CardContent>
           </Card>
         )}

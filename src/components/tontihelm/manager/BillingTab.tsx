@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { SubscriptionStatusBadge } from "../StatusBadge";
 import { BillingData, SessionUser, SUB_STATUS, formatFCFA } from "@/lib/types";
 import { get } from "@/lib/client";
-import { CreditCard, Smartphone, Users, CheckCircle2, Clock } from "lucide-react";
+import { CreditCard, Smartphone, Users, CheckCircle2, Clock, BellRing } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 export function BillingTab({ user }: { user: SessionUser }) {
@@ -99,9 +99,11 @@ export function BillingTab({ user }: { user: SessionUser }) {
               <p className="text-sm text-subtle">sur {usage.contributorsQuota} inclus</p>
             </div>
             <Progress value={Math.min(100, (usage.contributors / usage.contributorsQuota) * 100)} className="h-2" aria-label={`Quota cotisants : ${usage.contributors} sur ${usage.contributorsQuota}`} />
-            {usage.extraContributors > 0 && (
-              <p className="text-xs text-warning">Dépassement : {usage.extraContributors} cotisants × 50 FCFA par mois.</p>
-            )}
+            {usage.contributors >= usage.contributorsQuota ? (
+              <p className="text-xs font-medium text-warning">Palier atteint : passe au palier supérieur pour enregistrer d&apos;autres cotisants.</p>
+            ) : usage.contributorsQuota - usage.contributors <= 5 ? (
+              <p className="text-xs text-subtle">Il te reste {usage.contributorsQuota - usage.contributors} place{(usage.contributorsQuota - usage.contributors) > 1 ? "s" : ""} de cotisants sur ce palier.</p>
+            ) : null}
           </CardContent>
         </Card>
         <Card className="border-line">
@@ -116,9 +118,9 @@ export function BillingTab({ user }: { user: SessionUser }) {
               <p className="text-sm text-subtle">sur {usage.agentsQuota} inclus</p>
             </div>
             <Progress value={Math.min(100, (usage.agents / usage.agentsQuota) * 100)} className="h-2" aria-label={`Quota agents : ${usage.agents} sur ${usage.agentsQuota}`} />
-            {usage.extraAgents > 0 && (
-              <p className="text-xs text-warning">Supplément : {usage.extraAgents} agents × 2 000 FCFA par mois.</p>
-            )}
+            {usage.agents >= usage.agentsQuota ? (
+              <p className="text-xs font-medium text-warning">Palier atteint : passe au palier supérieur pour ajouter d&apos;autres agents.</p>
+            ) : null}
           </CardContent>
         </Card>
       </div>
@@ -129,7 +131,18 @@ export function BillingTab({ user }: { user: SessionUser }) {
             <p className="text-sm font-medium text-ink">SMS envoyés ce mois</p>
             <p className="text-xs text-subtle">Facturés à l'usage, tarif affiché avant envoi (25 FCFA chacun).</p>
           </div>
-          <p className="amount font-display text-xl font-bold text-ink">{usage.smsMonth}</p>
+          <div className="flex items-center gap-4">
+            {usage.remindersIncluded ? (
+              <Badge variant="outline" className="gap-1.5 rounded-md border-[#B5E8E5] bg-[#DFF6F4] px-2 py-1 text-xs font-medium text-[#00806B]">
+                <BellRing className="h-3.5 w-3.5" aria-hidden /> Rappels inclus
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="gap-1.5 rounded-md border-[#F0D48A] bg-[#FFF4D6] px-2 py-1 text-xs font-medium text-[#A66A00]">
+                <BellRing className="h-3.5 w-3.5" aria-hidden /> Rappels dès le palier Pro
+              </Badge>
+            )}
+            <p className="amount font-display text-xl font-bold text-ink">{usage.smsMonth}</p>
+          </div>
         </CardContent>
       </Card>
 

@@ -12,13 +12,18 @@
  */
 "use strict";
 
-const VERSION = "tth-v1";
-const PAGES_CACHE = "tth-pages-v1"; // HTML persistant
-const STATIC_CACHE = "tth-static-v1"; // chunks immuables
-const ASSETS_CACHE = "tth-assets-v1"; // images, logos, captures
+/* v2 : purge des caches v1 (icônes et assets obsolètes — notamment les anciennes
+ * icônes du manifest encore servies depuis tth-assets-v1) et pré-cache des
+ * routes /connexion et /inscription. */
+const VERSION = "tth-v2";
+const PAGES_CACHE = "tth-pages-v2"; // HTML persistant
+const STATIC_CACHE = "tth-static-v2"; // chunks immuables
+const ASSETS_CACHE = "tth-assets-v2"; // images, logos, captures, icônes
 
 const PRECACHE_PAGES = [
   "/",
+  "/connexion",
+  "/inscription",
   "/conditions-utilisation",
   "/confidentialite",
   "/mentions-legales",
@@ -26,7 +31,7 @@ const PRECACHE_PAGES = [
 
 const PRECACHE_ASSETS = [
   "/manifest.webmanifest",
-  "/logo-tontihelm/logo-TontiHelm1.svg",
+  "/logo-tontihelm/logo-TontiHelm1.webp",
   "/logo-tontihelm/logo-TontiHelm-nom%20droite1.png",
   "/logo-tontihelm/logo-TontiHelm-nom%20bas1.png",
   "/Background%20desktop.png",
@@ -36,6 +41,7 @@ const PRECACHE_ASSETS = [
   "/app-screens/screen-dashboard.png",
   "/icon-192.png",
   "/icon-512.png",
+  "/icon-maskable-512.png",
   "/favicon-32.png",
   "/apple-touch-icon.png",
 ];
@@ -118,7 +124,7 @@ self.addEventListener("activate", (event) => {
     (async () => {
       const keys = await caches.keys();
       await Promise.all(
-        keys.filter((k) => k.startsWith("tth-") && !k.endsWith("-v1")).map((k) => caches.delete(k))
+        keys.filter((k) => k.startsWith("tth-") && !k.endsWith("-v2")).map((k) => caches.delete(k))
       );
       await self.clients.claim();
     })()

@@ -26,8 +26,8 @@ export function LoginScreen({
   async function submit(e?: React.FormEvent) {
     e?.preventDefault();
     setError(null);
-    if (phone.replace(/\s+/g, "").length < 8) {
-      setError("Numéro invalide. Saisis ton numéro complet, sans espace.");
+    if (phone.replace(/[\s.\-()]/g, "").length < 8) {
+      setError("Numéro invalide. Saisis ton numéro complet, avec ou sans le +229.");
       return;
     }
     if (pin.length !== 6) {
@@ -36,7 +36,10 @@ export function LoginScreen({
     }
     setLoading(true);
     try {
-      const res = await post<{ user: SessionUser; token: string }>("/api/auth/login", { phone, pin });
+      const res = await post<{ user: SessionUser; token: string }>("/api/auth/login", {
+        phone: phone.replace(/[\s.\-()]/g, ""),
+        pin,
+      });
       setToken(res.token);
       onLoggedIn(res.user);
     } catch (err) {
@@ -77,12 +80,13 @@ export function LoginScreen({
                   id="phone"
                   inputMode="tel"
                   autoComplete="tel"
-                  placeholder="+229 97 01 02 03"
+                  placeholder="+229 97 01 02 03 ou 97 01 02 03"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   className="h-12 border-line text-base"
                   aria-describedby={error ? "login-error" : undefined}
                 />
+                <p className="text-xs text-subtle">Avec ou sans l'indicatif +229 — les espaces sont acceptés.</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="pin">Code PIN</Label>
@@ -110,6 +114,13 @@ export function LoginScreen({
               <Button type="submit" disabled={loading} className="h-12 w-full bg-primary text-base text-primary-foreground hover:bg-primary-hover">
                 {loading ? "Connexion…" : (<><LogIn className="h-4 w-4" aria-hidden /> Se connecter</>)}
               </Button>
+
+              <p className="text-center text-sm text-subtle">
+                Pas encore de compte ?{" "}
+                <a href="/inscription" className="font-medium text-primary underline-offset-4 hover:underline">
+                  Inscrire ma structure
+                </a>
+              </p>
             </form>
           </CardContent>
         </Card>

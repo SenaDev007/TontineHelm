@@ -8,7 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AuditPage, formatFCFA } from "@/lib/types";
 import { get } from "@/lib/client";
-import { Link2, ShieldCheck, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { downloadCsv, printReport } from "@/lib/export";
+import { ExportMenu } from "./ExportMenu";
+import { Link2, ShieldCheck, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -24,9 +26,12 @@ const ACTION_LABELS: Record<string, string> = {
   invoice_paid: "Facture réglée",
   contributor_created: "Cotisant créé",
   passbook_created: "Carnet créé",
+  agent_created: "Agent créé",
+  reminder_sent: "Rappel envoyé",
+  structure_reactivated: "Structure réactivée",
 };
 
-export function AuditTab() {
+export function AuditTab({ structureName }: { structureName: string }) {
   const [data, setData] = useState<AuditPage | null>(null);
   const [page, setPage] = useState(1);
   const [action, setAction] = useState("all");
@@ -46,6 +51,77 @@ export function AuditTab() {
   }, [page, action]);
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
+
+  /* ── Export réel du journal : toutes les pages, filtre d'action appliqué ── */
+  const [exporting, setExporting] = useState(false);
+
+  async function fetchAllAudit(): Promise<AuditPage["logs"]> {
+    const all = [] as AuditPage["logs"];
+    let p = 1;
+    for (let guard = 0; guard < 100; guard++, p++) {
+      const d = await get<AuditPage>(`/api/manager/audit?page=${p}${action !== "all" ? `&action=${action}` : ""}`);
+      all.push(...d.logs);
+      if (p * d.pageSize >= d.total || d.logs.length === 0) break;
+    }
+    return all;
+  }
+
+  function auditRows(logs: AuditPage["logs"]) {
+    return logs.map((l) => [
+      new Date(l.at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+      l.actor,
+      l.actorRole,
+      ACTION_LABELS[l.action] ?? l.action,
+      JSON.stringify(l.payload),
+      l.hash.slice(0, 12),
+    ]);
+  }
+
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      const logs = await fetchAllAudit();
+      const header = ["Horodatage", "Auteur", "Rôle", "Action", "Détail (JSON)", "Hash (début)"];
+      downloadCsv(`journal-audit-${new Date().toISOString().slice(0, 10)}`, [header, ...auditRows(logs)]);
+      toast({ title: "Export Excel prêt.", description: `${logs.length} lignes du journal téléchargées.` });
+    } catch {
+      toast({ title: "Export impossible", description: "Vérifie ta connexion puis réessaie." });
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function exportPdf() {
+    setExporting(true);
+    try {
+      const logs = await fetchAllAudit();
+      printReport(
+        {
+          structure: structureName,
+          title: "Journal d'audit",
+          subtitle: `${action === "all" ? "Toutes les actions" : ACTION_LABELS[action] ?? action} · ${logs.length} lignes · chaîne ${data?.chainOk ? "intacte" : "INTERROMPUE"}`,
+        },
+        [
+          { header: "Horodatage" },
+          { header: "Auteur" },
+          { header: "Rôle" },
+          { header: "Action" },
+          { header: "Hash" },
+        ],
+        logs.map((l) => [
+          new Date(l.at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+          l.actor,
+          l.actorRole,
+          ACTION_LABELS[l.action] ?? l.action,
+          l.hash.slice(0, 12) + "…",
+        ])
+      );
+    } catch {
+      toast({ title: "Export impossible", description: "Vérifie ta connexion puis réessaie." });
+    } finally {
+      setExporting(false);
+    }
+  }
 
   if (!data) {
     return <div className="space-y-3">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-14 rounded-lg" />)}</div>;
@@ -71,14 +147,7 @@ export function AuditTab() {
               </p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-line"
-            onClick={() => toast({ title: "Export préparé", description: "L'export complet du journal arrive avec le module d'export." })}
-          >
-            <Download className="h-4 w-4" aria-hidden /> Exporter le journal
-          </Button>
+          <ExportMenu onCsv={exportCsv} onPdf={exportPdf} label="Exporter le journal" busy={exporting} />
         </CardContent>
       </Card>
 

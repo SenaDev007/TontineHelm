@@ -195,7 +195,8 @@ export interface BillingData {
   } | null;
   usage: {
     agents: number; agentsQuota: number; contributors: number; contributorsQuota: number;
-    extraContributors: number; extraAgents: number; smsMonth: number; smsTotal: number;
+    extraContributors: number; extraAgents: number; remindersIncluded: boolean;
+    smsMonth: number; smsTotal: number;
   };
   invoices: {
     id: string; period: string; baseAmount: number; total: number; status: string;
@@ -207,7 +208,7 @@ export interface AdminStructure {
   id: string;
   name: string;
   kind: string;
-  licenseRef: string;
+  licenseRef: string | null;
   licenseDocName: string | null;
   city: string | null;
   status: string;
@@ -260,7 +261,7 @@ export const CLOSING_STATUS: Record<string, { label: string; tone: "success" | "
 };
 
 export const SUB_STATUS: Record<string, string> = {
-  trial: "Période d'essai",
+  trial: "Abonnement à activer",
   active: "Actif",
   past_due: "En retard de paiement",
   read_only: "Lecture seule",

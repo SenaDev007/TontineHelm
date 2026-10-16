@@ -95,7 +95,7 @@ const FEATURES = [
   },
 ];
 
-export function Features({ onDemoRequest }: { onDemoRequest: () => void }) {
+export function Features() {
   return (
     <section id="fonctionnalites" className="bg-canvas">
       <div className="mx-auto max-w-[1200px] px-4 py-16 md:px-6 lg:px-8 lg:py-24">
@@ -117,8 +117,11 @@ export function Features({ onDemoRequest }: { onDemoRequest: () => void }) {
           ))}
         </div>
         <div className="mt-10 text-center">
-          <Button size="lg" variant="outline" onClick={onDemoRequest} className="border-primary text-primary hover:bg-[#E8F1FD] hover:text-primary h-12 px-6 text-base">
-            Demander une démonstration <ArrowRight className="h-5 w-5" aria-hidden />
+          {/* Voir l'application en action : vraie route /connexion */}
+          <Button size="lg" variant="outline" asChild className="border-primary text-primary hover:bg-[#E8F1FD] hover:text-primary h-12 px-6 text-base">
+            <a href="/connexion">
+              Voir l'application en action <ArrowRight className="h-5 w-5" aria-hidden />
+            </a>
           </Button>
         </div>
       </div>
@@ -128,13 +131,13 @@ export function Features({ onDemoRequest }: { onDemoRequest: () => void }) {
 
 /* ── Section 5 · Méthode : quatre étapes courtes ── */
 const STEPS = [
-  "Tu inscris ta structure et tu joins ton justificatif d'agrément.",
+  "Tu inscris ta structure en quelques minutes, sans pièce à joindre.",
   "Nous configurons tes agents, tes carnets et tes règles de commission.",
   "Tes agents encaissent avec l'application dès la tournée suivante.",
   "Tu clôtures la caisse le soir et tu compares avec ton ancien carnet.",
 ];
 
-export function Method({ onStartTrial }: { onStartTrial: () => void }) {
+export function Method() {
   return (
     <section id="methode" className="bg-surface">
       <div className="mx-auto max-w-[1200px] px-4 py-16 md:px-6 lg:px-8 lg:py-24">
@@ -157,8 +160,11 @@ export function Method({ onStartTrial }: { onStartTrial: () => void }) {
           ))}
         </ol>
         <div className="mt-10">
-          <Button size="lg" onClick={onStartTrial} className="bg-primary text-primary-foreground hover:bg-primary-hover h-12 px-6 text-base">
-            Démarrer mon inscription <ArrowRight className="h-5 w-5" aria-hidden />
+          {/* Inscription : vraie route /inscription */}
+          <Button size="lg" asChild className="bg-primary text-primary-foreground hover:bg-primary-hover h-12 px-6 text-base">
+            <a href="/inscription">
+              Démarrer mon inscription <ArrowRight className="h-5 w-5" aria-hidden />
+            </a>
           </Button>
         </div>
       </div>
@@ -188,8 +194,8 @@ export function Trust() {
                 registre, pas la caisse.
               </p>
               <p>
-                Nous vérifions ton agrément avant d'activer ton compte. Une structure sans justificatif ne
-                passe pas.
+                Nous vérifions ta structure et son agrément avant d'activer ton compte. Une structure
+                non conforme ne passe pas.
               </p>
               <p>
                 Tes données restent isolées de celles des autres structures. Chaque ligne du journal est

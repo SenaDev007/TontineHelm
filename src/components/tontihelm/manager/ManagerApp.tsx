@@ -171,9 +171,9 @@ export function ManagerApp({
           {tab === "team" && <TeamTab readOnly={readOnly} />}
           {tab === "contributors" && <ContributorsTab readOnly={readOnly} />}
           {tab === "passbooks" && <PassbooksTab readOnly={readOnly} />}
-          {tab === "collections" && <CollectionsTab readOnly={readOnly} />}
+          {tab === "collections" && <CollectionsTab readOnly={readOnly} structureName={user.structureName ?? "Structure"} />}
           {tab === "closings" && <ClosingsTab readOnly={readOnly} />}
-          {tab === "audit" && <AuditTab />}
+          {tab === "audit" && <AuditTab structureName={user.structureName ?? "Structure"} />}
           {tab === "billing" && <BillingTab user={user} />}
         </main>
       </div>

@@ -1,10 +1,11 @@
 "use client";
-// TontiHelm — navigation vitrine (§13.2) : barre blanche, logo officiel bien visible,
-// bouton « Demander une démo » visible au défilement sur mobile.
+// TontiHelm — navigation vitrine (§13.2) : barre blanche, logo officiel bien visible.
+// « Démarrer mon inscription » (→ /inscription) et « Se connecter » (→ /connexion)
+// sont visibles dès le haut de page : de vraies routes, des vrais liens.
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, ArrowRight } from "lucide-react";
+import { Menu, ArrowRight, LogIn, Sparkles } from "lucide-react";
 import { LogoWordmark } from "../Logo";
 
 const LINKS = [
@@ -28,7 +29,7 @@ export function Navbar({ onDemoRequest }: { onDemoRequest: () => void }) {
           </span>
         </a>
 
-        <nav className="hidden items-center gap-1 md:flex" aria-label="Navigation principale">
+        <nav className="hidden items-center gap-1 lg:flex" aria-label="Navigation principale">
           {LINKS.map((l) => (
             <a
               key={l.href}
@@ -41,19 +42,23 @@ export function Navbar({ onDemoRequest }: { onDemoRequest: () => void }) {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Button
-            onClick={onDemoRequest}
-            className="hidden md:inline-flex"
-          >
-            Demander une démo <ArrowRight className="h-4 w-4" aria-hidden />
+          {/* Connexion : vraie route /connexion */}
+          <Button variant="outline" asChild className="border-line">
+            <a href="/connexion">
+              <LogIn className="h-4 w-4" aria-hidden />
+              <span className="hidden sm:inline">Se connecter</span>
+              <span className="sm:hidden">Connexion</span>
+            </a>
           </Button>
-          {/* Bouton de démo toujours visible sur mobile, même menu ouvert */}
-          <Button onClick={onDemoRequest} size="sm" className="px-3 md:hidden max-[380px]:px-2.5 max-[380px]:text-xs">
-            Demander une démo
+          {/* Inscription : vraie route /inscription, CTA principal */}
+          <Button asChild className="hidden bg-primary text-primary-foreground hover:bg-primary-hover sm:inline-flex">
+            <a href="/inscription">
+              Démarrer mon inscription <ArrowRight className="h-4 w-4" aria-hidden />
+            </a>
           </Button>
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="border-line md:hidden" aria-label="Ouvrir le menu">
+              <Button variant="outline" size="icon" className="border-line lg:hidden" aria-label="Ouvrir le menu">
                 <Menu className="h-5 w-5" aria-hidden />
               </Button>
             </SheetTrigger>
@@ -74,6 +79,29 @@ export function Navbar({ onDemoRequest }: { onDemoRequest: () => void }) {
                     {l.label}
                   </a>
                 ))}
+                <div className="my-2 h-px bg-line" aria-hidden />
+                <a
+                  href="/inscription"
+                  className="flex items-center gap-2 rounded-md bg-primary px-3 py-3 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
+                >
+                  <Sparkles className="h-4 w-4" aria-hidden /> Démarrer mon inscription
+                </a>
+                <a
+                  href="/connexion"
+                  className="flex items-center gap-2 rounded-md border border-line px-3 py-3 text-base font-medium text-ink transition-colors hover:bg-muted"
+                >
+                  <LogIn className="h-4 w-4" aria-hidden /> Se connecter
+                </a>
+                <a
+                  href="#demonstration"
+                  onClick={() => {
+                    setOpen(false);
+                    onDemoRequest();
+                  }}
+                  className="mt-1 rounded-md px-3 py-3 text-base font-medium text-primary transition-colors hover:bg-muted"
+                >
+                  Demander une démonstration
+                </a>
               </nav>
             </SheetContent>
           </Sheet>

@@ -32,13 +32,24 @@ router.post(
     if (!body.success) {
       throw new ApiError("invalid_input", "Numéro invalide. Saisis ton numéro complet, sans espace.");
     }
-    const phone = body.data.phone.replace(/\s+/g, "");
-    const user = await db.user.findUnique({
-      where: { phone },
-      include: { structure: { select: { id: true, name: true, kind: true, status: true } } },
-    });
+    const raw = body.data.phone.replace(/[\s.\-()]/g, "");
+    // Normalisation béninoise : un numéro local saisi sans préfixe (+229) est
+    // essayé tel quel PUIS avec le préfixe international du Bénin.
+    const candidates =
+      raw.startsWith("+") || raw.startsWith("00")
+        ? [raw.replace(/^00/, "+")]
+        : [raw, `+229${raw}`];
+    const found = await Promise.all(
+      candidates.map((phone) =>
+        db.user.findUnique({
+          where: { phone },
+          include: { structure: { select: { id: true, name: true, kind: true, status: true } } },
+        })
+      )
+    );
+    const user = found.find((u) => u !== null) ?? null;
     if (!user || !verifyPin(body.data.pin, user.pinHash)) {
-      throw new ApiError("bad_credentials", "Numéro ou code incorrect. Réessaie.", 401);
+      throw new ApiError("bad_credentials", "Numéro ou code PIN incorrect. Réessaie.", 401);
     }
     if (user.status !== "active") {
       throw new ApiError("user_inactive", "Ton compte est désactivé. Contacte ton gérant.", 403);

@@ -17,7 +17,7 @@ const FAQ = [
   },
   {
     q: "Dois-je être agréé ?",
-    a: "La loi béninoise exige l'agrément du ministre de l'Économie et des Finances pour collecter l'épargne. Nous demandons ton justificatif à l'inscription.",
+    a: "La loi béninoise exige l'agrément du ministre de l'Économie et des Finances pour collecter l'épargne. Tu peux t'inscrire sans le joindre : nous le vérifions avec toi avant l'activation définitive de ton compte.",
   },
   {
     q: "Ça marche sans internet ?",

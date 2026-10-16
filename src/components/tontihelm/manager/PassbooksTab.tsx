@@ -15,7 +15,7 @@ import { CarnetCalendar } from "./CarnetCalendar";
 import { ContributorRow, PassbookRow, formatFCFA } from "@/lib/types";
 import { get, isOfflineQueued, post } from "@/lib/client";
 import { useSyncDone } from "@/lib/offline/hooks";
-import { BookOpen, Search, CalendarDays, User } from "lucide-react";
+import { BookOpen, Search, CalendarDays, User, BellRing } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
@@ -49,6 +49,25 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
     const q = search.toLowerCase();
     return rows.filter((r) => r.contributor.toLowerCase().includes(q) || r.number.includes(q) || (r.neighborhood ?? "").toLowerCase().includes(q));
   }, [rows, search]);
+
+  const [reminding, setReminding] = useState<string | null>(null);
+
+  /* Rappel SMS au cotisant en retard (paliers Pro et Institution). */
+  async function remind(r: PassbookRow) {
+    setReminding(r.id);
+    try {
+      const res = await post<{ message: string }>(`/api/manager/passbooks/${r.id}/remind`, {});
+      if (isOfflineQueued(res)) {
+        toast({ title: "Enregistré hors ligne.", description: "Le rappel partira au serveur dès le retour du réseau." });
+      } else {
+        toast({ title: "Rappel envoyé.", description: res.message });
+      }
+    } catch (err) {
+      toast({ title: "Rappel impossible", description: err instanceof Error ? err.message : "Réessaie." });
+    } finally {
+      setReminding(null);
+    }
+  }
 
   async function submit() {
     setSubmitting(true);
@@ -160,7 +179,7 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                 <TableHead className="text-right">Solde</TableHead>
                 <TableHead className="text-right">Jours</TableHead>
                 <TableHead>Statut</TableHead>
-                <TableHead className="text-right">Calendrier</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -182,15 +201,30 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                   </TableCell>
                   <TableCell><PassbookStatusBadge status={r.status} /></TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="border-line"
-                      onClick={() => setOpenCarnetId(r.id)}
-                      aria-label={`Ouvrir le carnet calendrier de ${r.contributor}`}
-                    >
-                      <CalendarDays className="h-4 w-4" aria-hidden /> Carnet
-                    </Button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      {r.missedDays > 0 && r.status === "late" && r.phone && !readOnly && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-[#F5C6C0] text-[#B3261E] hover:bg-[#FDECEA] hover:text-[#B3261E]"
+                          disabled={reminding === r.id}
+                          onClick={() => remind(r)}
+                          aria-label={`Envoyer un rappel à ${r.contributor}`}
+                          title={`Rappel SMS : ${r.missedDays} jours manqués`}
+                        >
+                          <BellRing className="h-4 w-4" aria-hidden /> <span className="hidden xl:inline">Rappel</span>
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-line"
+                        onClick={() => setOpenCarnetId(r.id)}
+                        aria-label={`Ouvrir le carnet calendrier de ${r.contributor}`}
+                      >
+                        <CalendarDays className="h-4 w-4" aria-hidden /> Carnet
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -221,6 +255,17 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                 <span className="flex items-center gap-1 text-subtle"><User className="h-3.5 w-3.5" aria-hidden /> {r.paidDays}/{r.cycleDays} jours payés</span>
                 {r.missedDays > 0 && <span className="font-semibold text-danger">{r.missedDays} manqués</span>}
               </div>
+              {r.missedDays > 0 && r.status === "late" && r.phone && !readOnly && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 w-full border-[#F5C6C0] text-[#B3261E] hover:bg-[#FDECEA] hover:text-[#B3261E]"
+                  disabled={reminding === r.id}
+                  onClick={() => remind(r)}
+                >
+                  <BellRing className="h-4 w-4" aria-hidden /> Rappel : {r.missedDays} jours manqués
+                </Button>
+              )}
               <Button
                 variant="outline"
                 className="mt-3 w-full border-line"

@@ -30,12 +30,12 @@ export function PendingScreen({
           <p className="mt-3 text-sm leading-relaxed text-subtle">
             {suspended
               ? `Le compte de ${user.structureName} est suspendu. Contacte le support TontiHelm pour connaître le motif et régulariser la situation.`
-              : "Demande reçue. Nous vérifions ton justificatif d'agrément et nous te répondons sous 24 heures ouvrées."}
+              : "Demande reçue. Nous vérifions les informations de ta structure et nous te répondons sous 24 heures ouvrées."}
           </p>
           {!suspended && (
             <p className="mt-2 text-xs text-subtle">
               Structure : <span className="font-medium text-ink">{user.structureName}</span>. Ton espace
-              s'active dès la validation de ton justificatif.
+              s'active dès la validation de ta structure.
             </p>
           )}
           <Button variant="outline" onClick={onLogout} className="mt-6 border-line">

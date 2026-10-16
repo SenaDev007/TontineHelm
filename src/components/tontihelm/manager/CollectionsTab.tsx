@@ -12,11 +12,13 @@ import { MethodBadge } from "../StatusBadge";
 import { CollectionsPage, formatFCFA } from "@/lib/types";
 import { get, isOfflineQueued, post } from "@/lib/client";
 import { useSyncDone } from "@/lib/offline/hooks";
-import { Search, ChevronLeft, ChevronRight, Undo2, Download } from "lucide-react";
+import { downloadCsv, printReport } from "@/lib/export";
+import { ExportMenu } from "./ExportMenu";
+import { Search, ChevronLeft, ChevronRight, Undo2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 
-export function CollectionsTab({ readOnly }: { readOnly: boolean }) {
+export function CollectionsTab({ readOnly, structureName }: { readOnly: boolean; structureName: string }) {
   const [data, setData] = useState<CollectionsPage | null>(null);
   const [page, setPage] = useState(1);
   const [method, setMethod] = useState("all");
@@ -72,6 +74,82 @@ export function CollectionsTab({ readOnly }: { readOnly: boolean }) {
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
+  /* ── Export réel : la totalité du journal (toutes les pages), méthode filtrée ── */
+  const [exporting, setExporting] = useState(false);
+
+  async function fetchAll(): Promise<CollectionsPage["collections"]> {
+    const all = [] as CollectionsPage["collections"];
+    let p = 1;
+    // Garde-fou : 100 pages maximum (~5 000 écritures).
+    for (let guard = 0; guard < 100; guard++, p++) {
+      const d = await get<CollectionsPage>(
+        `/api/manager/collections?page=${p}&method=${method === "all" ? "" : method}`
+      );
+      all.push(...d.collections);
+      if (p * d.pageSize >= d.total || d.collections.length === 0) break;
+    }
+    return all;
+  }
+
+  function exportRows(rows: CollectionsPage["collections"]) {
+    return rows.map((c) => [
+      new Date(c.at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+      c.contributor,
+      c.passbook,
+      c.coversOn ? new Date(c.coversOn).toLocaleDateString("fr-FR") : "",
+      c.method === "cash" ? "Espèces" : "Mobile money",
+      c.agent,
+      c.amount,
+      c.reversesId ? "Annulation" : "",
+    ]);
+  }
+
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      const rows = exportRows(await fetchAll());
+      const header = ["Date et heure", "Cotisant", "Carnet", "Journée couverte", "Méthode", "Agent", "Montant (FCFA)", "Type"];
+      downloadCsv(`encaissements-${new Date().toISOString().slice(0, 10)}`, [header, ...rows]);
+      // Confirmation différée : le démarrage d'un téléchargement détourne le
+      // focus de la page et peut fermer une notification qui vient de naître.
+      setTimeout(() => {
+        toast({ title: "Export Excel prêt.", description: `${rows.length} écritures téléchargées en CSV.` });
+      }, 600);
+    } catch {
+      toast({ title: "Export impossible", description: "Vérifie ta connexion puis réessaie." });
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function exportPdf() {
+    setExporting(true);
+    try {
+      const all = await fetchAll();
+      printReport(
+        {
+          structure: structureName,
+          title: "Journal des encaissements",
+          subtitle: `${method === "all" ? "Toutes les méthodes" : method === "cash" ? "Espèces" : "Mobile money"} · ${all.length} écritures · total ${formatFCFA(all.reduce((s, c) => s + c.amount, 0))}`,
+        },
+        [
+          { header: "Date" },
+          { header: "Cotisant" },
+          { header: "Carnet" },
+          { header: "Journée" },
+          { header: "Méthode" },
+          { header: "Agent" },
+          { header: "Montant (FCFA)", align: "right" },
+        ],
+        exportRows(all)
+      );
+    } catch {
+      toast({ title: "Export impossible", description: "Vérifie ta connexion puis réessaie." });
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div>
       {/* Filtres */}
@@ -91,13 +169,7 @@ export function CollectionsTab({ readOnly }: { readOnly: boolean }) {
               <SelectItem value="mobile_money">Mobile money</SelectItem>
             </SelectContent>
           </Select>
-          <Button
-            variant="outline"
-            className="h-11 border-line"
-            onClick={() => toast({ title: "Export préparé", description: "Excel et PDF arrivent avec le module d'export complet." })}
-          >
-            <Download className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">Exporter</span>
-          </Button>
+          <ExportMenu onCsv={exportCsv} onPdf={exportPdf} busy={exporting} label="Exporter" />
         </div>
       </div>
 

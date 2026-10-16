@@ -6,9 +6,11 @@ import { randomUUID } from "crypto";
 import { db } from "../lib/db";
 import { requireUser, requireRole, requireTenant, errorResponse, ApiError, h } from "../lib/auth";
 import { appendAudit, verifyAuditChain } from "../lib/audit";
-import { assertWritable } from "../lib/tenant";
+import { assertWritable, getSubscription } from "../lib/tenant";
 import { hashPin } from "../lib/auth";
 import { passbookBalance, paidDays, missedDays, elapsedDays, isLate, buildDayLedger } from "../lib/domain";
+import { planOf } from "../lib/plans";
+import { lateReminderSms } from "../lib/sms";
 
 const router = Router();
 
@@ -179,6 +181,18 @@ router.post(
       throw new ApiError("phone_taken", "Ce numéro a déjà un compte.");
     }
 
+    // Quota d'agents du palier courant : interdiction de dépasser, invitation à monter de palier.
+    const sub = await getSubscription(tenantId);
+    const plan = planOf(sub?.plan);
+    const agentsCount = await db.user.count({ where: { tenantId, role: "agent" } });
+    if (agentsCount >= plan.agents) {
+      throw new ApiError(
+        "agent_quota_reached",
+        `Ton palier ${plan.label} inclut ${plan.agents} agent${plan.agents > 1 ? "s" : ""} de collecte. Passe au palier supérieur pour en ajouter d'autres.`,
+        403
+      );
+    }
+
     const agent = await db.user.create({
       data: {
         tenantId,
@@ -275,6 +289,18 @@ router.post(
       where: { id: body.data.agentId, tenantId, role: "agent" },
     });
     if (!agent) throw new ApiError("not_found", "Agent introuvable dans ta structure.", 404);
+
+    // Quota de cotisants du palier courant : interdiction de dépasser, invitation à monter de palier.
+    const sub = await getSubscription(tenantId);
+    const plan = planOf(sub?.plan);
+    const contributorsCount = await db.contributor.count({ where: { tenantId, status: "active" } });
+    if (contributorsCount >= plan.contributors) {
+      throw new ApiError(
+        "contributor_quota_reached",
+        `Ton palier ${plan.label} inclut ${plan.contributors} cotisants. Passe au palier supérieur pour enregistrer d'autres cotisants.`,
+        403
+      );
+    }
 
     const contributor = await db.contributor.create({
       data: {
@@ -764,14 +790,99 @@ router.get(
   })
 );
 
-// ── GET /api/manager/billing — abonnement, factures et usage de la structure (M9). ──
-const PLAN_LABELS: Record<string, string> = {
-  demarrage: "Démarrage",
-  pro: "Pro",
-  institution: "Institution",
-};
-const PLAN_PRICES: Record<string, number> = { demarrage: 15000, pro: 35000, institution: 75000 };
+// ── POST /api/manager/passbooks/:id/remind — rappel SMS au cotisant en retard (paliers Pro et Institution). ──
+// Envoie au cotisant un SMS de rappel (jours manqués + lien de paiement mobile money
+// pour une mise) ; l'envoi est journalisé comme les autres notifications SMS.
+router.post(
+  "/passbooks/:id/remind",
+  h(async (req, res) => {
+    const user = await requireUser(req);
+    requireRole(user, ["manager", "owner"]);
+    const tenantId = requireTenant(user);
+    await assertWritable(tenantId);
 
+    const [structure, passbook] = await Promise.all([
+      db.structure.findUnique({ where: { id: tenantId } }),
+      db.passbook.findUnique({
+        where: { id: req.params.id },
+        include: { contributor: true, collections: true, agent: true },
+      }),
+    ]);
+    if (!passbook || passbook.tenantId !== tenantId) {
+      throw new ApiError("not_found", "Carnet introuvable.", 404);
+    }
+    if (passbook.status !== "active") {
+      throw new ApiError("bad_state", "Ce carnet n'est plus actif.", 400);
+    }
+    if (!passbook.contributor.phone) {
+      throw new ApiError("no_phone", "Ce cotisant n'a pas de numéro de téléphone enregistré.", 400);
+    }
+
+    // Fonctionnalité incluse à partir du palier Pro uniquement.
+    const sub = await getSubscription(tenantId);
+    const plan = planOf(sub?.plan);
+    if (!plan.reminders) {
+      throw new ApiError(
+        "plan_required",
+        "Les rappels automatiques aux cotisants sont inclus dans les paliers Pro et Institution. Passe au palier supérieur pour les activer.",
+        403
+      );
+    }
+
+    const balance = passbookBalance(passbook.collections);
+    const missed = missedDays(passbook, balance);
+    if (missed < 1) {
+      throw new ApiError("bad_state", "Ce carnet n'a aucun jour manqué : aucun rappel à envoyer.", 400);
+    }
+
+    // Lien de paiement mobile money pour une mise journalière (comme l'agent le fait).
+    const payment = await db.payment.create({
+      data: {
+        tenantId,
+        passbookId: passbook.id,
+        contributorId: passbook.contributorId,
+        provider: "fedapay",
+        providerRef: `FP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`,
+        amount: passbook.dailyAmount,
+        status: "pending",
+        linkUrl: `https://pay.fedapay.com/tontihelm/${Math.random().toString(36).slice(2, 6)}`,
+      },
+    });
+
+    await db.notification.create({
+      data: {
+        tenantId,
+        channel: "sms",
+        template: "late_reminder",
+        toPhone: passbook.contributor.phone,
+        content: lateReminderSms({
+          structure: structure?.name ?? "",
+          passbookNumber: passbook.number,
+          missedDays: missed,
+          agentName: passbook.agent?.fullName ?? "ton agent",
+          link: payment.linkUrl ?? "",
+        }),
+        status: "sent",
+        costFcfa: 25,
+      },
+    });
+    await appendAudit({
+      tenantId,
+      actorId: user.id,
+      action: "reminder_sent",
+      entity: "passbook",
+      entityId: passbook.id,
+      payload: { contributor: passbook.contributor.fullName, missedDays: missed, phone: passbook.contributor.phone },
+    });
+
+    res.json({
+      ok: true,
+      message: `Rappel envoyé à ${passbook.contributor.fullName} (${missed} jours manqués), avec un lien de paiement mobile money.`,
+    });
+  })
+);
+
+// ── GET /api/manager/billing — abonnement, factures et usage de la structure (M9). ──
 router.get(
   "/billing",
   h(async (req, res) => {
@@ -797,20 +908,16 @@ router.get(
       where: { tenantId, channel: "sms", createdAt: { gte: monthStart, lte: monthEnd } },
     });
 
-    const plan = subscription?.plan ?? "demarrage";
-    const quotas: Record<string, { agents: number; contributors: number }> = {
-      demarrage: { agents: 2, contributors: 150 },
-      pro: { agents: 10, contributors: 800 },
-      institution: { agents: 40, contributors: 3000 },
-    };
+    const planKey = subscription?.plan ?? "demarrage";
+    const plan = planOf(planKey);
 
     res.json({
       structure: { name: structure?.name, status: structure?.status },
       subscription: subscription
         ? {
-            plan,
-            planLabel: PLAN_LABELS[plan] ?? plan,
-            price: PLAN_PRICES[plan],
+            plan: planKey,
+            planLabel: plan.label,
+            price: plan.price,
             status: subscription.status,
             trialEndsAt: subscription.trialEndsAt,
             periodStart: subscription.periodStart,
@@ -819,11 +926,12 @@ router.get(
         : null,
       usage: {
         agents: agentsCount,
-        agentsQuota: quotas[plan].agents,
+        agentsQuota: plan.agents,
         contributors: contributorsCount,
-        contributorsQuota: quotas[plan].contributors,
-        extraContributors: Math.max(0, contributorsCount - quotas[plan].contributors),
-        extraAgents: Math.max(0, agentsCount - quotas[plan].agents),
+        contributorsQuota: plan.contributors,
+        extraContributors: Math.max(0, contributorsCount - plan.contributors),
+        extraAgents: Math.max(0, agentsCount - plan.agents),
+        remindersIncluded: plan.reminders,
         smsMonth: monthSms,
         smsTotal: smsCount,
       },

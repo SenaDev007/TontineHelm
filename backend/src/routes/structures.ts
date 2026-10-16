@@ -1,4 +1,6 @@
-// TontiHelm — inscription d'une structure avec justificatif (M1).
+// TontiHelm — inscription d'une structure (M1).
+// L'agrément et le justificatif sont FACULTATIFS à l'inscription : la vérification
+// réglementaire se fait au moment de la validation par l'administrateur.
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../lib/db";
@@ -9,8 +11,8 @@ const router = Router();
 const registerSchema = z.object({
   structureName: z.string().min(2, "Saisis le nom de ta structure."),
   kind: z.enum(["sfd", "groupement", "pme"]),
-  licenseRef: z.string().min(3, "Saisis ton numéro d'agrément ou de récépissé."),
-  licenseDocName: z.string().min(1, "Joins ton justificatif d'agrément."),
+  licenseRef: z.string().trim().optional(),
+  licenseDocName: z.string().optional(),
   city: z.string().min(2, "Saisis ta ville."),
   ownerName: z.string().min(2, "Saisis ton nom complet."),
   ownerPhone: z.string().regex(/^\+?\d{8,15}$/, "Numéro invalide. Saisis ton numéro complet, sans espace."),
@@ -36,8 +38,8 @@ router.post(
       data: {
         name: data.structureName,
         kind: data.kind,
-        licenseRef: data.licenseRef,
-        licenseDocName: data.licenseDocName,
+        licenseRef: data.licenseRef || null,
+        licenseDocName: data.licenseDocName || null,
         city: data.city,
         status: "pending",
       },
@@ -55,7 +57,7 @@ router.post(
     res.json({
       ok: true,
       message:
-        "Demande reçue. Nous vérifions ton justificatif d'agrément et nous te répondons sous 24 heures ouvrées.",
+        "Demande reçue. Nous vérifions les informations de ta structure et nous te répondons sous 24 heures ouvrées.",
     });
   })
 );

@@ -31,7 +31,7 @@ export default function ConditionsUtilisationPage() {
         {
           heading: "Inscription, activation et compte",
           paragraphs: [
-            "L'inscription s'effectue par le formulaire du site : nom de la structure, type d'activité, référence de l'agrément, pièce jointe du justificatif, identité et numéro de téléphone du dirigeant, code PIN à six chiffres. La demande est examinée par l'administration de YEHI OR Tech, qui valide, refuse avec motif ou demande des compléments. Le compte est activé après validation ; un délai de réponse de vingt-quatre heures ouvrées est visé.",
+            "L'inscription s'effectue par le formulaire du site : nom de la structure, type d'activité, référence de l'agrément (facultative à ce stade), identité et numéro de téléphone du dirigeant, code PIN à six chiffres. Aucune pièce justificative n'est demandée au moment de l'inscription : la vérification de l'agrément et de la conformité de la structure s'effectue avec le dirigeant avant l'activation, et tout justificatif peut être demandé à cette occasion. La demande est examinée par l'administration de YEHI OR Tech, qui valide, refuse avec motif ou demande des compléments. Le compte est activé après validation ; un délai de réponse de vingt-quatre heures ouvrées est visé.",
             "Le gérant est responsable de la confidentialité de son code PIN et de ceux des agents qu'il crée. Toute opération réalisée avec les identifiants du compte est réputée faite par le titulaire. La perte d'un téléphone n'entraîne pas la perte des données déjà synchronisées ; le gérant doit signaler immédiatement la compromission d'un compte afin que les accès soient suspendus.",
           ],
         },
