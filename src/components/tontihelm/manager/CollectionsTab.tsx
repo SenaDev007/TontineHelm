@@ -106,6 +106,7 @@ export function CollectionsTab({ readOnly }: { readOnly: boolean }) {
                     <TableHead>Heure</TableHead>
                     <TableHead>Cotisant</TableHead>
                     <TableHead>Carnet</TableHead>
+                    <TableHead>Journée couverte</TableHead>
                     <TableHead>Méthode</TableHead>
                     <TableHead>Agent</TableHead>
                     <TableHead className="text-right">Montant</TableHead>
@@ -123,6 +124,15 @@ export function CollectionsTab({ readOnly }: { readOnly: boolean }) {
                         {c.reversesId && <span className="ml-2 text-xs font-medium text-danger">annulation</span>}
                       </TableCell>
                       <TableCell className="amount text-sm text-subtle">{c.passbook}</TableCell>
+                      <TableCell className="whitespace-nowrap text-xs">
+                        {c.coversOn ? (
+                          <span className="font-medium text-ink">
+                            {new Date(c.coversOn).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}
+                          </span>
+                        ) : (
+                          <span className="text-subtle">—</span>
+                        )}
+                      </TableCell>
                       <TableCell><MethodBadge method={c.method} /></TableCell>
                       <TableCell className="text-sm text-subtle">{c.agent}</TableCell>
                       <TableCell className={`amount text-right text-sm font-semibold ${c.amount < 0 ? "text-danger" : "text-ink"}`}>

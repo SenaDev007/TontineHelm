@@ -8,7 +8,7 @@ import { requireUser, requireRole, requireTenant, errorResponse, ApiError, h } f
 import { appendAudit, verifyAuditChain } from "../lib/audit";
 import { assertWritable } from "../lib/tenant";
 import { hashPin } from "../lib/auth";
-import { passbookBalance, paidDays, missedDays, elapsedDays, isLate } from "../lib/domain";
+import { passbookBalance, paidDays, missedDays, elapsedDays, isLate, buildDayLedger } from "../lib/domain";
 
 const router = Router();
 
@@ -434,6 +434,19 @@ router.get(
     const balance = passbookBalance(passbook.collections);
     const late = passbook.status === "active" && isLate(passbook, balance, structure?.lateThreshold ?? 3);
 
+    // Registre des journées du cycle (multi-jours) : le calendrier marque chaque
+    // journée réellement couverte — rattrapage, jour courant comme jours payés d'avance.
+    const ledger = buildDayLedger(
+      passbook,
+      passbook.collections.map((c) => ({
+        id: c.id,
+        amount: c.amount,
+        coversOn: c.coversOn,
+        collectedAt: c.collectedAt,
+        reversesId: c.reversesId,
+      }))
+    );
+
     res.json({
       passbook: {
         id: passbook.id,
@@ -458,11 +471,13 @@ router.get(
         },
         agent: passbook.agent?.fullName ?? "—",
       },
+      days: ledger.map((d) => ({ date: d.date.toISOString().slice(0, 10), net: d.net })),
       collections: passbook.collections.map((c) => ({
         id: c.id,
         amount: c.amount,
         method: c.method,
         dayIndex: c.dayIndex,
+        coversOn: c.coversOn,
         collectedAt: c.collectedAt,
         reversesId: c.reversesId,
       })),
@@ -519,6 +534,7 @@ router.get(
         amount: c.amount,
         method: c.method,
         dayIndex: c.dayIndex,
+        coversOn: c.coversOn,
         contributor: c.passbook?.contributor?.fullName ?? "—",
         passbook: c.passbook?.number ?? "",
         agent: c.agent?.fullName ?? "—",
@@ -586,6 +602,7 @@ router.post(
         amount: -original.amount,
         method: original.method,
         dayIndex: original.dayIndex,
+        coversOn: original.coversOn, // l'annulation retire la même journée couverte
         reversesId: original.id,
         collectedAt: new Date(),
       },

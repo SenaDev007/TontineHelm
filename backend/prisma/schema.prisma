@@ -123,6 +123,7 @@ model Collection {
   amount      Int // positif ; négatif si écriture d'annulation
   method      String // 'cash' | 'mobile_money'
   dayIndex    Int // jour du cycle au moment de l'encaissement
+  coversOn    DateTime? // journée calendaire réelle couverte par l'écriture (multi-jours)
   reversesId  String? // référence à l'encaissement annulé
   closingId   String?
   collectedAt DateTime // horodatage de la collecte sur le terrain
@@ -134,6 +135,7 @@ model Collection {
 
   @@index([tenantId, collectedAt])
   @@index([passbookId])
+  @@index([passbookId, coversOn])
 }
 
 model Closing {

@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { get, post } from "@/lib/client";
 import { OutboxEvent, SessionUser, TourData, TourStop, formatFCFA } from "@/lib/types";
 import { TourScreen } from "./TourScreen";
-import { CollectScreen } from "./CollectScreen";
+import { CollectScreen, CollectAllocation } from "./CollectScreen";
 import { ClosingScreen } from "./ClosingScreen";
 import { AccountScreen } from "./AccountScreen";
 import { MapPin, Wallet, Scale, User, WifiOff, ArrowLeft, RefreshCw } from "lucide-react";
@@ -82,6 +82,8 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
   }, [refreshTour, reloadKey]);
 
   // ── Synchronisation : envoi de l'outbox par lots de 50, idempotent ──
+  // Chaque événement porte la journée réelle qu'il couvre (coversOn) :
+  // le serveur pose une écriture par journée, le carnet marque chaque jour exact.
   const flushOutbox = useCallback(
     async (events: OutboxEvent[]) => {
       if (syncingRef.current || events.length === 0) return;
@@ -94,7 +96,7 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
           await post<{ acks: { id: string; status: string }[] }>("/api/agent/sync", {
             events: batch.map((e) => ({
               id: e.id, passbookId: e.passbookId, amount: e.amount,
-              method: e.method, advance: e.advance, collectedAt: e.collectedAt,
+              method: e.method, advance: e.advance, coversOn: e.coversOn, collectedAt: e.collectedAt,
             })),
           });
           const sent = new Set(batch.map((b) => b.id));
@@ -124,28 +126,40 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
     }
   }, [online, outbox, flushOutbox]);
 
-  // ── Encaissement local : écriture dans l'outbox, retour visuel immédiat ──
+  // ── Encaissement local : une écriture par journée couverte, dans l'outbox,
+  // avec retour visuel immédiat (solde + marquage du jour). ──
   const collect = useCallback(
-    (stop: TourStop, amount: number, advance: boolean) => {
-      const event: OutboxEvent = {
-        id: crypto.randomUUID(),
-        passbookId: stop.passbookId,
-        amount,
-        method: "cash",
-        advance,
-        collectedAt: new Date().toISOString(),
-        passbookNumber: stop.passbookNumber,
-        contributorName: stop.contributorName,
-      };
-      const next = [...outbox, event];
+    (stop: TourStop, allocations: CollectAllocation[]) => {
+      const total = allocations.reduce((s, a) => s + a.amount, 0);
+      const events: OutboxEvent[] = allocations
+        .filter((a) => a.amount > 0)
+        .map((a) => ({
+          id: crypto.randomUUID(),
+          passbookId: stop.passbookId,
+          amount: a.amount,
+          method: "cash" as const,
+          advance: false,
+          coversOn: a.date,
+          collectedAt: new Date().toISOString(),
+          passbookNumber: stop.passbookNumber,
+          contributorName: stop.contributorName,
+        }));
+      if (events.length === 0) return;
+      const next = [...outbox, ...events];
       setOutbox(next);
       saveOutbox(next);
       if (navigator.vibrate) navigator.vibrate(60);
+      const jours = events.length;
       toast({
-        title: `${formatFCFA(amount)} encaissés chez ${stop.contributorName}.`,
-        description: online ? undefined : "En attente d'envoi : enregistré sur ton téléphone.",
+        title: `${formatFCFA(total)} encaissés chez ${stop.contributorName}.`,
+        description:
+          jours > 1
+            ? `${jours} journées couvertes (${online ? "synchronisation en cours" : "en attente d'envoi : enregistré sur ton téléphone"}).`
+            : online
+              ? undefined
+              : "En attente d'envoi : enregistré sur ton téléphone.",
       });
-      // Mise à jour optimiste de la tournée locale.
+      // Mise à jour optimiste de la tournée locale (solde, jours, marquage des journées).
       setTour((t) =>
         t
           ? {
@@ -154,11 +168,15 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
                 s.passbookId === stop.passbookId
                   ? {
                       ...s,
-                      balance: s.balance + amount,
-                      paidDays: s.paidDays + (amount >= s.dailyAmount ? 1 : 0),
+                      balance: s.balance + total,
+                      paidDays: s.paidDays + Math.floor(total / s.dailyAmount),
+                      days: s.days.map((d) => {
+                        const alloc = allocations.find((a) => a.date === d.date);
+                        return alloc ? { ...d, net: d.net + alloc.amount } : d;
+                      }),
                       collectedToday: s.collectedToday
-                        ? { count: s.collectedToday.count + 1, amount: s.collectedToday.amount + amount, method: "cash", at: new Date().toISOString() }
-                        : { count: 1, amount, method: "cash", at: new Date().toISOString() },
+                        ? { count: s.collectedToday.count + events.length, amount: s.collectedToday.amount + total, method: "cash", at: new Date().toISOString() }
+                        : { count: events.length, amount: total, method: "cash", at: new Date().toISOString() },
                     }
                   : s
               ),
@@ -166,7 +184,7 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
                 ...t.summary,
                 collected: t.summary.collected + 1,
                 remaining: Math.max(0, t.summary.remaining - 1),
-                expectedCash: t.summary.expectedCash + amount,
+                expectedCash: t.summary.expectedCash + total,
               },
             }
           : t

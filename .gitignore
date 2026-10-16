@@ -67,3 +67,4 @@ worklog.md
 Caddyfile
 agent-ctx/
 backend/node_modules/
+/scripts/

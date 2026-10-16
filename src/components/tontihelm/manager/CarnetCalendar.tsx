@@ -110,12 +110,21 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
       .catch(() => setError("Carnet indisponible. Réessaie dans un instant."));
   }, [passbookId]);
 
-  // ── Encaissements indexés par jour calendaire réel ──
+  // ── Registre des journées du cycle (multi-jours) : net par journée réelle ──
+  const dayNet = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!data) return map;
+    for (const d of data.days) map.set(d.date, d.net);
+    return map;
+  }, [data]);
+
+  // ── Écritures indexées par leur journée effective (coversOn, sinon date d'encaissement) ──
   const byDay = useMemo(() => {
     const map = new Map<string, CarnetCollection[]>();
     if (!data) return map;
     for (const c of data.collections) {
-      const key = dateKey(parseLocalDate(c.collectedAt));
+      const day = c.coversOn ?? c.collectedAt.slice(0, 10);
+      const key = day.slice(0, 10);
       const list = map.get(key) ?? [];
       list.push(c);
       map.set(key, list);
@@ -132,6 +141,8 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
   }, [data]);
 
   // ── Matrice calendrier du mois affiché (6 semaines × 7 jours, vraies dates) ──
+  // Le marquage vient du registre des journées : chaque jour couvert par un
+  // versement est marqué — rattrapage, jour courant comme journées payées d'avance.
   const cells = useMemo<DayCell[]>(() => {
     if (!data || !view || !bounds) return [];
     const today = new Date();
@@ -146,7 +157,7 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
       const date = new Date(view.y, view.m, 1 - lead + i);
       const key = dateKey(date);
       const items = byDay.get(key) ?? [];
-      const net = items.reduce((s, c) => s + c.amount, 0);
+      const net = dayNet.get(key) ?? 0;
       const offset = diffDays(date, bounds.start);
       const inCycle = offset >= 0 && offset < data.passbook.cycleDays;
       const isFuture = date > todayStart;
@@ -169,7 +180,7 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
       });
     }
     return out;
-  }, [data, view, byDay, bounds]);
+  }, [data, view, byDay, dayNet, bounds]);
 
   // ── Statistiques du mois affiché ──
   const monthStats = useMemo(() => {
@@ -177,9 +188,10 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
     const cycleInMonth = inMonth.filter((c) => c.inCycle);
     return {
       marked: cycleInMonth.filter((c) => c.marked).length,
+      advance: cycleInMonth.filter((c) => c.marked && c.isFuture).length,
       partial: cycleInMonth.filter((c) => c.partial).length,
       missed: cycleInMonth.filter((c) => c.missed).length,
-      upcoming: cycleInMonth.filter((c) => c.isFuture).length,
+      upcoming: cycleInMonth.filter((c) => c.isFuture && !c.marked).length,
       collected: inMonth.reduce((s, c) => s + Math.max(0, c.net), 0),
       cycleDaysHere: cycleInMonth.length,
     };
@@ -202,6 +214,13 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
     () => (selectedKey ? cells.find((c) => dateKey(c.date) === selectedKey) ?? null : null),
     [cells, selectedKey]
   );
+
+  // Journées payées d'avance sur tout le cycle (marquées au-delà d'aujourd'hui).
+  const cycleAdvance = useMemo(() => {
+    if (!data) return 0;
+    const tKey = dateKey(new Date());
+    return data.days.filter((d) => d.date > tKey && d.net >= data.passbook.dailyAmount && d.net > 0).length;
+  }, [data]);
 
   if (error) {
     return (
@@ -286,6 +305,7 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
               </span>
               <span className="flex items-center gap-3 text-subtle">
                 <span className="inline-flex items-center gap-1"><CalendarCheck className="h-3.5 w-3.5 text-primary" aria-hidden /> {pb.paidDays} marqués</span>
+                {cycleAdvance > 0 && <span className="inline-flex items-center gap-1 font-medium text-primary/80"><TrendingUp className="h-3.5 w-3.5" aria-hidden /> {cycleAdvance} d&apos;avance</span>}
                 {pb.missedDays > 0 && <span className="inline-flex items-center gap-1 font-medium text-danger"><CalendarX className="h-3.5 w-3.5" aria-hidden /> {pb.missedDays} manqués</span>}
               </span>
             </div>
@@ -392,14 +412,14 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
                   onClick={() => setSelectedKey(selected ? null : key)}
                   title={
                     c.marked
-                      ? `Jour ${c.dayIndex} — marqué, ${formatFCFA(c.net)}`
+                      ? `Jour ${c.dayIndex} — marqué${c.isFuture ? " d'avance" : ""}, ${formatFCFA(c.net)}`
                       : c.missed
                         ? `Jour ${c.dayIndex} — manqué`
                         : c.inCycle
                           ? `Jour ${c.dayIndex}`
                           : "Hors cycle"
                   }
-                  aria-label={`${formatLongDate(c.date)}${c.dayIndex ? `, jour ${c.dayIndex} du cycle` : ", hors cycle"}${c.marked ? ", marqué" : c.missed ? ", manqué" : ""}`}
+                  aria-label={`${formatLongDate(c.date)}${c.dayIndex ? `, jour ${c.dayIndex} du cycle` : ", hors cycle"}${c.marked ? (c.isFuture ? ", payé d'avance" : ", marqué") : c.missed ? ", manqué" : ""}`}
                   aria-pressed={selected}
                   className={cn(
                     "relative flex min-h-[64px] flex-col items-center justify-start border-b border-r border-line p-1.5 text-left transition-colors md:min-h-[84px] md:p-2",
@@ -452,6 +472,11 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
                   <span className="mt-auto flex w-full flex-col items-center gap-0.5">
                     {c.marked && (
                       <>
+                        {c.isFuture && (
+                          <span className="rounded-sm bg-white/25 px-1 text-[8px] font-bold uppercase leading-none text-primary-foreground">
+                            d'avance
+                          </span>
+                        )}
                         <Check className="h-4 w-4 md:h-5 md:w-5" strokeWidth={3} aria-hidden />
                         <span className="amount text-[11px] font-bold leading-none md:text-xs">{formatFCFA(c.net).replace("\u00A0FCFA", "")}</span>
                       </>
@@ -486,6 +511,7 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-line bg-[#F7F8F5] px-3 py-2.5 text-[11px] text-subtle">
             <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-primary" aria-hidden /> Jour marqué</span>
             <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-[#C8E0D2]" aria-hidden /> Marquage partiel</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-primary/60" aria-hidden /> Payé d&apos;avance</span>
             <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-[#FBEAE7]" aria-hidden /> Jour manqué</span>
             <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border border-[#C8962E]" aria-hidden /> Aujourd&apos;hui</span>
             <span className="inline-flex items-center gap-1.5"><CircleDashed className="h-3 w-3 text-subtle/50" aria-hidden /> À venir</span>
@@ -523,13 +549,14 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
                 <p className="font-display text-sm font-bold text-ink">{formatLongDate(selectedCell.date)}</p>
                 <p className="text-xs text-subtle">
                   {selectedCell.inCycle
-                    ? `Jour ${selectedCell.dayIndex} du cycle · net du jour : ${formatFCFA(selectedCell.net)}`
+                    ? `Jour ${selectedCell.dayIndex} du cycle · net de la journée : ${formatFCFA(selectedCell.net)}`
                     : "Hors cycle de cotisation"}
                 </p>
               </div>
               {selectedCell.marked && (
                 <span className="inline-flex items-center gap-1 rounded-md bg-[#E7F3EB] px-2 py-1 text-xs font-bold text-primary">
-                  <BadgeCheck className="h-4 w-4" aria-hidden /> Jour marqué
+                  <BadgeCheck className="h-4 w-4" aria-hidden />
+                  {selectedCell.isFuture ? "Payé d'avance" : "Jour marqué"}
                 </span>
               )}
               {selectedCell.missed && (
@@ -562,7 +589,7 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
                     </span>
                     <span className="flex items-center gap-3 text-xs text-subtle">
                       <span>J{it.dayIndex}</span>
-                      <span>{new Date(it.collectedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
+                      <span>encaissé le {new Date(it.collectedAt).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} à {new Date(it.collectedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
                     </span>
                   </li>
                 ))}

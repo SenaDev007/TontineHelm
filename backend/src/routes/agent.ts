@@ -6,7 +6,7 @@ import { db } from "../lib/db";
 import { requireUser, requireRole, requireTenant, errorResponse, ApiError, h } from "../lib/auth";
 import { appendAudit } from "../lib/audit";
 import { assertWritable } from "../lib/tenant";
-import { passbookBalance, paidDays, missedDays, elapsedDays, isLate, closingGap, formatFCFA } from "../lib/domain";
+import { passbookBalance, paidDays, missedDays, elapsedDays, isLate, closingGap, formatFCFA, buildDayLedger } from "../lib/domain";
 import { receiptSms } from "../lib/sms";
 
 const router = Router();
@@ -42,6 +42,18 @@ router.get(
           (c) => c.amount > 0 && c.collectedAt >= todayStart && c.collectedAt < todayEnd
         );
         const late = isLate(pb, balance, structure?.lateThreshold ?? 3);
+        // Registre des journées du cycle (multi-jours) : le sélecteur de
+        // journées de l'écran d'encaissement s'appuie dessus.
+        const ledger = buildDayLedger(
+          pb,
+          pb.collections.map((c) => ({
+            id: c.id,
+            amount: c.amount,
+            coversOn: c.coversOn,
+            collectedAt: c.collectedAt,
+            reversesId: c.reversesId,
+          }))
+        );
         return {
           contributorId: pb.contributorId,
           contributorName: pb.contributor.fullName,
@@ -52,6 +64,7 @@ router.get(
           dailyAmount: pb.dailyAmount,
           cycleDays: pb.cycleDays,
           startsOn: pb.startsOn,
+          days: ledger.map((d) => ({ date: d.date.toISOString().slice(0, 10), net: d.net })),
           dayIndex: Math.max(1, Math.min(elapsed + (paid > elapsed ? 1 : 0), pb.cycleDays)),
           paidDays: paid,
           missedDays: missed,
@@ -112,12 +125,19 @@ router.get(
 );
 
 // ── POST /api/agent/sync — envoi d'un lot d'encaissements, réponse idempotente (§14.7). ──
+// Chaque événement peut couvrir une journée précise du cycle (coversOn, multi-jours) :
+// aujourd'hui, demain, après-demain… sans limite autre que les bornes du cycle.
 const eventSchema = z.object({
   id: z.string().uuid("Identifiant d'événement invalide."),
   passbookId: z.string().min(1),
   amount: z.number().int().refine((n) => n !== 0, "Montant invalide."),
   method: z.enum(["cash", "mobile_money"]),
   advance: z.boolean().optional().default(false),
+  coversOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Journée couverte invalide (format AAAA-MM-JJ attendu).")
+    .optional()
+    .nullable(),
   collectedAt: z.string().datetime({ offset: true }),
 });
 
@@ -157,6 +177,11 @@ router.post(
     }
 
     const acks: { id: string; status: "created" | "duplicate"; collectionId: string }[] = [];
+    // Reçus groupés par carnet : un encaissement multi-jours = un seul SMS récapitulatif.
+    const receipts = new Map<
+      string,
+      { number: string; phone: string | null; cycleDays: number; total: number; days: number[]; balance: number }
+    >();
 
     for (const ev of body.data.events) {
       const existing = await db.collection.findUnique({ where: { id: ev.id } });
@@ -172,6 +197,28 @@ router.post(
         acks.push({ id: ev.id, status: "duplicate", collectionId: ev.id });
         continue;
       }
+      // Journée couverte : elle doit tomber dans le cycle réel du carnet.
+      let coversOn: Date | null = null;
+      let coversIdx = -1;
+      if (ev.coversOn) {
+        coversOn = new Date(`${ev.coversOn}T00:00:00.000Z`);
+        if (Number.isNaN(coversOn.getTime())) {
+          throw new ApiError("invalid_input", "Journée couverte invalide.");
+        }
+        const startMs = Date.UTC(
+          passbook.startsOn.getUTCFullYear(),
+          passbook.startsOn.getUTCMonth(),
+          passbook.startsOn.getUTCDate()
+        );
+        coversIdx = Math.round((coversOn.getTime() - startMs) / (24 * 60 * 60 * 1000));
+        if (coversIdx < 0 || coversIdx >= passbook.cycleDays) {
+          throw new ApiError(
+            "day_out_of_cycle",
+            "Cette journée est hors du cycle du carnet.",
+            422
+          );
+        }
+      }
       // Règle métier 2 : un encaissement ne dépasse jamais le montant restant du cycle,
       // sauf paiement d'avance explicitement marqué.
       const cycleTotal = passbook.dailyAmount * passbook.cycleDays;
@@ -183,7 +230,11 @@ router.post(
           422
         );
       }
-      const dayIndex = Math.min(paidDays(balance + ev.amount, passbook.dailyAmount), passbook.cycleDays);
+      // Jour du cycle : celui de la journée couverte si elle est explicite,
+      // sinon la position cumulative habituelle.
+      const dayIndex = coversIdx >= 0
+        ? coversIdx + 1
+        : Math.min(paidDays(balance + ev.amount, passbook.dailyAmount), passbook.cycleDays);
       const collectedAt = new Date(ev.collectedAt);
 
       await db.collection.create({
@@ -195,6 +246,7 @@ router.post(
           amount: ev.amount,
           method: ev.method,
           dayIndex,
+          coversOn,
           collectedAt,
           receivedAt: new Date(),
         },
@@ -213,36 +265,57 @@ router.post(
           amount: ev.amount,
           method: ev.method,
           dayIndex,
+          coversOn: ev.coversOn ?? null,
           advance: ev.advance,
           source: "sync",
         },
         at: new Date(),
       });
 
-      // Reçu immédiat par SMS au cotisant (§13.5, sans accents).
-      if (ev.amount > 0 && passbook.contributor.phone) {
-        await db.notification.create({
-          data: {
-            tenantId,
-            channel: "sms",
-            template: "receipt",
-            toPhone: passbook.contributor.phone,
-            content: receiptSms({
-              structure: structure.name,
-              amount: ev.amount,
-              date: collectedAt,
-              passbookNumber: passbook.number,
-              dayIndex,
-              cycleDays: passbook.cycleDays,
-              balance: newBalance,
-            }),
-            status: "sent",
-            costFcfa: 25,
-          },
-        });
+      // Accumule le reçu groupé du carnet (journées couvertes, solde à jour).
+      if (ev.amount > 0) {
+        const r =
+          receipts.get(passbook.id) ??
+          {
+            number: passbook.number,
+            phone: passbook.contributor.phone,
+            cycleDays: passbook.cycleDays,
+            total: 0,
+            days: [],
+            balance: 0,
+          };
+        r.total += ev.amount;
+        r.days.push(dayIndex);
+        r.balance = newBalance;
+        receipts.set(passbook.id, r);
       }
 
       acks.push({ id: ev.id, status: "created", collectionId: ev.id });
+    }
+
+    // Un SMS récapitulatif par carnet touché (§13.5, sans accents) : montant total,
+    // journées couvertes et solde cumulé — pas un SMS par journée.
+    for (const [, r] of receipts) {
+      if (!r.phone) continue;
+      await db.notification.create({
+        data: {
+          tenantId,
+          channel: "sms",
+          template: "receipt",
+          toPhone: r.phone,
+          content: receiptSms({
+            structure: structure.name,
+            amount: r.total,
+            date: new Date(),
+            passbookNumber: r.number,
+            days: r.days,
+            cycleDays: r.cycleDays,
+            balance: r.balance,
+          }),
+          status: "sent",
+          costFcfa: 25,
+        },
+      });
     }
 
     res.json({ acks });

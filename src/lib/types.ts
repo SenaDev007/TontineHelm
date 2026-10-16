@@ -29,6 +29,9 @@ export interface TourStop {
   passbookNumber: string;
   dailyAmount: number;
   cycleDays: number;
+  startsOn: string;
+  /** Registre des journées du cycle (multi-jours) : net attribué par journée réelle. */
+  days: { date: string; net: number }[];
   dayIndex: number;
   paidDays: number;
   missedDays: number;
@@ -114,6 +117,7 @@ export interface CarnetCollection {
   amount: number;
   method: string;
   dayIndex: number;
+  coversOn: string | null;
   collectedAt: string;
   reversesId: string | null;
 }
@@ -142,6 +146,8 @@ export interface CarnetData {
     };
     agent: string;
   };
+  /** Registre des journées du cycle : net par journée réelle (marquage du calendrier). */
+  days: { date: string; net: number }[];
   collections: CarnetCollection[];
   structure: { name: string; commissionDays: number; lateThreshold: number };
 }
@@ -149,6 +155,7 @@ export interface CarnetData {
 export interface CollectionsPage {
   collections: {
     id: string; at: string; amount: number; method: string; dayIndex: number;
+    coversOn: string | null;
     contributor: string; passbook: string; agent: string; reversesId: string | null;
   }[];
   page: number;
@@ -217,6 +224,8 @@ export interface OutboxEvent {
   amount: number;
   method: "cash" | "mobile_money";
   advance: boolean;
+  /** Journée calendaire couverte ("AAAA-MM-JJ") — multi-jours, null = non précisée. */
+  coversOn: string | null;
   collectedAt: string;
   passbookNumber: string;
   contributorName: string;

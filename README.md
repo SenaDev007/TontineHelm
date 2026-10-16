@@ -49,6 +49,23 @@ dynamique :
   avec retour immédiat à « Aujourd'hui » ;
 - la barre de progression et les statistiques mensuelles se recalculent sur les vraies dates.
 
+### Encaissement sur plusieurs journées (multi-jours)
+
+Un cotisant peut régler **plusieurs journées d'un coup** : aujourd'hui, demain, après-demain…
+sans limite autre que les bornes du cycle — et rattraper les jours manqués. Concrètement :
+
+- l'écran d'encaissement de l'agent propose un **sélecteur de journées** : rattrapage (jours
+  manqués), aujourd'hui, puis toutes les journées à venir du cycle ;
+- chaque journée sélectionnée crée **une écriture datée sur la journée qu'elle couvre**
+  (`coversOn`) — le montant peut être ajusté au clavier (paiement partiel sur la dernière
+  journée) ;
+- le calendrier marque alors **chaque jour exact**, y compris les journées futures réglées
+  d'avance (badge « d'avance ») ;
+- le **reçu SMS est unique et récapitulatif** (« 1 500 FCFA reçus le 16/10, jours 16-18/31,
+  solde cumulé 1 500 FCFA ») ;
+- un excédent sur une journée est reporté sur les suivantes (une journée marquée = une mise) ;
+- l'annulation d'une écriture retire **la même journée**, le marquage se recalcule.
+
 ---
 
 ## Déploiement
@@ -70,21 +87,22 @@ pour éviter les conflits de prepared statements.
 1. Sur [Railway](https://railway.app), crée un service **à partir du dépôt GitHub** et
    renseigne le **Root Directory = `backend`** (le `railway.json` et le `Procfile` y sont
    déjà prêts).
-2. Variables d'environnement du service :
+2. Variables d'environnement du service — **tableau de référence complet** :
 
-   | Variable | Valeur | Rôle |
-   |---|---|---|
-   | `DATABASE_URL` | l'URL Neon ci-dessus | connexion PostgreSQL |
-   | `CORS_ORIGINS` | `https://ton-front.vercel.app` | origine(s) autorisée(s), séparées par des virgules |
-   | `ADMIN_PHONE` | `+22990000001` | téléphone du compte admin plateforme |
-   | `ADMIN_PIN` | un code PIN à 6 chiffres | PIN du compte admin |
+   | Variable | Obligatoire | Valeur d'exemple | Rôle |
+   |---|---|---|---|
+   | `DATABASE_URL` | **oui** | `postgresql://neondb_owner:•••@ep-…-pooler.c-2.eu-west-2.aws.neon.tech/TontineHelm?sslmode=require&channel_binding=require&pgbouncer=true&connection_limit=5` | connexion PostgreSQL Neon. Sur un endpoint *pooler*, garde `&pgbouncer=true&connection_limit=5` (évite les conflits de prepared statements) |
+   | `CORS_ORIGINS` | **oui en production** | `https://tontihelm.vercel.app` | origine(s) du frontend autorisée(s) à appeler l'API, **sans barre finale**, séparées par des virgules. Avec plusieurs domaines, le cookie de session passe automatiquement en `SameSite=None; Secure` (obligatoire entre domaines Vercel ↔ Railway) |
+   | `ADMIN_PHONE` | oui (amorçage) | `+22990000001` | téléphone du compte admin plateforme (créé par `bootstrap:admin`) |
+   | `ADMIN_PIN` | oui (amorçage) | `246810` | PIN du compte admin plateforme |
+   | `PORT` | non | *(fourni par Railway)* | injecté automatiquement par Railway — l'API écoute dessus (3001 en local par défaut) |
+   | `NODE_ENV` | non | *(fourni par Railway)* | Railway le règle sur `production` — active les cookies `Secure` et réduit les logs Prisma |
 
-   (Railway fournit `PORT` automatiquement — l'API écoute dessus.)
-3. Initialise le schéma et le compte admin (console Railway → commandes) :
+3. Initialise le schéma et le compte admin (console Railway → onglet *Command*) :
 
    ```bash
-   bunx prisma db push --accept-data-loss   # crée les tables
-   bun run bootstrap:admin                  # crée le compte admin
+   bunx prisma db push --accept-data-loss   # crée / met à jour les tables
+   bun run bootstrap:admin                  # crée le compte admin plateforme
    ```
 4. Vérifie `https://ton-service.up.railway.app/api/health` → `{"ok":true}`.
 
@@ -92,16 +110,49 @@ pour éviter les conflits de prepared statements.
 
 1. Sur [Vercel](https://vercel.com), importe le **même dépôt GitHub** avec le
    **Root Directory = racine du dépôt** (framework Next.js détecté automatiquement).
-2. Variable d'environnement :
+2. Variables d'environnement — **tableau de référence complet** :
 
-   | Variable | Valeur |
-   |---|---|
-   | `NEXT_PUBLIC_API_URL` | `https://ton-service.up.railway.app` (l'URL Railway, sans barre finale) |
+   | Variable | Obligatoire | Valeur d'exemple | Rôle |
+   |---|---|---|---|
+   | `NEXT_PUBLIC_API_URL` | **oui en production** | `https://ton-service.up.railway.app` | URL publique de l'API Railway, **sans barre finale**. Le navigateur appelle directement cette URL avec un jeton `Authorization: Bearer` |
+   | `NEXT_PUBLIC_API_PORT` | non | `3001` | réservé à la préproduction locale (paramètre `XTransformPort`) — **à ne pas définir sur Vercel** |
+
+   > `NEXT_PUBLIC_*` est injecté dans le bundle navigateur au moment du **build** :
+   > après toute modification, relance un déploiement pour qu'elle prenne effet.
 
 3. Déploie. Le navigateur appelle l'API Railway avec un jeton `Authorization: Bearer`
    (fonctionne entre domaines distincts ; le cookie httpOnly reste en renfort).
 
-### 4. Comptes créés pendant la recette
+### 4. Comment les deux services communiquent
+
+```
+Navigateur (tontihelm.vercel.app)
+   │  fetch https://ton-service.up.railway.app/api/…
+   │  Authorization: Bearer <jeton de session>   (+ cookie httpOnly en renfort)
+   ▼
+API Express (Railway)  ──CORS_ORIGINS──▶ n'accepte que tontihelm.vercel.app
+   │
+   ▼
+PostgreSQL Neon (DATABASE_URL)
+```
+
+- **CORS** : le backend n'accepte que les origines listées dans `CORS_ORIGINS` — mets-y
+  exactement l'URL de production Vercel (et, si besoin, celles des aperçus de déploiement) ;
+- **Authentification** : le jeton Bearer est le mécanisme principal (insensible aux
+  restrictions de cookies tiers) ; le cookie `SameSite=None; Secure` n'est qu'un renfort ;
+- **Sens des variables** : `NEXT_PUBLIC_API_URL` est publique par conception (c'est une URL
+  d'API, pas un secret) ; `DATABASE_URL` et `ADMIN_PIN` restent côté serveur Railway.
+
+### 5. Pièges fréquents
+
+- `CORS_ORIGINS` : URL complètes avec `https://`, **sans barre finale**, séparées par des
+  virgules sans espace (`https://a.vercel.app,https://b.vercel.app`) ;
+- le frontend affiche des erreurs réseau ? Vérifie que `/api/health` répond sur l'URL
+  Railway et que `NEXT_PUBLIC_API_URL` la pointe bien (sans `/` final) ;
+- après tout changement de variable (Railway ou Vercel), **redéploie** le service concerné
+  (Vercel : obligatoire, la variable est cuite dans le bundle au build).
+
+### 6. Comptes créés pendant la recette
 
 Le parcours complet (inscription → validation → équipe → cotisant → carnet → encaissement)
 a été exécuté sur la base Neon. Comptes réels actuellement en base :

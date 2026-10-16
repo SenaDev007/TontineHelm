@@ -133,7 +133,7 @@ router.post(
             amount: payment.amount,
             date: new Date(),
             passbookNumber: passbook.number,
-            dayIndex,
+            days: [dayIndex],
             cycleDays: passbook.cycleDays,
             balance: balance + payment.amount,
           }),
