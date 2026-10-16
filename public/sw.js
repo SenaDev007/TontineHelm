@@ -29,6 +29,8 @@ const PRECACHE_ASSETS = [
   "/logo-tontihelm/logo-TontiHelm1.svg",
   "/logo-tontihelm/logo-TontiHelm-nom%20droite1.png",
   "/logo-tontihelm/logo-TontiHelm-nom%20bas1.png",
+  "/Background%20desktop.png",
+  "/Background%20mobile.png",
   "/app-screens/screen-tour.png",
   "/app-screens/screen-collect.png",
   "/app-screens/screen-dashboard.png",

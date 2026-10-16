@@ -58,7 +58,7 @@ function PhoneMockup() {
       whileInView={reduce ? undefined : { opacity: 1, y: 0, rotate: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.7, ease: EASE }}
-      className="relative mx-auto w-full max-w-[300px]"
+      className="relative mx-auto w-full max-w-[320px]"
       role="img"
       aria-label={`Aperçu réel de l'application : ${current.label}`}
     >
@@ -69,7 +69,7 @@ function PhoneMockup() {
       <motion.div
         animate={reduce ? undefined : { y: [0, -12, 0] }}
         transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-        className="relative rounded-[36px] border border-[#2A3B5C] bg-[#0D1B33] p-[10px] shadow-2xl shadow-black/50"
+        className="relative rounded-[36px] border border-[#2A3B5C] bg-[#0D1B33] p-[10px] shadow-2xl shadow-black/60 ring-1 ring-white/10"
       >
         {/* Écran */}
         <div className="relative overflow-hidden rounded-[26px] bg-white">
@@ -170,9 +170,29 @@ export function Hero({
 
   return (
     <section id="accueil" className="relative overflow-hidden bg-ink text-white">
-      {/* Fond animé : grille + orbes */}
+      {/* Fond photographique officiel (assets du dépôt) — desktop / mobile */}
+      <div className="absolute inset-0" aria-hidden>
+        <picture>
+          <source media="(max-width: 767px)" srcSet="/Background mobile.png" />
+          {/* eslint-disable-next-line @next/next/no-img-element -- décoratif, fond plein cadre */}
+          <img
+            src="/Background desktop.png"
+            alt=""
+            className="h-full w-full object-cover object-center md:object-[75%_center]"
+            loading="eager"
+            fetchPriority="high"
+          />
+        </picture>
+      </div>
+      {/* Voile nuit pour la lisibilité du texte (plus dense à gauche, côté copy) */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.35]"
+        className="absolute inset-0 bg-[linear-gradient(100deg,rgba(10,20,40,0.98)_0%,rgba(10,20,40,0.93)_45%,rgba(13,27,51,0.78)_100%)]"
+        aria-hidden
+      />
+
+      {/* Fond animé : grille + orbes discrets par-dessus la photo */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.22]"
         style={{
           backgroundImage:
             "linear-gradient(rgba(35,51,80,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(35,51,80,0.5) 1px, transparent 1px)",
@@ -183,20 +203,20 @@ export function Hero({
         aria-hidden
       />
       <Orb className="left-[-8%] top-[-12%] h-72 w-72" duration={16}>
-        <div className="h-full w-full bg-[radial-gradient(circle,rgba(0,184,176,0.28),transparent_70%)]" />
+        <div className="h-full w-full bg-[radial-gradient(circle,rgba(0,184,176,0.20),transparent_70%)]" />
       </Orb>
       <Orb className="right-[-6%] top-[18%] h-96 w-96" duration={13}>
-        <div className="h-full w-full bg-[radial-gradient(circle,rgba(0,143,245,0.20),transparent_70%)]" />
+        <div className="h-full w-full bg-[radial-gradient(circle,rgba(0,143,245,0.16),transparent_70%)]" />
       </Orb>
       <Orb className="bottom-[-22%] left-[30%] h-80 w-80" duration={18}>
-        <div className="h-full w-full bg-[radial-gradient(circle,rgba(255,184,0,0.12),transparent_70%)]" />
+        <div className="h-full w-full bg-[radial-gradient(circle,rgba(255,184,0,0.10),transparent_70%)]" />
       </Orb>
 
-      <div className="relative mx-auto grid max-w-[1200px] items-center gap-14 px-4 pb-24 pt-16 md:px-6 md:pt-24 lg:grid-cols-2 lg:gap-16 lg:px-8">
+      <div className="relative mx-auto grid max-w-[1200px] items-center gap-12 px-4 pb-24 pt-14 md:px-6 md:pt-24 lg:grid-cols-2 lg:gap-16 lg:px-8">
         <motion.div variants={container} initial={reduce ? false : "hidden"} animate="show">
           <motion.p
             variants={item}
-            className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-4 py-1.5 text-[13px] font-semibold uppercase tracking-[0.14em] text-gold"
+            className="inline-flex items-center gap-2 rounded-full bg-gold/15 px-4 py-1.5 text-[13px] font-semibold uppercase tracking-[0.14em] text-gold [text-shadow:0_1px_10px_rgba(10,20,40,0.6)]"
           >
             <span className="relative flex h-2 w-2" aria-hidden>
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gold opacity-60" />
@@ -214,13 +234,13 @@ export function Hero({
 
           <motion.p
             variants={item}
-            className="mt-6 max-w-xl text-base leading-relaxed text-[#AFC2DE] md:text-lg"
+            className="mt-6 max-w-xl text-base leading-relaxed text-[#C4D2E8] [text-shadow:0_1px_12px_rgba(10,20,40,0.5)] md:text-lg"
           >
             TontiHelm remplace le carnet papier par une application qui marche sans réseau. Tes agents
             encaissent en 10 secondes, tes clients reçoivent leur reçu, ta caisse se clôture chaque soir.
           </motion.p>
 
-          <motion.div variants={item} className="mt-8 flex flex-wrap items-center gap-3">
+          <motion.div variants={item} className="mt-6 flex flex-wrap items-center gap-3">
             <Button
               size="lg"
               onClick={onDemoRequest}
@@ -238,7 +258,7 @@ export function Hero({
             </Button>
           </motion.div>
 
-          <motion.p variants={item} className="mt-3 text-sm text-[#7C90B0]">
+          <motion.p variants={item} className="mt-3 text-sm text-[#93A7C6]">
             Démonstration avec un conseiller · Réponse sous 24 heures ouvrées
           </motion.p>
 
@@ -246,7 +266,7 @@ export function Hero({
             variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.9 } } }}
             initial={reduce ? false : "hidden"}
             animate="show"
-            className="mt-8 flex flex-wrap gap-2"
+            className="mt-6 flex flex-wrap gap-2 lg:mt-8"
           >
             <ProofChip icon={WifiOff}>Fonctionne sans réseau</ProofChip>
             <ProofChip icon={MessageSquareText}>Reçu SMS immédiat</ProofChip>
