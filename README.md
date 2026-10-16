@@ -34,6 +34,24 @@ TontineHelm/
 **Règles d'or** : aucune donnée mock, rien de codé en dur. Tout ce que l'interface affiche
 provient de l'API Express et est persisté dans **PostgreSQL (Neon)**.
 
+## Identité visuelle
+
+Les logos officiels vivent dans `public/logo-tontihelm/` :
+
+| Asset | Usage |
+|---|---|
+| `logo-TontiHelm-nom droite1.png` | navbar et en-têtes des back-offices (emblème + nom à droite) |
+| `logo-TontiHelm-nom bas1.png` | footer de la vitrine (emblème + nom en bas, sur pastille blanche) |
+| `logo-TontiHelm1.png` | écrans de connexion / inscription / attente et écran de chargement animé |
+| `logo-TontiHelm1.svg` / `.ico` / `.webp` | sources vectorielles et favicon |
+
+Le favicon (`src/app/favicon.ico`, 16/32/48) et les icônes du manifest
+(`public/icon-192.png`, `public/icon-512.png`, `apple-touch-icon.png`) sont régénérés
+depuis l'emblème par `python3 scripts/make-icons.py`. Palette de marque :
+primaire `#003887`, secondaire `#00B8B0`, accent `#008FF5`, or `#FFB800` —
+définie dans `src/app/globals.css` (jetons `@theme` + variables shadcn/ui).
+
+
 ## Le carnet en calendrier réel
 
 Le carnet de chaque cotisant s'ouvre en vue **calendrier calendaire vrai**, entièrement

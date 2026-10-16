@@ -2,7 +2,7 @@
 // TontiHelm — écran d'attente : structure inscrite, en attente de validation manuelle (M1).
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { LogoWordmark } from "../Logo";
+import { LogoMark } from "../Logo";
 import { SessionUser } from "@/lib/types";
 import { Clock, LogOut, ShieldQuestion } from "lucide-react";
 
@@ -16,12 +16,12 @@ export function PendingScreen({
   const suspended = user.structureStatus === "suspended";
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
-      <Card className="w-full max-w-md border-line text-center">
+      <Card className="w-full max-w-md animate-scale-in border-line text-center">
         <CardContent className="p-8">
           <div className="flex justify-center">
-            <LogoWordmark size={30} />
+            <LogoMark size={56} priority />
           </div>
-          <span className="mx-auto mt-6 flex h-14 w-14 items-center justify-center rounded-full bg-[#FBF0E3] text-warning">
+          <span className="mx-auto mt-6 flex h-14 w-14 items-center justify-center rounded-full bg-[#FFF4D6] text-warning">
             {suspended ? <ShieldQuestion className="h-7 w-7 tontihelm-icon" aria-hidden /> : <Clock className="h-7 w-7 tontihelm-icon" aria-hidden />}
           </span>
           <h1 className="font-display mt-5 text-xl font-bold text-ink">

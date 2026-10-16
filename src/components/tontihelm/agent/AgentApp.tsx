@@ -235,7 +235,7 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
               </button>
             ) : (
               <>
-                <LogoMark size={26} />
+                <LogoMark size={32} />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold leading-tight text-ink">{tour?.structure.name ?? "TontiHelm"}</p>
                   <p className="truncate text-xs text-subtle">{user.fullName}</p>
@@ -251,9 +251,9 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
         {/* Bannière hors réseau (§13.4) — visible seulement hors réseau */}
         {!online && (
           <div className="mx-auto max-w-2xl px-4 pb-3">
-            <Alert className="border-[#EDD3B5] bg-[#FBF0E3]">
+            <Alert className="border-[#F0D48A] bg-[#FFF4D6]">
               <WifiOff className="h-4 w-4 text-warning" aria-hidden />
-              <AlertDescription className="text-[13px] font-medium text-[#8F4106]">
+              <AlertDescription className="text-[13px] font-medium text-[#A66A00]">
                 Pas de réseau. Continue ta tournée, tout est enregistré sur ton téléphone.
               </AlertDescription>
             </Alert>
@@ -261,9 +261,9 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
         )}
         {online && pendingCount > 0 && (
           <div className="mx-auto max-w-2xl px-4 pb-3">
-            <Alert className="border-[#C5D8ED] bg-[#E8F0F9]">
+            <Alert className="border-[#C5D8ED] bg-[#E8F1FD]">
               <RefreshCw className={cn("h-4 w-4 text-info", syncing && "animate-spin")} aria-hidden />
-              <AlertDescription className="text-[13px] font-medium text-[#16497F]">
+              <AlertDescription className="text-[13px] font-medium text-[#0B6BCB]">
                 {pendingCount} encaissement{pendingCount > 1 ? "s" : ""} en attente d'envoi. {"Ils partent dès le retour du réseau."}
               </AlertDescription>
             </Alert>

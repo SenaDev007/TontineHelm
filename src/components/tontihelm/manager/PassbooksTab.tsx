@@ -84,7 +84,7 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
         {!readOnly && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-primary text-primary-foreground hover:bg-[#0C5A3E]">
+              <Button className="bg-primary text-primary-foreground hover:bg-primary-hover">
                 <BookOpen className="h-4 w-4" aria-hidden /> Nouveau carnet
               </Button>
             </DialogTrigger>
@@ -121,14 +121,14 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                   <Label htmlFor="pb-start">Date de début</Label>
                   <Input id="pb-start" type="date" value={form.startsOn} onChange={(e) => setForm({ ...form, startsOn: e.target.value })} className="h-11 border-line" />
                 </div>
-                <p className="rounded-lg bg-[#F7F8F5] p-3 text-xs leading-relaxed text-subtle">
+                <p className="rounded-lg bg-[#F4F7FB] p-3 text-xs leading-relaxed text-subtle">
                   Commission de la structure : 1 jour de cotisation par cycle (paramétrable). Un cycle de 31
                   jours à 500 FCFA laisse 500 FCFA de commission et 15 000 FCFA restitués au cotisant.
                 </p>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOpen(false)} className="border-line">Annuler</Button>
-                <Button onClick={submit} disabled={submitting || !form.contributorId} className="bg-primary text-primary-foreground hover:bg-[#0C5A3E]">
+                <Button onClick={submit} disabled={submitting || !form.contributorId} className="bg-primary text-primary-foreground hover:bg-primary-hover">
                   {submitting ? "Création…" : "Créer le carnet"}
                 </Button>
               </DialogFooter>
@@ -202,7 +202,7 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                 </div>
                 <PassbookStatusBadge status={r.status} />
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-[#F7F8F5] px-3 py-2 text-xs">
+              <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-[#F4F7FB] px-3 py-2 text-xs">
                 <span className="amount flex items-center gap-1 text-subtle"><CalendarDays className="h-3.5 w-3.5" aria-hidden /> {r.cycleDays} j</span>
                 <span className="amount text-subtle">Mise {formatFCFA(r.dailyAmount)}</span>
                 <span className="amount font-semibold text-ink">{formatFCFA(r.balance)}</span>

@@ -67,7 +67,7 @@ export function TeamTab({ readOnly }: { readOnly: boolean }) {
         {!readOnly && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-primary text-primary-foreground hover:bg-[#0C5A3E]">
+              <Button className="bg-primary text-primary-foreground hover:bg-primary-hover">
                 <UserPlus className="h-4 w-4" aria-hidden /> Nouvel agent
               </Button>
             </DialogTrigger>
@@ -121,7 +121,7 @@ export function TeamTab({ readOnly }: { readOnly: boolean }) {
                 <Button
                   onClick={submit}
                   disabled={submitting || form.fullName.length < 2 || form.phone.replace(/\s+/g, "").length < 8 || form.pin.length !== 6}
-                  className="bg-primary text-primary-foreground hover:bg-[#0C5A3E]"
+                  className="bg-primary text-primary-foreground hover:bg-primary-hover"
                 >
                   {submitting ? "Création…" : "Créer l'agent"}
                 </Button>
@@ -134,7 +134,7 @@ export function TeamTab({ readOnly }: { readOnly: boolean }) {
       {agents.length === 0 ? (
         <Card className="border-dashed border-line bg-white">
           <CardContent className="flex flex-col items-center gap-2 p-10 text-center">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#EDF1EA] text-primary">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#EDF2F7] text-primary">
               <Users className="h-6 w-6" aria-hidden />
             </span>
             <p className="font-display font-bold text-ink">Aucun agent pour l&apos;instant</p>
@@ -151,7 +151,7 @@ export function TeamTab({ readOnly }: { readOnly: boolean }) {
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#EDF1EA] font-display text-sm font-bold text-primary">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#EDF2F7] font-display text-sm font-bold text-primary">
                       {a.fullName.split(" ").map((p) => p[0]).slice(0, 2).join("")}
                     </span>
                     <div className="min-w-0">
@@ -161,7 +161,7 @@ export function TeamTab({ readOnly }: { readOnly: boolean }) {
                       </p>
                     </div>
                   </div>
-                  <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-[#E7F3EB] px-2 py-0.5 text-[11px] font-semibold text-primary">
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-[#DFF6F4] px-2 py-0.5 text-[11px] font-semibold text-primary">
                     <Wallet className="h-3 w-3" aria-hidden /> Agent
                   </span>
                 </div>

@@ -15,6 +15,7 @@ import { RegisterScreen } from "@/components/tontihelm/register/RegisterScreen";
 import { AgentApp } from "@/components/tontihelm/agent/AgentApp";
 import { ManagerApp } from "@/components/tontihelm/manager/ManagerApp";
 import { AdminApp } from "@/components/tontihelm/admin/AdminApp";
+import { LogoAnimated } from "@/components/tontihelm/Logo";
 import { get, post, setToken } from "@/lib/client";
 import { SessionUser, SubscriptionInfo } from "@/lib/types";
 
@@ -60,9 +61,15 @@ export default function TontiHelmApp() {
   if (booting) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-canvas" role="status" aria-live="polite">
-        <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" aria-hidden />
-          <p className="mt-3 text-sm text-subtle">Chargement de TontiHelm…</p>
+        <div className="text-center animate-fade-in">
+          <div className="flex justify-center">
+            <LogoAnimated size={96} />
+          </div>
+          {/* Barre de progression indéterminée (shimmer aux couleurs de marque). */}
+          <div className="mx-auto mt-8 h-1.5 w-44 overflow-hidden rounded-full bg-line" aria-hidden>
+            <div className="shimmer-bar h-full w-full" />
+          </div>
+          <p className="mt-4 text-sm text-subtle animate-pulse-soft">Chargement de TontiHelm…</p>
         </div>
       </div>
     );

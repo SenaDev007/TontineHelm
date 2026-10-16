@@ -224,7 +224,7 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-[#EFC7C0] bg-[#FBEAE7] p-4 text-sm font-medium text-[#931D12]" role="alert">
+      <div className="rounded-lg border border-[#F5C6C0] bg-[#FDECEA] p-4 text-sm font-medium text-[#B3261E]" role="alert">
         {error}
       </div>
     );
@@ -254,7 +254,7 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="amount rounded-md bg-[#EDF1EA] px-2 py-0.5 text-sm font-bold text-primary">
+                <span className="amount rounded-md bg-[#EDF2F7] px-2 py-0.5 text-sm font-bold text-primary">
                   Carnet {pb.number}
                 </span>
                 <PassbookStatusBadge status={pb.status} />
@@ -275,11 +275,11 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
           </div>
 
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-lg bg-[#F7F8F5] px-3 py-2">
+            <div className="rounded-lg bg-[#F4F7FB] px-3 py-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-subtle">Mise journalière</p>
               <p className="amount text-sm font-bold text-ink">{formatFCFA(pb.dailyAmount)}</p>
             </div>
-            <div className="rounded-lg bg-[#F7F8F5] px-3 py-2">
+            <div className="rounded-lg bg-[#F4F7FB] px-3 py-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-subtle">Cycle réel</p>
               <p className="text-sm font-bold text-ink">
                 {bounds.start.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}
@@ -287,11 +287,11 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
                 {bounds.end.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}
               </p>
             </div>
-            <div className="rounded-lg bg-[#F7F8F5] px-3 py-2">
+            <div className="rounded-lg bg-[#F4F7FB] px-3 py-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-subtle">Commission ({data.structure.commissionDays} j)</p>
               <p className="amount text-sm font-bold text-ink">{formatFCFA(commission)}</p>
             </div>
-            <div className="rounded-lg bg-[#F7F8F5] px-3 py-2">
+            <div className="rounded-lg bg-[#F4F7FB] px-3 py-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-subtle">Restitué en fin de cycle</p>
               <p className="amount text-sm font-bold text-ink">{formatFCFA(pb.cycleTotal - commission)}</p>
             </div>
@@ -310,7 +310,7 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
               </span>
             </div>
             <div
-              className="h-2.5 w-full overflow-hidden rounded-full bg-[#EDF1EA]"
+              className="h-2.5 w-full overflow-hidden rounded-full bg-[#EDF2F7]"
               role="progressbar"
               aria-valuenow={pb.paidDays}
               aria-valuemin={0}
@@ -389,7 +389,7 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
       <Card className="overflow-hidden border-line bg-white">
         <CardContent className="p-0">
           {/* Jours de semaine réels */}
-          <div className="grid grid-cols-7 border-b border-line bg-[#F7F8F5]">
+          <div className="grid grid-cols-7 border-b border-line bg-[#F4F7FB]">
             {WEEKDAYS.map((d) => (
               <div key={d} className="py-2 text-center text-[11px] font-bold uppercase tracking-wide text-subtle">
                 <span className="hidden sm:inline">{d}</span>
@@ -424,16 +424,16 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
                   className={cn(
                     "relative flex min-h-[64px] flex-col items-center justify-start border-b border-r border-line p-1.5 text-left transition-colors md:min-h-[84px] md:p-2",
                     "border-line",
-                    !c.inMonth && "bg-[#FAFBF8]",
+                    !c.inMonth && "bg-[#F0F5FC]",
                     c.inMonth && !c.marked && !c.partial && !c.missed && "bg-white",
                     !c.inCycle && "cursor-default",
-                    c.inCycle && !c.marked && !c.missed && "hover:bg-[#F2F7F4]",
+                    c.inCycle && !c.marked && !c.missed && "hover:bg-[#EEF4FD]",
                     c.marked && "bg-primary text-primary-foreground",
-                    c.partial && "bg-[#E7F3EB]",
-                    c.missed && "bg-[#FBEAE7]",
+                    c.partial && "bg-[#DFF6F4]",
+                    c.missed && "bg-[#FDECEA]",
                     !clickable && "opacity-60",
                     clickable && "cursor-pointer",
-                    selected && "outline outline-2 outline-offset-[-2px] outline-[#C8962E]"
+                    selected && "outline outline-2 outline-offset-[-2px] outline-[#FFB800]"
                   )}
                 >
                   {/* Numéro du jour calendaire réel */}
@@ -443,7 +443,7 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
                       !c.inMonth && "text-subtle/40",
                       c.inMonth && !c.marked && "text-ink",
                       c.marked && "bg-white/20 text-primary-foreground",
-                      c.isToday && !c.marked && "bg-[#C8962E] text-white"
+                      c.isToday && !c.marked && "bg-[#FFB800] text-white"
                     )}
                   >
                     {dayNum}
@@ -451,7 +451,7 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
 
                   {/* Jour courant (date réelle) */}
                   {c.isToday && (
-                    <span className="absolute right-1 top-1 rounded-sm bg-[#C8962E] px-1 text-[9px] font-bold uppercase text-white md:right-1.5 md:top-1.5">
+                    <span className="absolute right-1 top-1 rounded-sm bg-[#FFB800] px-1 text-[9px] font-bold uppercase text-white md:right-1.5 md:top-1.5">
                       Auj.
                     </span>
                   )}
@@ -508,12 +508,12 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
           </div>
 
           {/* Légende du marquage */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-line bg-[#F7F8F5] px-3 py-2.5 text-[11px] text-subtle">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-line bg-[#F4F7FB] px-3 py-2.5 text-[11px] text-subtle">
             <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-primary" aria-hidden /> Jour marqué</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-[#C8E0D2]" aria-hidden /> Marquage partiel</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-[#B5E8E5]" aria-hidden /> Marquage partiel</span>
             <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-primary/60" aria-hidden /> Payé d&apos;avance</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-[#FBEAE7]" aria-hidden /> Jour manqué</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border border-[#C8962E]" aria-hidden /> Aujourd&apos;hui</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-[#FDECEA]" aria-hidden /> Jour manqué</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border border-[#FFB800]" aria-hidden /> Aujourd&apos;hui</span>
             <span className="inline-flex items-center gap-1.5"><CircleDashed className="h-3 w-3 text-subtle/50" aria-hidden /> À venir</span>
             <span className="ml-auto hidden sm:inline">J&lt;n&gt; = jour du cycle</span>
           </div>
@@ -554,13 +554,13 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
                 </p>
               </div>
               {selectedCell.marked && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-[#E7F3EB] px-2 py-1 text-xs font-bold text-primary">
+                <span className="inline-flex items-center gap-1 rounded-md bg-[#DFF6F4] px-2 py-1 text-xs font-bold text-primary">
                   <BadgeCheck className="h-4 w-4" aria-hidden />
                   {selectedCell.isFuture ? "Payé d'avance" : "Jour marqué"}
                 </span>
               )}
               {selectedCell.missed && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-[#FBEAE7] px-2 py-1 text-xs font-bold text-[#931D12]">
+                <span className="inline-flex items-center gap-1 rounded-md bg-[#FDECEA] px-2 py-1 text-xs font-bold text-[#B3261E]">
                   <CalendarX className="h-4 w-4" aria-hidden /> Jour manqué
                 </span>
               )}
@@ -579,7 +579,7 @@ export function CarnetCalendar({ passbookId }: { passbookId: string }) {
             ) : (
               <ul className="space-y-2">
                 {selectedCell.items.map((it) => (
-                  <li key={it.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[#F7F8F5] px-3 py-2">
+                  <li key={it.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[#F4F7FB] px-3 py-2">
                     <span className="flex items-center gap-2 text-sm">
                       <MethodBadge method={it.method} />
                       <span className={cn("amount font-bold", it.amount < 0 ? "text-danger" : "text-ink")}>

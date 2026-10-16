@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogoWordmark } from "../Logo";
+import { LogoMark } from "../Logo";
 import { post } from "@/lib/client";
 import { ArrowLeft, ArrowRight, CheckCircle2, FileUp, PartyPopper } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -78,7 +78,7 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
           <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm font-medium text-subtle transition-colors hover:text-ink">
             <ArrowLeft className="h-4 w-4 tontihelm-icon" aria-hidden /> Retour au site
           </button>
-          <LogoWordmark size={28} />
+          <LogoMark size={40} priority />
         </div>
       </div>
 
@@ -86,21 +86,24 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
         {finished ? (
           <Card className="w-full max-w-lg border-line text-center">
             <CardContent className="p-8">
-              <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#E7F3EB] text-success">
+              <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#DFF6F4] text-success">
                 <PartyPopper className="h-7 w-7 tontihelm-icon" aria-hidden />
               </span>
               <h1 className="font-display mt-5 text-2xl font-bold text-ink">Inscription envoyée</h1>
               <p className="mt-3 text-base leading-relaxed text-subtle">
                 Demande reçue. Nous vérifions ton justificatif d'agrément et nous te répondons sous 24 heures ouvrées.
               </p>
-              <Button onClick={onDone} className="mt-6 h-12 bg-primary px-6 text-primary-foreground hover:bg-[#0C5A3E]">
+              <Button onClick={onDone} className="mt-6 h-12 bg-primary px-6 text-primary-foreground hover:bg-primary-hover">
                 Retour à l'accueil
               </Button>
             </CardContent>
           </Card>
         ) : (
-          <Card className="w-full max-w-xl border-line">
+          <Card className="w-full max-w-xl animate-scale-in border-line">
             <CardHeader>
+              <div className="mb-1 flex justify-center">
+                <LogoMark size={64} priority />
+              </div>
               <CardTitle className="font-display text-xl font-bold">Inscrire ma structure</CardTitle>
               <p className="text-sm text-subtle">
                 Période d'essai de 60 jours activée à la validation de ton justificatif.
@@ -111,7 +114,7 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
                   <div key={s} className="flex flex-1 items-center gap-2">
                     <span className={cn(
                       "font-display flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold",
-                      s < step ? "bg-primary text-primary-foreground" : s === step ? "bg-primary text-primary-foreground" : "bg-[#EDF1EA] text-subtle"
+                      s < step ? "bg-primary text-primary-foreground" : s === step ? "bg-primary text-primary-foreground" : "bg-[#EDF2F7] text-subtle"
                     )}>
                       {s < step ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : s}
                     </span>
@@ -148,7 +151,7 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
                     <Label htmlFor="doc">Justificatif d'agrément</Label>
                     <label
                       htmlFor="doc"
-                      className="flex h-14 cursor-pointer items-center gap-3 rounded-lg border border-dashed border-line bg-[#F7F8F5] px-4 text-sm text-subtle transition-colors hover:border-primary/50 hover:bg-[#F2F7F4]"
+                      className="flex h-14 cursor-pointer items-center gap-3 rounded-lg border border-dashed border-line bg-[#F4F7FB] px-4 text-sm text-subtle transition-colors hover:border-primary/50 hover:bg-[#EEF4FD]"
                     >
                       <FileUp className="h-5 w-5 tontihelm-icon text-primary" aria-hidden />
                       {form.licenseDocName || "Choisis le fichier PDF ou l'image du justificatif"}
@@ -222,11 +225,11 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
                   </Button>
                 )}
                 {step < 3 ? (
-                  <Button onClick={next} className="h-12 flex-1 bg-primary text-base text-primary-foreground hover:bg-[#0C5A3E]">
+                  <Button onClick={next} className="h-12 flex-1 bg-primary text-base text-primary-foreground hover:bg-primary-hover">
                     Continuer <ArrowRight className="h-4 w-4" aria-hidden />
                   </Button>
                 ) : (
-                  <Button onClick={submit} disabled={loading} className="h-12 flex-1 bg-primary text-base text-primary-foreground hover:bg-[#0C5A3E]">
+                  <Button onClick={submit} disabled={loading} className="h-12 flex-1 bg-primary text-base text-primary-foreground hover:bg-primary-hover">
                     {loading ? "Envoi…" : "Envoyer ma demande"}
                   </Button>
                 )}

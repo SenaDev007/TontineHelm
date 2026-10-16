@@ -42,7 +42,7 @@ function AmountKeypad({
             if (k === "eff") onChange("");
             else if (value.length < 7) onChange(value + k);
           }}
-          className="font-display flex h-[52px] items-center justify-center rounded-lg border border-line bg-surface text-lg font-semibold text-ink transition-colors hover:bg-[#EDF1EA] active:bg-[#E2E8DF] disabled:opacity-40"
+          className="font-display flex h-[52px] items-center justify-center rounded-lg border border-line bg-surface text-lg font-semibold text-ink transition-colors hover:bg-[#EDF2F7] active:bg-[#EDF2F7] disabled:opacity-40"
         >
           {k === "eff" ? "eff" : k}
         </button>
@@ -97,11 +97,11 @@ function DayChip({
       aria-label={`${formatDayShort(iso)}${covered ? ", journée déjà couverte" : partial ? `, il reste ${formatFCFA(remaining)}` : ""}`}
       className={cn(
         "flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-lg border px-2.5 py-1.5 text-center transition-colors",
-        covered && "cursor-default border-line bg-[#EDF1EA] text-subtle",
-        !covered && !selected && "border-line bg-surface text-ink hover:border-primary/40 hover:bg-[#F7FAF8]",
+        covered && "cursor-default border-line bg-[#EDF2F7] text-subtle",
+        !covered && !selected && "border-line bg-surface text-ink hover:border-primary/40 hover:bg-[#F0F5FC]",
         selected && "border-primary bg-primary text-primary-foreground",
-        isToday && !covered && !selected && "border-[#C8962E] bg-[#FBF6EA]",
-        isToday && selected && "ring-2 ring-[#C8962E] ring-offset-1"
+        isToday && !covered && !selected && "border-[#FFB800] bg-[#FFF7E0]",
+        isToday && selected && "ring-2 ring-[#FFB800] ring-offset-1"
       )}
     >
       <span className="text-xs font-semibold leading-none">
@@ -217,9 +217,9 @@ export function CollectScreen({
             <button
               key={s.passbookId}
               onClick={() => { setAmountInput(null); setSelected(null); onSelectStop(s); }}
-              className="flex w-full items-center gap-3 rounded-lg border border-line bg-surface p-4 text-left transition-colors hover:border-primary/40 hover:bg-[#F7FAF8]"
+              className="flex w-full items-center gap-3 rounded-lg border border-line bg-surface p-4 text-left transition-colors hover:border-primary/40 hover:bg-[#F0F5FC]"
             >
-              <span className="amount font-display flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#EDF1EA] text-sm font-bold text-ink" aria-hidden>
+              <span className="amount font-display flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#EDF2F7] text-sm font-bold text-ink" aria-hidden>
                 {s.passbookNumber}
               </span>
               <div className="min-w-0 flex-1">
@@ -274,7 +274,7 @@ export function CollectScreen({
             </div>
             <PassbookStatusBadge status={stop.status} />
           </div>
-          <div className="mt-4 flex items-center justify-between rounded-lg border border-line bg-[#F7F8F5] px-3 py-2.5">
+          <div className="mt-4 flex items-center justify-between rounded-lg border border-line bg-[#F4F7FB] px-3 py-2.5">
             <span className="text-sm text-subtle">Solde cumulé</span>
             <span className="amount text-base font-semibold text-ink">{formatFCFA(stop.balance)}</span>
           </div>
@@ -304,7 +304,7 @@ export function CollectScreen({
         </div>
 
         {view.payable.length === 0 ? (
-          <Card className="border-line bg-[#F7F8F5]">
+          <Card className="border-line bg-[#F4F7FB]">
             <CardContent className="flex items-center gap-2 p-4 text-sm text-subtle">
               <Check className="h-4 w-4 text-primary" aria-hidden />
               Cycle entièrement réglé : toutes les journées sont couvertes.
@@ -382,7 +382,7 @@ export function CollectScreen({
         <div
           className={cn(
             "amount font-display mt-1 flex h-16 items-center justify-center rounded-lg border-2 text-[40px] font-bold leading-none",
-            overMax || unallocated ? "border-danger bg-[#FBEAE7] text-danger" : "border-primary bg-[#F2F7F4] text-primary"
+            overMax || unallocated ? "border-danger bg-[#FDECEA] text-danger" : "border-primary bg-[#EEF4FD] text-primary"
           )}
           role="status"
           aria-live="polite"
@@ -400,7 +400,7 @@ export function CollectScreen({
 
       {/* Répartition du montant sur les journées choisies */}
       {allocations.length > 0 && (
-        <div className="mt-3 rounded-lg border border-line bg-[#F7F8F5] px-3 py-2.5">
+        <div className="mt-3 rounded-lg border border-line bg-[#F4F7FB] px-3 py-2.5">
           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-subtle">Répartition</p>
           <ul className="space-y-1">
             {allocations.map((a) => {
@@ -459,7 +459,7 @@ export function CollectScreen({
           setAmountInput(null);
           setSelected(null);
         }}
-        className="mt-5 flex h-14 w-full flex-col items-center justify-center gap-0.5 bg-primary text-base font-semibold text-primary-foreground hover:bg-[#0C5A3E]"
+        className="mt-5 flex h-14 w-full flex-col items-center justify-center gap-0.5 bg-primary text-base font-semibold text-primary-foreground hover:bg-primary-hover"
       >
         <span className="amount inline-flex items-center gap-2">
           <Wallet className="h-5 w-5" aria-hidden />

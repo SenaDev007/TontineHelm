@@ -50,8 +50,8 @@ export function Pricing({ onStartTrial }: { onStartTrial: () => void }) {
             <Card
               key={p.name}
               className={cn(
-                "relative flex flex-col border-line",
-                p.highlight && "border-primary shadow-lg shadow-[#0F6B4A]/10 md:scale-[1.02]"
+                "card-hover animate-fade-in-up relative flex flex-col border-line",
+                p.highlight && "border-primary shadow-lg shadow-[#003887]/10 md:scale-[1.02]"
               )}
             >
               {p.highlight && (
@@ -59,7 +59,7 @@ export function Pricing({ onStartTrial }: { onStartTrial: () => void }) {
                   Le plus choisi
                 </Badge>
               )}
-              <CardHeader className={cn("pb-2", p.highlight && "bg-[#F2F7F4] rounded-t-lg")}>
+              <CardHeader className={cn("pb-2", p.highlight && "bg-[#EEF4FD] rounded-t-lg")}>
                 <h3 className="font-display text-lg font-bold text-ink">{p.name}</h3>
                 <p className="amount mt-2 text-3xl font-bold tracking-tight text-ink">
                   {p.price}
@@ -85,7 +85,7 @@ export function Pricing({ onStartTrial }: { onStartTrial: () => void }) {
           Paiement annuel : 2 mois offerts. Les SMS sont facturés à l'usage, tarif affiché avant envoi.
         </p>
         <div className="mt-8 text-center">
-          <Button size="lg" onClick={onStartTrial} className="bg-primary text-primary-foreground hover:bg-[#0C5A3E] h-12 px-6 text-base">
+          <Button size="lg" onClick={onStartTrial} className="bg-primary text-primary-foreground hover:bg-primary-hover h-12 px-6 text-base">
             Essayer 60 jours gratuitement <ArrowRight className="h-5 w-5" aria-hidden />
           </Button>
         </div>

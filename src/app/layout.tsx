@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
@@ -17,7 +17,14 @@ const jakarta = Plus_Jakarta_Sans({
   display: "swap",
 });
 
+export const viewport: Viewport = {
+  themeColor: "#003887",
+  width: "device-width",
+  initialScale: 1,
+};
+
 export const metadata: Metadata = {
+  manifest: "/manifest.webmanifest",
   title: "TontiHelm : logiciel de gestion de tontine au Bénin",
   description:
     "Remplace le carnet papier par une app qui marche sans réseau. Encaissement en 10 secondes, caisse clôturée chaque soir. Essai gratuit 60 jours.",
@@ -29,7 +36,7 @@ export const metadata: Metadata = {
   ],
   icons: {
     icon: [
-      { url: "/logo.svg", type: "image/svg+xml" },
+      { url: "/logo-tontihelm/logo-TontiHelm1.svg", type: "image/svg+xml" },
       { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icon-512.png", sizes: "512x512", type: "image/png" },

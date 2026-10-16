@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/components/ui/input-otp";
-import { LogoWordmark } from "../Logo";
+import { LogoMark } from "../Logo";
 import { post, setToken } from "@/lib/client";
 import { SessionUser } from "@/lib/types";
 import { ArrowLeft, LogIn, ShieldCheck } from "lucide-react";
@@ -56,14 +56,17 @@ export function LoginScreen({
           >
             <ArrowLeft className="h-4 w-4 tontihelm-icon" aria-hidden /> Retour au site
           </button>
-          <LogoWordmark size={28} />
+          <LogoMark size={40} priority />
         </div>
       </div>
 
       <div className="mx-auto grid w-full max-w-[1200px] flex-1 items-center gap-12 px-4 py-10 md:px-6 lg:px-8">
-        <Card className="mx-auto w-full max-w-md border-line">
-          <CardHeader>
-            <CardTitle className="font-display text-xl font-bold">Connexion</CardTitle>
+        <Card className="mx-auto w-full max-w-md animate-scale-in border-line">
+          <CardHeader className="text-center">
+            <div className="flex justify-center">
+              <LogoMark size={72} priority />
+            </div>
+            <CardTitle className="font-display mt-4 text-xl font-bold">Connexion</CardTitle>
             <p className="text-sm text-subtle">Numéro de téléphone et code PIN à 6 chiffres.</p>
           </CardHeader>
           <CardContent>
@@ -104,7 +107,7 @@ export function LoginScreen({
                 </p>
               )}
 
-              <Button type="submit" disabled={loading} className="h-12 w-full bg-primary text-base text-primary-foreground hover:bg-[#0C5A3E]">
+              <Button type="submit" disabled={loading} className="h-12 w-full bg-primary text-base text-primary-foreground hover:bg-primary-hover">
                 {loading ? "Connexion…" : (<><LogIn className="h-4 w-4" aria-hidden /> Se connecter</>)}
               </Button>
             </form>
@@ -114,7 +117,7 @@ export function LoginScreen({
         <div className="mx-auto w-full max-w-md">
           <div className="rounded-xl border border-line bg-white p-6">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E7F3EB] text-primary">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#DFF6F4] text-primary">
                 <ShieldCheck className="h-5 w-5" aria-hidden />
               </span>
               <h2 className="font-display text-lg font-bold text-ink">Ton compte est protégé</h2>

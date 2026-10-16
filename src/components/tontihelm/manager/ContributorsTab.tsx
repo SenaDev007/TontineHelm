@@ -75,7 +75,7 @@ export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
         {!readOnly && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-primary text-primary-foreground hover:bg-[#0C5A3E]">
+              <Button className="bg-primary text-primary-foreground hover:bg-primary-hover">
                 <UserPlus className="h-4 w-4" aria-hidden /> Nouveau cotisant
               </Button>
             </DialogTrigger>
@@ -120,7 +120,7 @@ export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOpen(false)} className="border-line">Annuler</Button>
-                <Button onClick={submit} disabled={submitting} className="bg-primary text-primary-foreground hover:bg-[#0C5A3E]">
+                <Button onClick={submit} disabled={submitting} className="bg-primary text-primary-foreground hover:bg-primary-hover">
                   {submitting ? "Enregistrement…" : "Enregistrer"}
                 </Button>
               </DialogFooter>
@@ -195,7 +195,7 @@ export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
                 <span className="text-subtle">Agent : {r.agent}</span>
               </div>
               {r.passbook && (
-                <div className="mt-3 flex items-center justify-between rounded-lg bg-[#F7F8F5] px-3 py-2">
+                <div className="mt-3 flex items-center justify-between rounded-lg bg-[#F4F7FB] px-3 py-2">
                   <span className="text-xs text-subtle">Carnet {r.passbook.number} · Jour {r.passbook.paidDays}/{r.passbook.cycleDays}</span>
                   <span className="amount text-sm font-semibold text-ink">{formatFCFA(r.passbook.balance)}</span>
                 </div>

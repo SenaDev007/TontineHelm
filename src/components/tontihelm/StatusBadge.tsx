@@ -10,12 +10,12 @@ import { cn } from "@/lib/utils";
 type Tone = "success" | "warning" | "danger" | "info" | "neutral" | "gold";
 
 const toneClasses: Record<Tone, string> = {
-  success: "bg-[#E7F3EB] text-[#116635] border-[#C4E0CE]",
-  warning: "bg-[#FBF0E3] text-[#8F4106] border-[#EDD3B5]",
-  danger: "bg-[#FBEAE7] text-[#931D12] border-[#EFC7C0]",
-  info: "bg-[#E8F0F9] text-[#16497F] border-[#C5D8ED]",
-  neutral: "bg-[#EDF1EA] text-[#3A4A40] border-[#DDE3DC]",
-  gold: "bg-[#FAF3E4] text-[#8A6115] border-[#EBD9AE]",
+  success: "bg-[#DFF6F4] text-[#00806B] border-[#B5E8E5]",
+  warning: "bg-[#FFF4D6] text-[#A66A00] border-[#F0D48A]",
+  danger: "bg-[#FDECEA] text-[#B3261E] border-[#F5C6C0]",
+  info: "bg-[#E8F1FD] text-[#0B6BCB] border-[#C5D8ED]",
+  neutral: "bg-[#EDF2F7] text-[#7C90B0] border-[#D9E2EC]",
+  gold: "bg-[#FFF7E0] text-[#A66A00] border-[#F0D48A]",
 };
 
 function Icon({ tone }: { tone: Tone }) {
@@ -111,26 +111,26 @@ export function SyncStatusPill({
   switch (state) {
     case "synced":
       return (
-        <Badge variant="outline" className="gap-1.5 rounded-full border-[#C4E0CE] bg-[#E7F3EB] px-2.5 py-1 text-xs font-medium text-[#116635]">
+        <Badge variant="outline" className="gap-1.5 rounded-full border-[#B5E8E5] bg-[#DFF6F4] px-2.5 py-1 text-xs font-medium text-[#00806B]">
           <ShieldCheck className="h-3.5 w-3.5 tontihelm-icon" aria-hidden /> Synchronisé
         </Badge>
       );
     case "pending":
       return (
-        <Badge variant="outline" className="gap-1.5 rounded-full border-[#EDD3B5] bg-[#FBF0E3] px-2.5 py-1 text-xs font-medium text-[#8F4106]">
+        <Badge variant="outline" className="gap-1.5 rounded-full border-[#F0D48A] bg-[#FFF4D6] px-2.5 py-1 text-xs font-medium text-[#A66A00]">
           <Clock className="h-3.5 w-3.5 tontihelm-icon" aria-hidden />
           {pendingCount} en attente
         </Badge>
       );
     case "error":
       return (
-        <Badge variant="outline" className="gap-1.5 rounded-full border-[#EFC7C0] bg-[#FBEAE7] px-2.5 py-1 text-xs font-medium text-[#931D12]">
+        <Badge variant="outline" className="gap-1.5 rounded-full border-[#F5C6C0] bg-[#FDECEA] px-2.5 py-1 text-xs font-medium text-[#B3261E]">
           <XCircle className="h-3.5 w-3.5 tontihelm-icon" aria-hidden /> Erreur d'envoi
         </Badge>
       );
     default:
       return (
-        <Badge variant="outline" className="gap-1.5 rounded-full border-[#DDE3DC] bg-[#EDF1EA] px-2.5 py-1 text-xs font-medium text-[#3A4A40]">
+        <Badge variant="outline" className="gap-1.5 rounded-full border-[#D9E2EC] bg-[#EDF2F7] px-2.5 py-1 text-xs font-medium text-[#7C90B0]">
           <X className="h-3.5 w-3.5 tontihelm-icon" aria-hidden /> Hors réseau
         </Badge>
       );

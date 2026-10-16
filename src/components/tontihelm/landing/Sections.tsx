@@ -41,11 +41,11 @@ export function Problem() {
         </h2>
         <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {PROBLEMS.map((p) => (
-            <Card key={p.title} className="border-[#24382E] bg-[#12241B] text-white">
+            <Card key={p.title} className="border-[#233350] bg-[#101B31] text-white">
               <CardContent className="p-6">
-                <p.icon className="h-6 w-6 tontihelm-icon text-accent" aria-hidden />
+                <p.icon className="h-6 w-6 tontihelm-icon text-info" aria-hidden />
                 <h3 className="font-display mt-4 text-lg font-bold">{p.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-[#C6D2CB]">{p.body}</p>
+                <p className="mt-2 text-sm leading-relaxed text-[#AFC2DE]">{p.body}</p>
               </CardContent>
             </Card>
           ))}
@@ -104,9 +104,9 @@ export function Features({ onDemo }: { onDemo: () => void }) {
         </h2>
         <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((f) => (
-            <Card key={f.title} className="border-line bg-surface">
+            <Card key={f.title} className="card-hover animate-fade-in-up border-line bg-surface">
               <CardContent className="p-6">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#EDF3EE] text-primary">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#E8F1FD] text-primary">
                   <f.icon className="h-5 w-5 tontihelm-icon" aria-hidden />
                 </div>
                 <h3 className="font-display mt-4 text-lg font-bold text-ink">{f.title}</h3>
@@ -117,7 +117,7 @@ export function Features({ onDemo }: { onDemo: () => void }) {
           ))}
         </div>
         <div className="mt-10 text-center">
-          <Button size="lg" variant="outline" onClick={onDemo} className="border-primary text-primary hover:bg-[#EDF3EE] hover:text-primary h-12 px-6 text-base">
+          <Button size="lg" variant="outline" onClick={onDemo} className="border-primary text-primary hover:bg-[#E8F1FD] hover:text-primary h-12 px-6 text-base">
             Voir l'application en action <ArrowRight className="h-5 w-5" aria-hidden />
           </Button>
         </div>
@@ -157,7 +157,7 @@ export function Method({ onStartTrial }: { onStartTrial: () => void }) {
           ))}
         </ol>
         <div className="mt-10">
-          <Button size="lg" onClick={onStartTrial} className="bg-primary text-primary-foreground hover:bg-[#0C5A3E] h-12 px-6 text-base">
+          <Button size="lg" onClick={onStartTrial} className="bg-primary text-primary-foreground hover:bg-primary-hover h-12 px-6 text-base">
             Démarrer mon inscription <ArrowRight className="h-5 w-5" aria-hidden />
           </Button>
         </div>

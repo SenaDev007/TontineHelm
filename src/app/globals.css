@@ -3,29 +3,68 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* ── Jetons de design TontiHelm (cahier des charges §15.3) ─────────────────── */
+/* ── Jetons de design TontiHelm — identité bleu institutionnel / turquoise / or.
+   Palette officielle : primaire #003887, secondaire #00B8B0, accent #008FF5,
+   or #FFB800 ; interface froide (fond #F4F7FB, texte #172B4D). ────────────── */
 @theme {
-  --color-primary: #0F6B4A;
+  /* Marque */
+  --color-primary: #003887;
   --color-primary-foreground: #FFFFFF;
-  --color-accent: #C8962E;
-  --color-ink: #0B1A14;
-  --color-canvas: #F7F8F5;
-  --color-surface: #FFFFFF;
-  --color-line: #DDE3DC;
-  --color-subtle: #4A5A50;
-  --color-success: #167A3E;
-  --color-warning: #B45309;
-  --color-danger: #B42318;
-  --color-info: #1D5FA8;
+  --color-gold: #FFB800;
+  --color-info: #008FF5;
+  --color-success: #00806B;
+  --color-warning: #A66A00;
+  --color-danger: #D92D20;
 
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  /* Interface */
+  --color-ink: #172B4D;
+  --color-canvas: #F4F7FB;
+  --color-surface: #FFFFFF;
+  --color-line: #D9E2EC;
+  --color-subtle: #64748B;
+
+  /* Interactions de marque */
+  --color-primary-hover: #002B6B;
+  --color-secondary-hover: #009D96;
 
   --font-sans: var(--font-inter), system-ui, sans-serif;
   --font-display: var(--font-jakarta), var(--font-inter), system-ui, sans-serif;
+
+  /* ── Animations fluides de l'interface ──────────────────────────────────── */
+  --animate-fade-in-up: fade-in-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in: fade-in 0.4s ease-out both;
+  --animate-scale-in: scale-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-float: float 3.2s ease-in-out infinite;
+  --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+
+  @keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.94); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-9px); }
+  }
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.65; }
+  }
+  @keyframes shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+  }
 }
 
-/* ── Variables sémantiques shadcn/ui branchées sur les jetons ──────────────── */
+/* ── Variables sémantiques shadcn/ui branchées sur la palette TontiHelm ───── */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -64,77 +103,81 @@
 }
 
 :root {
-  --radius: 0.5rem;
-  --background: #F7F8F5;
-  --foreground: #0B1A14;
+  /* Rayons « pro » : 12 px de base → cartes 16, contrôles 12, puces 8. */
+  --radius: 0.75rem;
+  --background: #F4F7FB;
+  --foreground: #172B4D;
   --card: #FFFFFF;
-  --card-foreground: #0B1A14;
+  --card-foreground: #172B4D;
   --popover: #FFFFFF;
-  --popover-foreground: #0B1A14;
-  --primary: #0F6B4A;
+  --popover-foreground: #172B4D;
+  --primary: #003887;
   --primary-foreground: #FFFFFF;
-  --secondary: #EDF1EA;
-  --secondary-foreground: #0B1A14;
-  --muted: #EDF1EA;
-  --muted-foreground: #4A5A50;
-  --accent: #EDF1EA;
-  --accent-foreground: #0B1A14;
-  --destructive: #B42318;
-  --border: #DDE3DC;
-  --input: #DDE3DC;
-  --ring: #0F6B4A;
-  --chart-1: #0F6B4A;
-  --chart-2: #C8962E;
-  --chart-3: #1D5FA8;
-  --chart-4: #B45309;
-  --chart-5: #167A3E;
+  --secondary: #00B8B0;
+  --secondary-foreground: #FFFFFF;
+  --muted: #EDF2F7;
+  --muted-foreground: #64748B;
+  --accent: #E8F1FD;
+  --accent-foreground: #172B4D;
+  --destructive: #D92D20;
+  --border: #D9E2EC;
+  --input: #D9E2EC;
+  --ring: #003887;
+  --chart-1: #003887;
+  --chart-2: #00B8B0;
+  --chart-3: #008FF5;
+  --chart-4: #FFB800;
+  --chart-5: #64748B;
   --sidebar: #FFFFFF;
-  --sidebar-foreground: #0B1A14;
-  --sidebar-primary: #0F6B4A;
+  --sidebar-foreground: #172B4D;
+  --sidebar-primary: #003887;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #EDF1EA;
-  --sidebar-accent-foreground: #0B1A14;
-  --sidebar-border: #DDE3DC;
-  --sidebar-ring: #0F6B4A;
+  --sidebar-accent: #E8F1FD;
+  --sidebar-accent-foreground: #172B4D;
+  --sidebar-border: #D9E2EC;
+  --sidebar-ring: #003887;
 }
 
 .dark {
-  --background: #0B1A14;
-  --foreground: #F7F8F5;
-  --card: #14251D;
-  --card-foreground: #F7F8F5;
-  --popover: #14251D;
-  --popover-foreground: #F7F8F5;
-  --primary: #C8962E;
-  --primary-foreground: #0B1A14;
-  --secondary: #1C2F26;
-  --secondary-foreground: #F7F8F5;
-  --muted: #1C2F26;
-  --muted-foreground: #A7B5AC;
-  --accent: #1C2F26;
-  --accent-foreground: #F7F8F5;
-  --destructive: #E05A4E;
-  --border: #24382E;
-  --input: #24382E;
-  --ring: #C8962E;
-  --chart-1: #167A3E;
-  --chart-2: #C8962E;
-  --chart-3: #5B9BD5;
-  --chart-4: #D97706;
-  --chart-5: #4A5A50;
-  --sidebar: #14251D;
-  --sidebar-foreground: #F7F8F5;
-  --sidebar-primary: #C8962E;
-  --sidebar-primary-foreground: #0B1A14;
-  --sidebar-accent: #1C2F26;
-  --sidebar-accent-foreground: #F7F8F5;
-  --sidebar-border: #24382E;
-  --sidebar-ring: #C8962E;
+  --background: #0B1220;
+  --foreground: #E6EDF7;
+  --card: #101B31;
+  --card-foreground: #E6EDF7;
+  --popover: #101B31;
+  --popover-foreground: #E6EDF7;
+  --primary: #2E6BE8;
+  --primary-foreground: #FFFFFF;
+  --secondary: #00B8B0;
+  --secondary-foreground: #06282B;
+  --muted: #16233C;
+  --muted-foreground: #8FA3C2;
+  --accent: #1A2B4A;
+  --accent-foreground: #E6EDF7;
+  --destructive: #E5484D;
+  --border: #233350;
+  --input: #233350;
+  --ring: #3D7BE8;
+  --chart-1: #3D7BE8;
+  --chart-2: #00D2C8;
+  --chart-3: #33B5F0;
+  --chart-4: #FFC53D;
+  --chart-5: #8FA3C2;
+  --sidebar: #0D1526;
+  --sidebar-foreground: #E6EDF7;
+  --sidebar-primary: #2E6BE8;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #1A2B4A;
+  --sidebar-accent-foreground: #E6EDF7;
+  --sidebar-border: #233350;
+  --sidebar-ring: #3D7BE8;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+  html {
+    scroll-behavior: smooth;
   }
   body {
     @apply bg-canvas text-ink antialiased;
@@ -142,8 +185,26 @@
   }
   /* Focus clavier toujours visible, anneau 2 px dans la couleur primaire (§15.11). */
   :focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
+  }
+
+  /* ── Fluidité générale : boutons, liens et contrôles transitionnent en douceur. */
+  button:not(:disabled),
+  a,
+  [role="button"],
+  summary {
+    transition-property: color, background-color, border-color, outline-color,
+      box-shadow, transform, opacity;
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    transition-duration: 200ms;
+  }
+  input,
+  select,
+  textarea {
+    transition-property: color, background-color, border-color, box-shadow;
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    transition-duration: 180ms;
   }
 }
 
@@ -155,6 +216,29 @@
   .amount {
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.01em;
+  }
+  /* Cartes et surfaces interactives : élévation douce au survol. */
+  .card-hover {
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 260ms cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 260ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+  .card-hover:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 28px -14px rgb(23 43 77 / 0.22);
+  }
+  /* Barre de progression indéterminée (écran de chargement). */
+  .shimmer-bar {
+    background-image: linear-gradient(
+      100deg,
+      #D9E2EC 20%,
+      #008FF5 40%,
+      #00B8B0 55%,
+      #D9E2EC 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
   }
 }
 
@@ -173,8 +257,4 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-}
-
-html {
-  scroll-behavior: smooth;
 }

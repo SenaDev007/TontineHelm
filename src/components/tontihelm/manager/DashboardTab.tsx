@@ -23,7 +23,7 @@ export function DashboardTab() {
   }, []);
 
   if (error) {
-    return <Card className="border-[#EFC7C0]"><CardContent className="p-6 text-sm text-danger">{error}</CardContent></Card>;
+    return <Card className="border-[#F5C6C0]"><CardContent className="p-6 text-sm text-danger">{error}</CardContent></Card>;
   }
   if (!data) {
     return (
@@ -63,25 +63,25 @@ export function DashboardTab() {
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid vertical={false} stroke="#DDE3DC" strokeDasharray="3 3" />
-                  <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#4A5A50" }} axisLine={false} tickLine={false} />
+                  <CartesianGrid vertical={false} stroke="#D9E2EC" strokeDasharray="3 3" />
+                  <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#64748B" }} axisLine={false} tickLine={false} />
                   <YAxis
-                    tick={{ fontSize: 12, fill: "#4A5A50" }}
+                    tick={{ fontSize: 12, fill: "#64748B" }}
                     axisLine={false} tickLine={false} width={56}
                     tickFormatter={(v: number) => new Intl.NumberFormat("fr-FR").format(v)}
                   />
                   <Tooltip
                     formatter={(value: number, name: string) => [formatFCFA(value), name === "cash" ? "Espèces" : "Mobile money"]}
-                    contentStyle={{ borderRadius: 8, border: "1px solid #DDE3DC", fontSize: 13 }}
+                    contentStyle={{ borderRadius: 8, border: "1px solid #D9E2EC", fontSize: 13 }}
                   />
-                  <Bar dataKey="cash" stackId="a" fill="#0F6B4A" radius={[0, 0, 0, 0]} maxBarSize={40} />
-                  <Bar dataKey="mobile" stackId="a" fill="#C8962E" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  <Bar dataKey="cash" stackId="a" fill="#003887" radius={[0, 0, 0, 0]} maxBarSize={40} />
+                  <Bar dataKey="mobile" stackId="a" fill="#FFB800" radius={[4, 4, 0, 0]} maxBarSize={40} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
             <div className="mt-2 flex gap-4 text-xs text-subtle">
               <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-primary" aria-hidden /> Espèces</span>
-              <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-accent" aria-hidden /> Mobile money</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-info" aria-hidden /> Mobile money</span>
             </div>
           </CardContent>
         </Card>
@@ -148,7 +148,7 @@ export function DashboardTab() {
                         </TableCell>
                         <TableCell className="text-sm text-subtle">{p.neighborhood}</TableCell>
                         <TableCell className="amount text-right">
-                          <span className="inline-flex items-center justify-center rounded-md bg-[#FBEAE7] px-2 py-0.5 text-sm font-bold text-danger">
+                          <span className="inline-flex items-center justify-center rounded-md bg-[#FDECEA] px-2 py-0.5 text-sm font-bold text-danger">
                             {p.missedDays}
                           </span>
                         </TableCell>

@@ -61,7 +61,7 @@ export function ClosingsTab({ readOnly }: { readOnly: boolean }) {
         )}
         <div className="space-y-3">
           {pending.map((c) => (
-            <Card key={c.id} className={c.gap === 0 ? "border-line" : "border-[#EFC7C0]"}>
+            <Card key={c.id} className={c.gap === 0 ? "border-line" : "border-[#F5C6C0]"}>
               <CardContent className="p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -76,15 +76,15 @@ export function ClosingsTab({ readOnly }: { readOnly: boolean }) {
                   </div>
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  <div className="rounded-lg bg-[#F7F8F5] px-2 py-2">
+                  <div className="rounded-lg bg-[#F4F7FB] px-2 py-2">
                     <p className="text-xs text-subtle">Déclaré</p>
                     <p className="amount text-sm font-semibold text-ink">{formatFCFA(c.declaredCash)}</p>
                   </div>
-                  <div className="rounded-lg bg-[#F7F8F5] px-2 py-2">
+                  <div className="rounded-lg bg-[#F4F7FB] px-2 py-2">
                     <p className="text-xs text-subtle">Attendu</p>
                     <p className="amount text-sm font-semibold text-ink">{formatFCFA(c.expectedCash)}</p>
                   </div>
-                  <div className={`rounded-lg px-2 py-2 ${c.gap === 0 ? "bg-[#E7F3EB]" : "bg-[#FBEAE7]"}`}>
+                  <div className={`rounded-lg px-2 py-2 ${c.gap === 0 ? "bg-[#DFF6F4]" : "bg-[#FDECEA]"}`}>
                     <p className="text-xs text-subtle">Écart</p>
                     <p className={`amount text-sm font-bold ${c.gap === 0 ? "text-success" : "text-danger"}`}>{formatFCFA(c.gap)}</p>
                   </div>
@@ -95,7 +95,7 @@ export function ClosingsTab({ readOnly }: { readOnly: boolean }) {
                       size="sm"
                       onClick={() => act(c.id, "validate")}
                       disabled={busy === c.id}
-                      className="bg-primary text-primary-foreground hover:bg-[#0C5A3E]"
+                      className="bg-primary text-primary-foreground hover:bg-primary-hover"
                     >
                       <ShieldCheck className="h-4 w-4" aria-hidden /> Valider la clôture
                     </Button>
@@ -104,7 +104,7 @@ export function ClosingsTab({ readOnly }: { readOnly: boolean }) {
                       variant="outline"
                       onClick={() => act(c.id, "contest")}
                       disabled={busy === c.id}
-                      className="border-danger text-danger hover:bg-[#FBEAE7] hover:text-danger"
+                      className="border-danger text-danger hover:bg-[#FDECEA] hover:text-danger"
                     >
                       <ShieldAlert className="h-4 w-4" aria-hidden /> Contester
                     </Button>

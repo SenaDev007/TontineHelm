@@ -51,7 +51,7 @@ function ManagerNav({
           onClick={() => { onTab(t.id); onNavigate?.(); }}
           className={cn(
             "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-            tab === t.id ? "bg-primary text-primary-foreground" : "text-subtle hover:bg-[#EDF1EA] hover:text-ink"
+            tab === t.id ? "bg-primary text-primary-foreground" : "text-subtle hover:bg-[#EDF2F7] hover:text-ink"
           )}
           aria-current={tab === t.id ? "page" : undefined}
           title={t.label}
@@ -89,19 +89,19 @@ export function ManagerApp({
       {/* Sidebar bureau / tablette */}
       <aside className="sticky top-0 hidden h-screen w-[72px] flex-col border-r border-line bg-white px-2 py-4 md:flex lg:w-64 lg:px-3">
         <div className="mb-6 flex items-center justify-center lg:justify-start lg:px-2">
-          <span className="hidden lg:inline"><LogoWordmark size={28} /></span>
-          <span className="lg:hidden"><LogoMark size={28} /></span>
+          <span className="hidden lg:inline"><LogoWordmark size={30} /></span>
+          <span className="lg:hidden"><LogoMark size={30} /></span>
         </div>
         <ManagerNav tab={tab} onTab={setTab} />
         <div className="mt-auto space-y-2">
           {readOnly && (
-            <Badge variant="outline" className="hidden w-full justify-center gap-1.5 rounded-md border-[#EFC7C0] bg-[#FBEAE7] px-2 py-1 text-[11px] font-medium text-[#931D12] lg:flex">
+            <Badge variant="outline" className="hidden w-full justify-center gap-1.5 rounded-md border-[#F5C6C0] bg-[#FDECEA] px-2 py-1 text-[11px] font-medium text-[#B3261E] lg:flex">
               <ShieldCheck className="h-3 w-3" aria-hidden /> Lecture seule
             </Badge>
           )}
           <button
             onClick={onLogout}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-subtle transition-colors hover:bg-[#FBEAE7] hover:text-danger"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-subtle transition-colors hover:bg-[#FDECEA] hover:text-danger"
           >
             <LogOut className="h-5 w-5 shrink-0 tontihelm-icon" aria-hidden />
             <span className="hidden lg:inline">Se déconnecter</span>
@@ -121,11 +121,11 @@ export function ManagerApp({
               </SheetTrigger>
               <SheetContent side="left" className="w-72 bg-white p-0">
                 <div className="border-b border-line p-4">
-                  <SheetTitle className="text-left"><LogoWordmark size={26} /></SheetTitle>
+                  <SheetTitle className="text-left"><LogoWordmark size={30} /></SheetTitle>
                 </div>
                 <div className="p-3"><ManagerNav tab={tab} onTab={setTab} onNavigate={() => setMenuOpen(false)} /></div>
                 <div className="mt-auto border-t border-line p-3">
-                  <Button variant="outline" onClick={onLogout} className="w-full border-line text-danger hover:bg-[#FBEAE7] hover:text-danger">
+                  <Button variant="outline" onClick={onLogout} className="w-full border-line text-danger hover:bg-[#FDECEA] hover:text-danger">
                     <LogOut className="h-4 w-4" aria-hidden /> Se déconnecter
                   </Button>
                 </div>
@@ -135,14 +135,14 @@ export function ManagerApp({
               <p className="truncate text-sm font-semibold text-ink">{TABS.find((t) => t.id === tab)?.label}</p>
               <p className="truncate text-xs text-subtle">{user.structureName}</p>
             </div>
-            <LogoMark size={26} />
+            <LogoMark size={30} />
           </div>
         </header>
 
         {/* Bandeau lecture seule (§13.4) */}
         {readOnlyBanner && (
-          <div className="border-b border-[#EFC7C0] bg-[#FBEAE7] px-4 py-2.5 md:px-6 lg:px-8" role="alert">
-            <p className="mx-auto max-w-6xl text-sm font-medium text-[#931D12]">{readOnlyBanner}</p>
+          <div className="border-b border-[#F5C6C0] bg-[#FDECEA] px-4 py-2.5 md:px-6 lg:px-8" role="alert">
+            <p className="mx-auto max-w-6xl text-sm font-medium text-[#B3261E]">{readOnlyBanner}</p>
           </div>
         )}
 
@@ -158,7 +158,7 @@ export function ManagerApp({
             {subscription && (
               <Badge variant="outline" className={cn(
                 "rounded-md px-3 py-1 text-xs font-medium",
-                subscription.status === "active" ? "border-[#C4E0CE] bg-[#E7F3EB] text-[#116635]" : "border-[#EFC7C0] bg-[#FBEAE7] text-[#931D12]"
+                subscription.status === "active" ? "border-[#B5E8E5] bg-[#DFF6F4] text-[#00806B]" : "border-[#F5C6C0] bg-[#FDECEA] text-[#B3261E]"
               )}>
                 {subscription.plan === "pro" ? "Palier Pro" : subscription.plan === "demarrage" ? "Palier Démarrage" : subscription.plan === "institution" ? "Palier Institution" : subscription.plan}
               </Badge>

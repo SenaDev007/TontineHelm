@@ -26,15 +26,15 @@ export function CollectionRow({
       className={cn(
         "flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors",
         done
-          ? "border-[#C4E0CE] bg-[#F4FAF6]"
-          : "border-line bg-surface hover:border-primary/40 hover:bg-[#F7FAF8]"
+          ? "border-[#B5E8E5] bg-[#E9FAF9]"
+          : "border-line bg-surface hover:border-primary/40 hover:bg-[#F0F5FC]"
       )}
       aria-label={`Carnet ${stop.passbookNumber}, ${stop.contributorName}, ${done ? "encaissé" : "à encaisser"}`}
     >
       <span
         className={cn(
           "amount font-display flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sm font-bold",
-          done ? "bg-success text-white" : "bg-[#EDF1EA] text-ink"
+          done ? "bg-success text-white" : "bg-[#EDF2F7] text-ink"
         )}
         aria-hidden
       >
@@ -55,7 +55,7 @@ export function CollectionRow({
           <span>Jour {stop.dayIndex}/{stop.cycleDays}</span>
           <span>Solde {formatFCFA(stop.balance)}</span>
           {pendingLocal > 0 && (
-            <span className="font-medium text-[#8F4106]">{pendingLocal} en attente</span>
+            <span className="font-medium text-[#A66A00]">{pendingLocal} en attente</span>
           )}
         </div>
         <div className="mt-1.5">

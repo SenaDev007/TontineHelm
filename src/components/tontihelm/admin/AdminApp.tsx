@@ -57,8 +57,8 @@ export function AdminApp({ onLogout }: { onLogout: () => void }) {
       <header className="sticky top-0 z-30 border-b border-line bg-white">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 md:px-6">
           <div className="flex items-center gap-3">
-            <LogoWordmark size={28} />
-            <Badge variant="outline" className="rounded-md border-line bg-[#F7F8F5] px-2 py-0.5 text-xs font-medium text-subtle">
+            <LogoWordmark size={30} />
+            <Badge variant="outline" className="rounded-md border-line bg-[#F4F7FB] px-2 py-0.5 text-xs font-medium text-subtle">
               Administration YEHI OR Tech
             </Badge>
           </div>
@@ -101,7 +101,7 @@ export function AdminApp({ onLogout }: { onLogout: () => void }) {
                     <StatusBadge label="En attente" tone="warning" />
                   </div>
 
-                  <div className="mt-4 grid gap-3 rounded-lg border border-line bg-[#F7F8F5] p-4 sm:grid-cols-2">
+                  <div className="mt-4 grid gap-3 rounded-lg border border-line bg-[#F4F7FB] p-4 sm:grid-cols-2">
                     <div>
                       <p className="text-xs font-medium uppercase tracking-wide text-subtle">Référence de l'agrément</p>
                       <p className="mt-1 text-sm font-medium text-ink">{s.licenseRef}</p>
@@ -122,7 +122,7 @@ export function AdminApp({ onLogout }: { onLogout: () => void }) {
                     <Button
                       onClick={() => act(s.id, "approve")}
                       disabled={busy === s.id}
-                      className="bg-primary text-primary-foreground hover:bg-[#0C5A3E]"
+                      className="bg-primary text-primary-foreground hover:bg-primary-hover"
                     >
                       <ShieldCheck className="h-4 w-4" aria-hidden /> Valider et activer l'essai
                     </Button>
@@ -130,7 +130,7 @@ export function AdminApp({ onLogout }: { onLogout: () => void }) {
                       variant="outline"
                       onClick={() => setRefuseTarget(s)}
                       disabled={busy === s.id}
-                      className="border-danger text-danger hover:bg-[#FBEAE7] hover:text-danger"
+                      className="border-danger text-danger hover:bg-[#FDECEA] hover:text-danger"
                     >
                       <ShieldAlert className="h-4 w-4" aria-hidden /> Refuser
                     </Button>
@@ -174,12 +174,12 @@ export function AdminApp({ onLogout }: { onLogout: () => void }) {
                   </div>
                   <div className="flex gap-2">
                     {s.status === "active" && (
-                      <Button variant="outline" size="sm" disabled={busy === s.id} onClick={() => act(s.id, "suspend", "Suspension administrative")} className="border-line text-danger hover:bg-[#FBEAE7] hover:text-danger">
+                      <Button variant="outline" size="sm" disabled={busy === s.id} onClick={() => act(s.id, "suspend", "Suspension administrative")} className="border-line text-danger hover:bg-[#FDECEA] hover:text-danger">
                         Suspendre
                       </Button>
                     )}
                     {s.status === "suspended" && (
-                      <Button variant="outline" size="sm" disabled={busy === s.id} onClick={() => act(s.id, "reactivate")} className="border-line text-primary hover:bg-[#EDF3EE] hover:text-primary">
+                      <Button variant="outline" size="sm" disabled={busy === s.id} onClick={() => act(s.id, "reactivate")} className="border-line text-primary hover:bg-[#E8F1FD] hover:text-primary">
                         Réactiver
                       </Button>
                     )}
@@ -218,7 +218,7 @@ export function AdminApp({ onLogout }: { onLogout: () => void }) {
               variant="destructive"
               onClick={() => refuseTarget && act(refuseTarget.id, "refuse", note)}
               disabled={busy !== null || note.trim().length < 3}
-              className="bg-danger hover:bg-[#931D12]"
+              className="bg-danger hover:bg-[#B3261E]"
             >
               Refuser la demande
             </Button>

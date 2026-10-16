@@ -32,7 +32,7 @@ export function AccountScreen({
       <Card className="border-line">
         <CardContent className="p-4">
           <div className="flex items-center gap-3">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#EDF3EE] text-primary">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#E8F1FD] text-primary">
               <UserCircle2 className="h-6 w-6 tontihelm-icon" aria-hidden />
             </span>
             <div>
@@ -69,7 +69,7 @@ export function AccountScreen({
           <CardTitle className="font-display text-base font-bold">Synchronisation</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between rounded-lg bg-[#F7F8F5] px-3 py-2.5 text-sm">
+          <div className="flex items-center justify-between rounded-lg bg-[#F4F7FB] px-3 py-2.5 text-sm">
             <span className="text-subtle">Encaissements en attente d'envoi</span>
             <span className="amount font-semibold text-ink">{outbox.length}</span>
           </div>
@@ -88,7 +88,7 @@ export function AccountScreen({
             variant="outline"
             onClick={onFlush}
             disabled={outbox.length === 0 || simOffline}
-            className="w-full border-primary text-primary hover:bg-[#EDF3EE] hover:text-primary"
+            className="w-full border-primary text-primary hover:bg-[#E8F1FD] hover:text-primary"
           >
             <RefreshCw className="h-4 w-4" aria-hidden /> Envoyer maintenant
           </Button>
@@ -132,7 +132,7 @@ export function AccountScreen({
         </Card>
       )}
 
-      <Button variant="outline" onClick={onLogout} className="w-full border-line text-danger hover:bg-[#FBEAE7] hover:text-danger">
+      <Button variant="outline" onClick={onLogout} className="w-full border-line text-danger hover:bg-[#FDECEA] hover:text-danger">
         <LogOut className="h-4 w-4" aria-hidden /> Se déconnecter
       </Button>
     </div>

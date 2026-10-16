@@ -144,7 +144,7 @@ export function CollectionsTab({ readOnly }: { readOnly: boolean }) {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-9 w-9 text-subtle hover:bg-[#FBEAE7] hover:text-danger"
+                              className="h-9 w-9 text-subtle hover:bg-[#FDECEA] hover:text-danger"
                               onClick={() => setReversalTarget({ id: c.id, contributor: c.contributor, amount: c.amount })}
                               aria-label={`Annuler l'encaissement de ${c.contributor}`}
                             >
@@ -193,7 +193,7 @@ export function CollectionsTab({ readOnly }: { readOnly: boolean }) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setReversalTarget(null)} className="border-line">Fermer</Button>
-            <Button onClick={reverse} disabled={submitting || reason.trim().length < 3} className="bg-danger text-white hover:bg-[#931D12]">
+            <Button onClick={reverse} disabled={submitting || reason.trim().length < 3} className="bg-danger text-white hover:bg-[#B3261E]">
               {submitting ? "Annulation…" : "Créer l'annulation"}
             </Button>
           </DialogFooter>

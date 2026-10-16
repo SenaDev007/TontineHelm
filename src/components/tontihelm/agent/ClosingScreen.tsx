@@ -97,7 +97,7 @@ export function ClosingScreen({
       </Card>
 
       {closing && closing.status !== "open" ? (
-        <Card className={closing.gap === 0 ? "border-[#C4E0CE]" : closing.gap < 0 ? "border-[#EFC7C0]" : "border-[#C5D8ED]"}>
+        <Card className={closing.gap === 0 ? "border-[#B5E8E5]" : closing.gap < 0 ? "border-[#F5C6C0]" : "border-[#C5D8ED]"}>
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-ink">Déclaration transmise</p>
@@ -111,7 +111,7 @@ export function ClosingScreen({
               <span className="text-subtle">Écart constaté</span>
               <span className="amount font-semibold text-danger">{formatFCFA(closing.gap)}</span>
             </div>
-            <p className="flex items-start gap-2 rounded-lg bg-[#F7F8F5] p-3 text-xs leading-relaxed text-subtle">
+            <p className="flex items-start gap-2 rounded-lg bg-[#F4F7FB] p-3 text-xs leading-relaxed text-subtle">
               {closing.status === "validated" ? (
                 <>
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
@@ -142,7 +142,7 @@ export function ClosingScreen({
               />
             </div>
             {declared !== "" && (
-              <div id="gap-hint" className="flex items-center justify-between rounded-lg bg-[#F7F8F5] px-3 py-2.5" role="status" aria-live="polite">
+              <div id="gap-hint" className="flex items-center justify-between rounded-lg bg-[#F4F7FB] px-3 py-2.5" role="status" aria-live="polite">
                 <span className="text-sm text-subtle">Écart calculé</span>
                 <span className={`amount text-base font-bold ${gapNow === 0 ? "text-success" : "text-danger"}`}>
                   {gapNow === 0 ? "Aucun écart" : formatFCFA(gapNow)}
@@ -158,7 +158,7 @@ export function ClosingScreen({
             <Button
               onClick={declare}
               disabled={declared === "" || submitting || !online}
-              className="h-13 w-full bg-primary py-3.5 text-base font-semibold text-primary-foreground hover:bg-[#0C5A3E]"
+              className="h-13 w-full bg-primary py-3.5 text-base font-semibold text-primary-foreground hover:bg-primary-hover"
             >
               <Lock className="h-4 w-4" aria-hidden />
               {submitting ? "Déclaration…" : "Déclarer ma caisse du jour"}

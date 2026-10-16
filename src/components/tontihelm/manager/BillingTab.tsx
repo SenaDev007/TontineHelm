@@ -51,25 +51,25 @@ export function BillingTab({ user }: { user: SessionUser }) {
                   </p>
                 </div>
                 {isOwner && (
-                  <Button className="bg-primary text-primary-foreground hover:bg-[#0C5A3E]" onClick={() => toast({ title: "Paiement mobile money", description: "Le règlement par FedaPay s'activera en production." })}>
+                  <Button className="bg-primary text-primary-foreground hover:bg-primary-hover" onClick={() => toast({ title: "Paiement mobile money", description: "Le règlement par FedaPay s'activera en production." })}>
                     <Smartphone className="h-4 w-4" aria-hidden /> Payer par mobile money
                   </Button>
                 )}
               </div>
               {sub.status === "trial" && sub.trialEndsAt && (
-                <p className="mt-3 flex items-center gap-2 rounded-lg bg-[#E8F0F9] px-3 py-2 text-sm text-[#16497F]">
+                <p className="mt-3 flex items-center gap-2 rounded-lg bg-[#E8F1FD] px-3 py-2 text-sm text-[#0B6BCB]">
                   <Clock className="h-4 w-4" aria-hidden />
                   Fin de l'essai le {new Date(sub.trialEndsAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}.
                 </p>
               )}
               {sub.status === "past_due" && (
-                <p className="mt-3 rounded-lg bg-[#FBF0E3] px-3 py-2 text-sm text-[#8F4106]">
+                <p className="mt-3 rounded-lg bg-[#FFF4D6] px-3 py-2 text-sm text-[#A66A00]">
                   Ton abonnement est impayé. Dans 15 jours, ton compte passe en lecture seule. Tes données
                   restent intactes.
                 </p>
               )}
               {sub.status === "read_only" && (
-                <p className="mt-3 rounded-lg bg-[#FBEAE7] px-3 py-2 text-sm text-[#931D12]">
+                <p className="mt-3 rounded-lg bg-[#FDECEA] px-3 py-2 text-sm text-[#B3261E]">
                   Compte en lecture seule. Règle ton abonnement pour reprendre les encaissements.
                 </p>
               )}
@@ -162,12 +162,12 @@ export function BillingTab({ user }: { user: SessionUser }) {
                   <TableCell className="amount text-sm font-semibold text-ink">{formatFCFA(inv.total)}</TableCell>
                   <TableCell>
                     {inv.status === "paid" ? (
-                      <Badge variant="outline" className="gap-1.5 rounded-md border-[#C4E0CE] bg-[#E7F3EB] px-2 py-0.5 text-xs font-medium text-[#116635]">
+                      <Badge variant="outline" className="gap-1.5 rounded-md border-[#B5E8E5] bg-[#DFF6F4] px-2 py-0.5 text-xs font-medium text-[#00806B]">
                         <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
                         Payée {inv.paidAt ? new Date(inv.paidAt).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : ""}
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="gap-1.5 rounded-md border-[#EDD3B5] bg-[#FBF0E3] px-2 py-0.5 text-xs font-medium text-[#8F4106]">
+                      <Badge variant="outline" className="gap-1.5 rounded-md border-[#F0D48A] bg-[#FFF4D6] px-2 py-0.5 text-xs font-medium text-[#A66A00]">
                         <Clock className="h-3.5 w-3.5" aria-hidden /> À régler
                       </Badge>
                     )}

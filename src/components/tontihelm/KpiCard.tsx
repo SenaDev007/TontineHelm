@@ -34,7 +34,7 @@ export function KpiCard({
     );
   }
   return (
-    <Card className={cn("border-line", emphasis && "border-primary/40 bg-[#F2F7F4]")}>
+    <Card className={cn("animate-fade-in-up border-line card-hover", emphasis && "border-primary/40 bg-[#EEF4FD]")}>
       <CardContent className="p-4">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm text-subtle">{label}</p>

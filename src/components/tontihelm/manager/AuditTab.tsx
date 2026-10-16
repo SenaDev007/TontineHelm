@@ -54,7 +54,7 @@ export function AuditTab() {
   return (
     <div className="space-y-4">
       {/* Intégrité de la chaîne */}
-      <Card className={data.chainOk ? "border-[#C4E0CE] bg-[#F4FAF6]" : "border-[#EFC7C0] bg-[#FBEAE7]"}>
+      <Card className={data.chainOk ? "border-[#B5E8E5] bg-[#E9FAF9]" : "border-[#F5C6C0] bg-[#FDECEA]"}>
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div className="flex items-center gap-3">
             {data.chainOk ? (
