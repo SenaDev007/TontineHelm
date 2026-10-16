@@ -1,6 +1,7 @@
 // TontiHelm — API de gestion de tontines journalières (YEHI OR Tech, Bénin).
 // Backend Express autonome : déploiement Railway, base PostgreSQL (Neon),
 // frontend Next.js déployé séparément sur Vercel.
+const BUILD = "boot-v3 (double port + anti-crash)";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -90,8 +91,44 @@ app.use((_req, res) => {
 
 app.use(apiErrorHandler);
 
-app.listen(PORT, () => {
-  console.log(`[tontihelm-api] à l'écoute sur le port ${PORT}`);
+// ── Garde-fous de processus : ce process NE DOIT JAMAIS mourir. ──
+// En production, un conteneur mort = 502 « Application failed to respond »
+// sur tout le frontend (« Pas de réseau »). Toute erreur non interceptée est
+// journalisée ; le process continue de servir les requêtes suivantes.
+process.on("uncaughtException", (err) => {
+  console.error("[tontihelm-api] uncaughtException — process maintenu en vie :", err);
 });
+process.on("unhandledRejection", (err) => {
+  console.error("[tontihelm-api] unhandledRejection — process maintenu en vie :", err);
+});
+
+// ── Écoute réseau : double port pour éliminer tout décalage de routage. ──
+// Railway route le domaine vers le port applicatif ; selon le mode de build,
+// ce peut être le PORT injecté OU le port EXPOSE du Dockerfile (3001).
+// On écoute sur les DEUX : coût nul, et le 502 « fallback » devient
+// impossible quelle que soit la configuration de routage de la plateforme.
+console.log(
+  `[tontihelm-api] ${BUILD} | démarrage` +
+    ` | PORT env=${process.env.PORT ?? "absent"}` +
+    ` | déploiement=${process.env.RAILWAY_DEPLOYMENT_ID ?? "hors Railway"}` +
+    ` | DATABASE_URL=${process.env.DATABASE_URL ? "définie" : "ABSENTE"}` +
+    ` | CORS=${corsOrigins.join(",") || "*"}`,
+);
+const ports = [...new Set([PORT, 3001])].filter((p) => p > 0);
+for (const p of ports) {
+  try {
+    const server = app.listen(p, () => {
+      console.log(
+        `[tontihelm-api] à l'écoute sur le port ${p}` +
+          (p === PORT ? " (PORT injecté)" : " (port par défaut Dockerfile)"),
+      );
+    });
+    server.on("error", (err) => {
+      console.error(`[tontihelm-api] port ${p} indisponible (ignoré) :`, err instanceof Error ? err.message : err);
+    });
+  } catch (err) {
+    console.error(`[tontihelm-api] port ${p} indisponible (ignoré) :`, err instanceof Error ? err.message : err);
+  }
+}
 
 export default app;

@@ -37,4 +37,4 @@ EXPOSE 3001
 #    idempotent également ; ignoré si les variables ne sont pas définies.
 # 3. L'API démarre enfin (exec : le process Express devient PID principal,
 #    les signaux Railway — arrêt/redéploiement — lui parviennent directement).
-CMD ["sh", "-c", "bunx prisma db push --skip-generate || echo '[startup] prisma db push a échoué (vérifie DATABASE_URL) — le service démarre quand même'; bun src/scripts/bootstrap-admin.ts || echo '[startup] admin non amorcé (ADMIN_PHONE / ADMIN_PIN absents ou invalides)'; exec bun src/index.ts"]
+CMD ["sh", "-c", "timeout 90 bunx prisma db push --skip-generate || echo '[startup] prisma db push a échoué (vérifie DATABASE_URL) — le service démarre quand même'; timeout 30 bun src/scripts/bootstrap-admin.ts || echo '[startup] admin non amorcé (ADMIN_PHONE / ADMIN_PIN absents ou invalides)'; exec bun src/index.ts"]
