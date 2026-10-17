@@ -1,17 +1,74 @@
 // TontiHelm — routes agent : tournée du jour, synchronisation des encaissements,
 // déclaration de caisse, clients du portefeuille (création sur le terrain + lien
-// de carnet partagé par WhatsApp / e-mail), carnet détaillé d'un arrêt de tournée.
+// de carnet partagé par WhatsApp / e-mail), carnets multiples par client.
+// Le carnet est un LIVRET ANNUEL : 12 feuilles mensuelles (31 lignes chacune,
+// la 31e = mise de l'entreprise) + 13e feuille de récapitulatif. Les écritures
+// remplissent les lignes séquentiellement — l'avance couvre des lignes à venir.
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../lib/db";
-import { requireUser, requireRole, requireTenant, errorResponse, ApiError, h } from "../lib/auth";
+import { requireUser, requireRole, requireTenant, ApiError, h } from "../lib/auth";
 import { appendAudit } from "../lib/audit";
-import { assertWritable, getSubscription } from "../lib/tenant";
+import { assertWritable } from "../lib/tenant";
 import { planOf } from "../lib/plans";
-import { passbookBalance, paidDays, missedDays, elapsedDays, isLate, closingGap, formatFCFA, buildDayLedger } from "../lib/domain";
-import { ensureShareToken, carnetUrl } from "../lib/share";
+import { passbookBalance, paidDays, closingGap, formatFCFA } from "../lib/domain";
+import {
+  LIVRET_DAYS, LIVRET_MONTHS, buildLivret, linePosition, monthStart, serializeLivret,
+} from "../lib/livret";
+import { ensureShareToken, ensureStructureSlug, carnetUrl, entityUrl } from "../lib/share";
+import { autoScale } from "../lib/autoscale";
 
 const router = Router();
+
+/** Fenêtre de lignes encaissables envoyée à l'écran d'encaissement (dues + avance). */
+function payableWindow(livret: ReturnType<typeof buildLivret>, count = 40) {
+  const out: { line: number; sheet: number; lineInSheet: number; company: boolean; label: string }[] = [];
+  const start = Math.min(livret.lineDue, LIVRET_DAYS);
+  for (let line = start; line < start + count && line <= LIVRET_DAYS; line += 1) {
+    const pos = linePosition(line);
+    const sheet = livret.sheets[pos.sheet - 1];
+    out.push({
+      line,
+      sheet: pos.sheet,
+      lineInSheet: pos.lineInSheet,
+      company: pos.company,
+      label: pos.company ? `Mise entreprise — ${sheet?.shortLabel ?? ""}` : `Ligne ${pos.lineInSheet}`,
+    });
+  }
+  return out;
+}
+
+/** Sérialisation « arrêt de tournée » d'un carnet (livret annuel). */
+function livretStop(pb: { id: string; number: string; label: string | null; dailyAmount: number; startsOn: Date; status: string }, collections: { amount: number }[], lateThreshold: number) {
+  const balance = passbookBalance(collections);
+  const livret = buildLivret(pb, balance);
+  const current = livret.sheets[livret.currentSheet - 1];
+  const duePos = linePosition(Math.min(livret.lineDue, LIVRET_DAYS));
+  const late = pb.status === "active" && livret.missedLines >= lateThreshold;
+  return {
+    passbookId: pb.id,
+    passbookNumber: pb.number,
+    passbookLabel: pb.label,
+    dailyAmount: pb.dailyAmount,
+    livret: {
+      ...serializeLivret(livret),
+      payable: payableWindow(livret),
+      sheet: {
+        index: current.index,
+        label: current.label,
+        attendu: current.attendu,
+        encaisse: current.encaisse,
+        avance: current.avance,
+        reste: current.reste,
+        coveredLines: current.coveredLines,
+      },
+      dueLineInSheet: duePos.lineInSheet,
+    },
+    balance,
+    status: late ? "late" : pb.status,
+    statusLabel: late ? "En retard" : pb.status === "active" ? "À jour" : pb.status === "closing" ? "Remise en cours" : pb.status === "completed" ? "Terminé" : "Clos",
+  };
+}
 
 // ── GET /api/agent/tour — tournée du jour (§14.7 snapshot local). ──
 router.get(
@@ -36,43 +93,16 @@ router.get(
 
     const stops = passbooks
       .map((pb) => {
-        const balance = passbookBalance(pb.collections);
-        const elapsed = Math.min(elapsedDays(pb, new Date()), pb.cycleDays);
-        const paid = paidDays(balance, pb.dailyAmount);
-        const missed = missedDays(pb, balance);
+        const stop = livretStop(pb, pb.collections, structure?.lateThreshold ?? 3);
         const todayCollections = pb.collections.filter(
           (c) => c.amount > 0 && c.collectedAt >= todayStart && c.collectedAt < todayEnd
-        );
-        const late = isLate(pb, balance, structure?.lateThreshold ?? 3);
-        // Registre des journées du cycle (multi-jours) : le sélecteur de
-        // journées de l'écran d'encaissement s'appuie dessus.
-        const ledger = buildDayLedger(
-          pb,
-          pb.collections.map((c) => ({
-            id: c.id,
-            amount: c.amount,
-            coversOn: c.coversOn,
-            collectedAt: c.collectedAt,
-            reversesId: c.reversesId,
-          }))
         );
         return {
           contributorId: pb.contributorId,
           contributorName: pb.contributor.fullName,
           phone: pb.contributor.phone,
           neighborhood: pb.contributor.neighborhood ?? "",
-          passbookId: pb.id,
-          passbookNumber: pb.number,
-          dailyAmount: pb.dailyAmount,
-          cycleDays: pb.cycleDays,
-          startsOn: pb.startsOn,
-          days: ledger.map((d) => ({ date: d.date.toISOString().slice(0, 10), net: d.net })),
-          dayIndex: Math.max(1, Math.min(elapsed + (paid > elapsed ? 1 : 0), pb.cycleDays)),
-          paidDays: paid,
-          missedDays: missed,
-          balance,
-          status: late ? "late" : pb.status,
-          statusLabel: late ? "En retard" : pb.status === "active" ? "À jour" : "Clos",
+          ...stop,
           collectedToday: todayCollections.length
             ? {
                 count: todayCollections.length,
@@ -127,8 +157,9 @@ router.get(
 );
 
 // ── POST /api/agent/sync — envoi d'un lot d'encaissements, réponse idempotente (§14.7). ──
-// Chaque événement peut couvrir une journée précise du cycle (coversOn, multi-jours) :
-// aujourd'hui, demain, après-demain… sans limite autre que les bornes du cycle.
+// Chaque écriture couvre la prochaine ligne du livret (remplissage séquentiel,
+// comme le marquage du carnet papier) ; le montant peut couvrir plusieurs lignes
+// d'un coup (avance). Les anciens événements datés (coversOn) restent admis.
 const eventSchema = z.object({
   id: z.string().uuid("Identifiant d'événement invalide."),
   passbookId: z.string().min(1),
@@ -191,44 +222,46 @@ router.post(
         acks.push({ id: ev.id, status: "duplicate", collectionId: ev.id });
         continue;
       }
-      // Journée couverte : elle doit tomber dans le cycle réel du carnet.
+      if (passbook.status !== "active" && passbook.status !== "late") {
+        throw new ApiError(
+          "bad_state",
+          passbook.status === "closing" || passbook.status === "completed"
+            ? "Ce carnet est clôturé (remise en cours ou déjà signé) : plus aucun encaissement."
+            : "Ce carnet n'est plus actif.",
+          409
+        );
+      }
+      // Journée couverte (legacy) : elle doit tomber dans les 12 mois du livret.
       let coversOn: Date | null = null;
-      let coversIdx = -1;
       if (ev.coversOn) {
         coversOn = new Date(`${ev.coversOn}T00:00:00.000Z`);
         if (Number.isNaN(coversOn.getTime())) {
           throw new ApiError("invalid_input", "Journée couverte invalide.");
         }
-        const startMs = Date.UTC(
-          passbook.startsOn.getUTCFullYear(),
-          passbook.startsOn.getUTCMonth(),
-          passbook.startsOn.getUTCDate()
-        );
-        coversIdx = Math.round((coversOn.getTime() - startMs) / (24 * 60 * 60 * 1000));
-        if (coversIdx < 0 || coversIdx >= passbook.cycleDays) {
+        const livretStart = monthStart(passbook.startsOn);
+        const livretEnd = new Date(livretStart);
+        livretEnd.setUTCMonth(livretEnd.getUTCMonth() + LIVRET_MONTHS);
+        if (coversOn < livretStart || coversOn >= livretEnd) {
           throw new ApiError(
             "day_out_of_cycle",
-            "Cette journée est hors du cycle du carnet.",
+            "Cette journée est hors du livret annuel (12 feuilles mensuelles).",
             422
           );
         }
       }
-      // Règle métier 2 : un encaissement ne dépasse jamais le montant restant du cycle,
-      // sauf paiement d'avance explicitement marqué.
-      const cycleTotal = passbook.dailyAmount * passbook.cycleDays;
+      // Règle métier 2 : un encaissement ne dépasse jamais le montant restant du
+      // livret (372 lignes), sauf avance explicite pour laisser le surplus en dépôt.
+      const cycleTotal = passbook.dailyAmount * LIVRET_DAYS;
       const balance = passbookBalance(passbook.collections);
       if (!ev.advance && ev.amount > cycleTotal - balance) {
         throw new ApiError(
           "amount_exceeds",
-          "Encaissement supérieur au montant restant du cycle. Marque-le comme paiement d'avance ou corrige le montant.",
+          "Encaissement supérieur au montant restant du livret. Marque-le comme paiement d'avance ou corrige le montant.",
           422
         );
       }
-      // Jour du cycle : celui de la journée couverte si elle est explicite,
-      // sinon la position cumulative habituelle.
-      const dayIndex = coversIdx >= 0
-        ? coversIdx + 1
-        : Math.min(paidDays(balance + ev.amount, passbook.dailyAmount), passbook.cycleDays);
+      // Ligne du livret : position séquentielle après pose de l'écriture.
+      const dayIndex = Math.min(paidDays(balance + ev.amount, passbook.dailyAmount), LIVRET_DAYS);
       const collectedAt = new Date(ev.collectedAt);
 
       await db.collection.create({
@@ -258,7 +291,7 @@ router.post(
           contributor: passbook.contributor.fullName,
           amount: ev.amount,
           method: ev.method,
-          dayIndex,
+          line: dayIndex,
           coversOn: ev.coversOn ?? null,
           advance: ev.advance,
           source: "sync",
@@ -276,7 +309,9 @@ router.post(
   })
 );
 
-// ── GET /api/agent/clients — portefeuille clients de l'agent (avec lien de carnet). ──
+// ── GET /api/agent/clients — portefeuille clients de l'agent, avec TOUS leurs carnets. ──
+// Un client peut prendre plusieurs livrets (chacun avec son surnom) : ils sont
+// regroupés sous ce client — on clique le client, puis le carnet à encaisser.
 router.get(
   "/clients",
   h(async (req, res) => {
@@ -284,20 +319,37 @@ router.get(
     requireRole(user, ["agent"]);
     const tenantId = requireTenant(user);
 
-    const contributors = await db.contributor.findMany({
-      where: { agentId: user.id },
-      orderBy: { createdAt: "desc" },
-      include: {
-        passbooks: {
-          where: { status: { in: ["active", "late"] } },
-          include: { collections: true },
+    const [structure, contributors] = await Promise.all([
+      db.structure.findUnique({ where: { id: tenantId }, select: { id: true, name: true, lateThreshold: true } }),
+      db.contributor.findMany({
+        where: { agentId: user.id },
+        orderBy: { createdAt: "desc" },
+        include: {
+          passbooks: {
+            where: { status: { in: ["active", "late", "closing", "completed", "closed"] } },
+            include: { collections: true },
+            orderBy: { createdAt: "asc" },
+          },
         },
-      },
-    });
+      }),
+    ]);
+    const slug = await ensureStructureSlug(tenantId);
+    const lateThreshold = structure?.lateThreshold ?? 3;
 
     const clients = contributors.map((c) => {
-      const pb = c.passbooks[0] ?? null;
-      const balance = pb ? passbookBalance(pb.collections) : 0;
+      const carnets = c.passbooks.map((pb) => {
+        const stop = livretStop(pb, pb.collections, lateThreshold);
+        return {
+          id: pb.id,
+          number: pb.number,
+          label: pb.label,
+          status: stop.status,
+          statusLabel: stop.statusLabel,
+          dailyAmount: pb.dailyAmount,
+          balance: stop.balance,
+          livret: stop.livret,
+        };
+      });
       return {
         id: c.id,
         fullName: c.fullName,
@@ -305,28 +357,21 @@ router.get(
         email: c.email,
         neighborhood: c.neighborhood,
         shareToken: c.shareToken,
-        shareUrl: c.shareToken ? carnetUrl(c.shareToken) : null,
+        shareUrl: c.shareToken ? carnetUrl(slug, c.shareToken) : null,
         status: c.status,
-        passbook: pb
-          ? {
-              id: pb.id,
-              number: pb.number,
-              dailyAmount: pb.dailyAmount,
-              cycleDays: pb.cycleDays,
-              balance,
-              paidDays: paidDays(balance, pb.dailyAmount),
-            }
-          : null,
+        carnets,
       };
     });
 
-    res.json({ clients });
+    res.json({ clients, entity: { name: structure?.name ?? "", url: entityUrl(slug) } });
   })
 );
 
-// ── POST /api/agent/clients — nouveau client + premier carnet, en une fois (fluide). ──
-// Sur le terrain, l'agent enregistre le client et sa tontine ; le lien personnel
-// du carnet est généré immédiatement pour être partagé par WhatsApp ou e-mail.
+// ── POST /api/agent/clients — nouveau client + premier livret, en une fois (fluide). ──
+// Sur le terrain, l'agent enregistre le client et sa tontine : la mise journalière
+// suffit — le livret annuel démarre AUTOMATIQUEMENT au mois en cours (12 feuilles
+// mensuelles + récap). Le surnom du carnet est facultatif. Le lien personnel est
+// généré immédiatement, prêt à partager par WhatsApp ou e-mail.
 const createClientSchema = z.object({
   fullName: z.string().min(2, "Saisis le nom complet du client."),
   phone: z.string().regex(/^\+?\d{8,15}$/, "Numéro invalide. Saisis le numéro complet, sans espace."),
@@ -334,8 +379,7 @@ const createClientSchema = z.object({
   neighborhood: z.string().min(2, "Saisis le quartier."),
   idNumber: z.string().min(3, "Saisis le numéro de pièce d'identité.").optional().or(z.literal("")),
   dailyAmount: z.number().int().min(100, "La mise journalière minimum est de 100 FCFA."),
-  cycleDays: z.number().int().min(1, "Durée du cycle invalide.").max(366, "Durée du cycle invalide."),
-  startsOn: z.string().min(8, "Date de début invalide."),
+  label: z.string().max(60, "Le surnom du carnet est trop long.").optional().or(z.literal("")),
 });
 
 router.post(
@@ -352,22 +396,23 @@ router.post(
       throw new ApiError("invalid_input", issue);
     }
 
-    // Quota de cotisants du palier courant.
-    const sub = await getSubscription(tenantId);
-    const plan = planOf(sub?.plan);
-    const contributorsCount = await db.contributor.count({ where: { tenantId, status: "active" } });
+    // ── Montée en charge automatique : la création projette +1 cotisant ; si le
+    // palier courant ne suffit plus, le système scale tout seul (alerte aux
+    // dirigeants) et la création continue sans interruption. ──
+    const scale = await autoScale(tenantId, { extraContributors: 1, actorId: user.id });
+    const contributorsCount = scale.snapshot.contributors;
+    const plan = planOf(scale.snapshot.plan);
     if (contributorsCount >= plan.contributors) {
       throw new ApiError(
         "contributor_quota_reached",
-        `Le palier ${plan.label} inclut ${plan.contributors} cotisants. Passe au palier supérieur pour enregistrer d'autres clients.`,
+        `Le palier ${plan.label} inclut ${plan.contributors} cotisants et tu les as tous atteints : ` +
+          `c'est le palier maximum. Contacte le support TontiHelm pour un accompagnement sur mesure.`,
         403
       );
     }
 
-    const startsOn = new Date(`${body.data.startsOn}T00:00:00.000Z`);
-    if (Number.isNaN(startsOn.getTime())) {
-      throw new ApiError("invalid_input", "Date de début invalide.");
-    }
+    // Livret annuel : démarre au mois en cours, détecté automatiquement.
+    const startsOn = monthStart(new Date());
 
     // Numéro de carnet : séquence tenant, partagée avec le back-office.
     const last = await db.passbook.findFirst({ where: { tenantId }, orderBy: { number: "desc" } });
@@ -392,8 +437,9 @@ router.post(
         agentId: user.id,
         number: nextNumber,
         dailyAmount: body.data.dailyAmount,
-        cycleDays: body.data.cycleDays,
+        cycleDays: LIVRET_DAYS,
         startsOn,
+        label: body.data.label || null,
       },
     });
 
@@ -418,10 +464,11 @@ router.post(
       entityId: passbook.id,
       payload: {
         number: nextNumber,
+        label: passbook.label,
         contributor: contributor.fullName,
         dailyAmount: body.data.dailyAmount,
-        cycleDays: body.data.cycleDays,
-        startsOn: body.data.startsOn,
+        months: LIVRET_MONTHS,
+        startsOn: startsOn.toISOString().slice(0, 10),
         source: "terrain",
       },
     });
@@ -429,8 +476,78 @@ router.post(
     const url = await ensureShareToken(contributor.id);
     res.status(201).json({
       contributor: { id: contributor.id, fullName: contributor.fullName },
-      passbook: { id: passbook.id, number: nextNumber },
+      passbook: { id: passbook.id, number: nextNumber, label: passbook.label },
       shareUrl: url,
+      autoUpgrade: scale.upgraded
+        ? { from: scale.fromPlan, to: scale.toPlan }
+        : null,
+    });
+  })
+);
+
+// ── POST /api/agent/clients/:id/carnets — un NOUVEAU livret pour un client existant. ──
+// Le client peut prendre plusieurs carnets ( boutique, école, projet…) : chacun
+// garde son numéro et son surnom, tous regroupés sous le même client.
+const createCarnetSchema = z.object({
+  dailyAmount: z.number().int().min(100, "La mise journalière minimum est de 100 FCFA."),
+  label: z.string().max(60, "Le surnom du carnet est trop long.").optional().or(z.literal("")),
+});
+
+router.post(
+  "/clients/:id/carnets",
+  h(async (req, res) => {
+    const user = await requireUser(req);
+    requireRole(user, ["agent"]);
+    const tenantId = requireTenant(user);
+    await assertWritable(tenantId);
+
+    const body = createCarnetSchema.safeParse(req.body ?? {});
+    if (!body.success) {
+      const issue = body.error.issues[0]?.message ?? "Formulaire incomplet.";
+      throw new ApiError("invalid_input", issue);
+    }
+
+    const contributor = await db.contributor.findUnique({ where: { id: req.params.id } });
+    if (!contributor || contributor.tenantId !== tenantId || contributor.agentId !== user.id) {
+      throw new ApiError("not_found", "Client introuvable dans ton portefeuille.", 404);
+    }
+
+    const last = await db.passbook.findFirst({ where: { tenantId }, orderBy: { number: "desc" } });
+    const nextNumber = String((last ? parseInt(last.number, 10) : 100) + 1).padStart(4, "0");
+    const startsOn = monthStart(new Date());
+
+    const passbook = await db.passbook.create({
+      data: {
+        tenantId,
+        contributorId: contributor.id,
+        agentId: user.id,
+        number: nextNumber,
+        dailyAmount: body.data.dailyAmount,
+        cycleDays: LIVRET_DAYS,
+        startsOn,
+        label: body.data.label || null,
+      },
+    });
+    await appendAudit({
+      tenantId,
+      actorId: user.id,
+      action: "passbook_created",
+      entity: "passbook",
+      entityId: passbook.id,
+      payload: {
+        number: nextNumber,
+        label: passbook.label,
+        contributor: contributor.fullName,
+        dailyAmount: body.data.dailyAmount,
+        months: LIVRET_MONTHS,
+        startsOn: startsOn.toISOString().slice(0, 10),
+        source: "terrain",
+        additional: true,
+      },
+    });
+
+    res.status(201).json({
+      passbook: { id: passbook.id, number: nextNumber, label: passbook.label },
     });
   })
 );

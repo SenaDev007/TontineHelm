@@ -20,6 +20,80 @@ export interface SubscriptionInfo {
   periodEnd: string | null;
 }
 
+// ── Livret annuel : 12 feuilles mensuelles + 13e feuille de récapitulatif ──
+
+/** Ligne encaissable du livret (fenêtre envoyée à l'écran d'encaissement). */
+export interface PayableLine {
+  line: number; // 1..372
+  sheet: number; // 1..12
+  lineInSheet: number; // 1..31
+  company: boolean; // true = 31e ligne : mise de l'entreprise
+  label: string;
+}
+
+/** Feuille mensuelle du livret : 31 lignes, champs avance/reste. */
+export interface LivretSheet {
+  index: number;
+  key: string;
+  year: number;
+  month: number;
+  label: string;
+  shortLabel: string;
+  days: number;
+  attendu: number;
+  encaisse: number;
+  avance: number;
+  reste: number;
+  coveredLines: number;
+  partial: number;
+  partClient: number;
+  partEntreprise: number;
+  complete: boolean;
+  elapsedLines: number;
+  current: boolean;
+}
+
+/** 13e feuille — récapitulatif annuel. */
+export interface LivretRecap {
+  mise: number;
+  attendu: number;
+  encaisse: number;
+  reste: number;
+  partEntreprise: number;
+  partClient: number;
+  sheetsComplete: number;
+  sheetsStarted: number;
+  missedLines: number;
+}
+
+export interface LivretData {
+  months: number;
+  startsOn: string;
+  dailyAmount: number;
+  balance: number;
+  coveredLines: number;
+  lineDue: number;
+  missedLines: number;
+  currentSheet: number;
+  sheets: LivretSheet[];
+  recap: LivretRecap;
+}
+
+/** Vue « arrêt de tournée » d'un carnet : livret + fenêtre de lignes. */
+export interface StopLivret extends LivretData {
+  payable: PayableLine[];
+  sheet: {
+    index: number;
+    label: string;
+    attendu: number;
+    encaisse: number;
+    avance: number;
+    reste: number;
+    coveredLines: number;
+  };
+  dueLineInSheet: number;
+}
+
 export interface TourStop {
   contributorId: string;
   contributorName: string;
@@ -27,11 +101,12 @@ export interface TourStop {
   neighborhood: string;
   passbookId: string;
   passbookNumber: string;
+  passbookLabel: string | null;
   dailyAmount: number;
   cycleDays: number;
   startsOn: string;
-  /** Registre des journées du cycle (multi-jours) : net attribué par journée réelle. */
-  days: { date: string; net: number }[];
+  /** Livret annuel : 12 feuilles mensuelles + récap, avec fenêtre de lignes. */
+  livret: StopLivret;
   dayIndex: number;
   paidDays: number;
   missedDays: number;
@@ -65,7 +140,7 @@ export interface DashboardData {
   byAgent: { name: string; amount: number }[];
   byArea: { name: string; amount: number }[];
   latePassbooks: {
-    passbookId: string; number: string; contributor: string; neighborhood: string;
+    passbookId: string; number: string; label: string | null; contributor: string; neighborhood: string;
     dailyAmount: number; cycleDays: number; balance: number; paidDays: number;
     missedDays: number; agent: string;
   }[];
@@ -78,6 +153,13 @@ export interface DashboardData {
     contributor: string; passbook: string; agent: string;
   }[];
   contributors: { total: number; activeThisMonth: number };
+  /** Montée en charge automatique + alertes dirigeants + lien dédié de l'entité. */
+  scaling?: {
+    plan: string; planLabel: string; contributors: number; agents: number;
+    volumeMonth: number; requiredPlan: string; upgraded: boolean;
+  };
+  alerts?: { unread: number; events: PlanEventRow[] };
+  entity?: { name: string; slug: string; url: string };
 }
 
 export interface ContributorRow {
@@ -91,12 +173,14 @@ export interface ContributorRow {
   status: string;
   createdAt: string;
   shareToken: string | null;
-  /** Lien personnel du carnet (partagé par WhatsApp / e-mail). */
+  /** Lien personnel du carnet (partagé par WhatsApp / e-mail), rattaché à l'entité. */
   shareUrl: string | null;
-  passbook: {
-    id: string; number: string; dailyAmount: number; cycleDays: number;
-    balance: number; paidDays: number; missedDays: number; status: string;
-  } | null;
+  /** Tous les carnets (livrets) du cotisant, regroupés sous son nom. */
+  carnets: {
+    id: string; number: string; label: string | null; dailyAmount: number;
+    balance: number; coveredLines: number; missedLines: number; currentSheet: number; status: string;
+  }[];
+  activeCarnets: number;
 }
 
 /** Client du portefeuille d'un agent (écran Clients de l'application agent). */
@@ -109,29 +193,46 @@ export interface AgentClientRow {
   shareToken: string | null;
   shareUrl: string | null;
   status: string;
-  passbook: {
-    id: string; number: string; dailyAmount: number; cycleDays: number;
-    balance: number; paidDays: number;
-  } | null;
+  /** Tous les carnets (livrets) du client — on clique le client, puis le carnet. */
+  carnets: AgentCarnetRow[];
+}
+
+/** Carnet (livret annuel) d'un client, vu par son agent. */
+export interface AgentCarnetRow {
+  id: string;
+  number: string;
+  label: string | null;
+  status: string;
+  statusLabel: string;
+  dailyAmount: number;
+  balance: number;
+  livret: StopLivret;
 }
 
 /** Carnet public d'un cotisant, consulté depuis son lien personnel. */
 export interface PublicCarnetData {
-  structure: { name: string };
+  structure: { name: string; slug: string | null };
   contributor: { fullName: string; neighborhood: string | null };
   passbooks: {
+    id: string;
     number: string;
+    label: string | null;
     dailyAmount: number;
-    cycleDays: number;
     startsOn: string;
     status: string;
     statusLabel: string;
     balance: number;
-    paidDays: number;
-    missedDays: number;
-    elapsedDays: number;
-    cycleTotal: number;
-    days: { date: string; net: number }[];
+    coveredLines: number;
+    missedLines: number;
+    livret: LivretData;
+    completion: {
+      pending: boolean;
+      completedAt: string | null;
+      payoutAmount: number | null;
+      companyAmount: number | null;
+      signedAt: string | null;
+      signatureName: string | null;
+    };
   }[];
   generatedAt: string;
 }
@@ -139,6 +240,7 @@ export interface PublicCarnetData {
 export interface PassbookRow {
   id: string;
   number: string;
+  label: string | null;
   contributor: string;
   phone: string | null;
   neighborhood: string | null;
@@ -148,8 +250,9 @@ export interface PassbookRow {
   startsOn: string;
   status: string;
   balance: number;
-  paidDays: number;
-  missedDays: number;
+  coveredLines: number;
+  missedLines: number;
+  currentSheet: number;
   cycleTotal: number;
 }
 
@@ -167,6 +270,7 @@ export interface CarnetData {
   passbook: {
     id: string;
     number: string;
+    label: string | null;
     dailyAmount: number;
     cycleDays: number;
     startsOn: string;
@@ -174,10 +278,10 @@ export interface CarnetData {
     closedAt: string | null;
     createdAt: string;
     balance: number;
-    paidDays: number;
-    missedDays: number;
+    coveredLines: number;
+    missedLines: number;
+    currentSheet: number;
     cycleTotal: number;
-    elapsedDays: number;
     contributor: {
       id: string;
       fullName: string;
@@ -187,8 +291,15 @@ export interface CarnetData {
     };
     agent: string;
   };
-  /** Registre des journées du cycle : net par journée réelle (marquage du calendrier). */
-  days: { date: string; net: number }[];
+  livret: LivretData;
+  completion: {
+    status: string;
+    completedAt: string | null;
+    payoutAmount: number | null;
+    companyAmount: number | null;
+    signatureName: string | null;
+    signedAt: string | null;
+  };
   collections: CarnetCollection[];
   structure: { name: string; commissionDays: number; lateThreshold: number };
 }
@@ -230,6 +341,7 @@ export interface AuditPage {
 
 export interface BillingData {
   structure: { name: string | null; status: string | null };
+  entity: { slug: string; url: string };
   subscription: {
     plan: string; planLabel: string; price: number; status: string;
     trialEndsAt: string | null; periodStart: string | null; periodEnd: string | null;
@@ -237,11 +349,27 @@ export interface BillingData {
   usage: {
     agents: number; agentsQuota: number; contributors: number; contributorsQuota: number;
     extraContributors: number; extraAgents: number; remindersIncluded: boolean;
+    volumeMonth: number;
   };
+  alerts: { events: PlanEventRow[]; unread: number };
   invoices: {
     id: string; period: string; baseAmount: number; total: number; status: string;
     paidAt: string | null; createdAt: string; extras: Record<string, number>;
   }[];
+}
+
+/** Événement de palier — alerte de montée en charge aux dirigeants. */
+export interface PlanEventRow {
+  id: string;
+  kind: "scaling_warning" | "plan_upgraded" | string;
+  fromPlan: string | null;
+  toPlan: string;
+  message: string;
+  contributors: number;
+  agents: number;
+  volumeMonth: number;
+  readAt: string | null;
+  createdAt: string;
 }
 
 export interface AdminStructure {

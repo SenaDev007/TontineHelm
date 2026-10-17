@@ -1,40 +1,28 @@
 "use client";
-// TontiHelm — carnet public du cotisant (consultation par lien personnel).
-// Le cotisant ouvre ce lien depuis WhatsApp ou son e-mail : il voit son carnet,
-// chaque journée versée, son solde et l'évolution de sa tontine — à tout moment,
-// sans compte ni code. Les données se rafraîchissent automatiquement.
+// TontiHelm — carnet public du cotisant (consultation par lien personnel, 2026-10).
+// Le cotisant ouvre ce lien depuis WhatsApp ou son e-mail : il voit son LIVRET
+// ANNUEL — 12 feuilles mensuelles (avance/reste, 31e mise entreprise) + la 13e
+// feuille de récapitulatif — pour CHACUN de ses carnets, et l'évolution de ses
+// versements en temps réel, sans compte ni code. Quand la structure a préparé
+// la remise de fin de souscription, il signe ICI (numériquement) pour certifier
+// qu'il a fini et pris son argent : le carnet est alors archivé automatiquement.
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LogoMark } from "@/components/tontihelm/Logo";
-import { get } from "@/lib/client";
+import { LivretSheets } from "./LivretSheets";
+import { SignaturePad } from "./SignaturePad";
+import { get, post } from "@/lib/client";
 import { PublicCarnetData, formatFCFA } from "@/lib/types";
 import {
-  AlertCircle, CalendarCheck2, CircleDollarSign, Clock3, RefreshCw,
-  ShieldCheck, TrendingUp, XCircle,
+  AlertCircle, BadgeCheck, Building2, CheckCircle2, FileSignature, Landmark,
+  Lock, RefreshCw, ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type DayCell = {
-  date: string;
-  dayIndex: number;
-  net: number;
-  state: "paid" | "partial" | "missed" | "future";
-};
-
-function buildCells(pb: PublicCarnetData["passbooks"][number]): DayCell[] {
-  const today = new Date();
-  const todayStart = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-  return pb.days.map((d, i) => {
-    const cellDate = new Date(`${d.date}T00:00:00.000Z`).getTime();
-    const isPast = cellDate <= todayStart;
-    let state: DayCell["state"] = "future";
-    if (d.net >= pb.dailyAmount) state = "paid";
-    else if (d.net > 0) state = "partial";
-    else if (isPast) state = "missed";
-    return { date: d.date, dayIndex: i + 1, net: d.net, state };
-  });
-}
+type PublicCarnet = PublicCarnetData["passbooks"][number];
 
 function StatusPill({ status, label }: { status: string; label: string }) {
   const tone =
@@ -42,52 +30,152 @@ function StatusPill({ status, label }: { status: string; label: string }) {
       ? "border-[#F5C6C0] bg-[#FDECEA] text-[#B3261E]"
       : status === "active"
         ? "border-[#B5E8E5] bg-[#DFF6F4] text-[#00806B]"
-        : status === "closed"
-          ? "border-line bg-[#EDF2F7] text-subtle"
-          : "border-[#F0D48A] bg-[#FFF4D6] text-[#A66A00]";
+        : status === "closing"
+          ? "border-[#F0D48A] bg-[#FFF4D6] text-[#A66A00]"
+          : status === "completed"
+            ? "border-[#9ED9D3] bg-[#DFF6F4] text-[#00806B]"
+            : "border-line bg-[#EDF2F7] text-subtle";
   return (
     <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold", tone)}>
-      {status === "late" ? <Clock3 className="h-3.5 w-3.5" aria-hidden /> : status === "active" ? <CalendarCheck2 className="h-3.5 w-3.5" aria-hidden /> : null}
+      {status === "closing" ? <FileSignature className="h-3.5 w-3.5" aria-hidden /> : null}
+      {status === "completed" ? <BadgeCheck className="h-3.5 w-3.5" aria-hidden /> : null}
       {label}
     </span>
   );
 }
 
-function DayGrid({ pb }: { pb: PublicCarnetData["passbooks"][number] }) {
-  const cells = buildCells(pb);
-  const weeks: DayCell[][] = [];
-  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+/** Panneau de signature de fin de souscription (status « closing »). */
+function SignaturePanel({
+  token,
+  pb,
+  contributorName,
+  onSigned,
+}: {
+  token: string;
+  pb: PublicCarnet;
+  contributorName: string;
+  onSigned: () => void;
+}) {
+  const [name, setName] = useState(contributorName);
+  const [drawing, setDrawing] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function sign() {
+    if (name.trim().length < 2) {
+      setError("Saisis ton nom complet pour certifier.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await post(`/api/public/carnets/${token}/sign`, {
+        passbookId: pb.id,
+        name: name.trim(),
+        signature: drawing,
+      });
+      onSigned();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Signature impossible. Réessaie.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
-    <div className="space-y-1.5" role="img" aria-label={`Calendrier du carnet ${pb.number} : ${pb.paidDays} journées versées sur ${pb.cycleDays}`}>
-      {weeks.map((week, wi) => (
-        <div key={wi} className="grid grid-cols-7 gap-1.5">
-          {week.map((c) => (
-            <div
-              key={c.date}
-              title={`${new Date(`${c.date}T00:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}${c.net > 0 ? ` — ${formatFCFA(c.net)} versés` : c.state === "missed" ? " — non versé" : ""}`}
-              className={cn(
-                "flex h-11 flex-col items-center justify-center rounded-lg border text-[11px] font-semibold leading-none",
-                c.state === "paid" && "border-[#9ED9D3] bg-[#DFF6F4] text-[#00806B]",
-                c.state === "partial" && "border-[#F0D48A] bg-[#FFF4D6] text-[#A66A00]",
-                c.state === "missed" && "border-[#F5C6C0] bg-[#FDECEA] text-[#B3261E]",
-                c.state === "future" && "border-line bg-[#F4F7FB] text-subtle"
-              )}
-            >
-              <span className="amount text-[13px]">{c.dayIndex}</span>
-              <span className="mt-0.5 text-[9px] font-medium opacity-80">
-                {new Date(`${c.date}T00:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
-              </span>
-            </div>
-          ))}
+    <Card className="mt-4 border-[#F0D48A] bg-[#FFFCF2]">
+      <CardContent className="p-4 sm:p-5">
+        <p className="flex items-center gap-2 font-display text-sm font-bold text-[#A66A00]">
+          <FileSignature className="h-4 w-4" aria-hidden /> Fin de souscription — à signer
+        </p>
+        <p className="mt-1.5 text-sm leading-relaxed text-ink">
+          Ta structure a préparé la remise de ton carnet {pb.number}
+          {pb.label ? ` « ${pb.label} »` : ""}. En signant, tu certifies avoir <b>fini de cotiser</b> et
+          <b> pris ton argent</b>. Le carnet sera alors archivé — ton lien reste ta preuve.
+        </p>
+
+        <div className="mt-3 grid grid-cols-2 gap-2.5">
+          <div className="rounded-lg bg-white px-3 py-2.5 shadow-sm">
+            <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-subtle">
+              <Landmark className="h-3 w-3" aria-hidden /> Tu reçois
+            </p>
+            <p className="amount mt-0.5 text-base font-bold text-[#00806B]">
+              {formatFCFA(pb.completion.payoutAmount ?? 0)}
+            </p>
+          </div>
+          <div className="rounded-lg bg-white px-3 py-2.5 shadow-sm">
+            <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-subtle">
+              <Building2 className="h-3 w-3" aria-hidden /> Part entreprise
+            </p>
+            <p className="amount mt-0.5 text-base font-bold text-primary">
+              {formatFCFA(pb.completion.companyAmount ?? 0)}
+            </p>
+          </div>
         </div>
-      ))}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-2 text-[11px] text-subtle">
-        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border border-[#9ED9D3] bg-[#DFF6F4]" aria-hidden /> Journée versée</span>
-        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border border-[#F0D48A] bg-[#FFF4D6]" aria-hidden /> Versement partiel</span>
-        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border border-[#F5C6C0] bg-[#FDECEA]" aria-hidden /> Jour manqué</span>
-        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border border-line bg-[#F4F7FB]" aria-hidden /> À venir</span>
-      </div>
-    </div>
+
+        <div className="mt-4 space-y-3">
+          <SignaturePad value={drawing} onChange={setDrawing} />
+          <div className="space-y-1.5">
+            <label htmlFor="sign-name" className="text-xs font-semibold text-ink">
+              Ton nom complet (certification)
+            </label>
+            <Input
+              id="sign-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-11 border-line bg-white"
+              placeholder="Prénom et nom"
+              autoComplete="name"
+            />
+          </div>
+          {error && <p className="text-xs font-medium text-danger" role="alert">{error}</p>}
+          <Button
+            onClick={sign}
+            disabled={submitting}
+            className="h-12 w-full bg-[#00806B] text-base font-semibold text-white hover:bg-[#006E5C]"
+          >
+            {submitting ? "Signature en cours…" : "Signer et archiver mon carnet"}
+          </Button>
+          <p className="flex items-center justify-center gap-1.5 text-center text-[11px] text-subtle">
+            <Lock className="h-3 w-3" aria-hidden /> Signature liée à ton lien personnel — horodatée par le système.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Carte « carnet signé et archivé ». */
+function SignedCard({ pb }: { pb: PublicCarnet }) {
+  return (
+    <Card className="mt-4 border-[#9ED9D3] bg-[#F6FDFB]">
+      <CardContent className="p-4 sm:p-5">
+        <p className="flex items-center gap-2 font-display text-sm font-bold text-[#00806B]">
+          <CheckCircle2 className="h-4 w-4" aria-hidden /> Souscription terminée et signée
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-2.5">
+          <div className="rounded-lg bg-white px-3 py-2.5 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-subtle">Montant reçu</p>
+            <p className="amount mt-0.5 text-base font-bold text-[#00806B]">
+              {formatFCFA(pb.completion.payoutAmount ?? 0)}
+            </p>
+          </div>
+          <div className="rounded-lg bg-white px-3 py-2.5 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-subtle">Part entreprise</p>
+            <p className="amount mt-0.5 text-base font-bold text-primary">
+              {formatFCFA(pb.completion.companyAmount ?? 0)}
+            </p>
+          </div>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-subtle">
+          Signé par <span className="font-semibold text-ink">{pb.completion.signatureName}</span>
+          {pb.completion.signedAt
+            ? ` le ${new Date(pb.completion.signedAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })} à ${new Date(pb.completion.signedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`
+            : ""}
+          {" · "}carnet archivé{pb.label ? ` « ${pb.label} »` : ""} — ce lien reste ta preuve.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -95,6 +183,7 @@ export function PublicCarnetScreen({ token }: { token: string }) {
   const [data, setData] = useState<PublicCarnetData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedCarnet, setSelectedCarnet] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -117,6 +206,15 @@ export function PublicCarnetScreen({ token }: { token: string }) {
     return () => clearInterval(timer);
   }, [load]);
 
+  const carnetCount = data?.passbooks.length ?? 0;
+  // Carnet affiché par défaut : celui choisi, sinon le premier ACTIF (plutôt
+  // que le dernier créé) — le client retrouve d'abord sa tontine en cours.
+  const active =
+    data?.passbooks.find((p) => p.id === selectedCarnet) ??
+    data?.passbooks.find((p) => p.status === "active" || p.status === "late" || p.status === "closing") ??
+    data?.passbooks[0] ??
+    null;
+
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
       {/* En-tête : structure + cotisant */}
@@ -128,7 +226,8 @@ export function PublicCarnetScreen({ token }: { token: string }) {
               {data?.structure.name ?? "TontiHelm"}
             </p>
             <p className="truncate text-xs text-subtle">
-              {data ? `Carnet de ${data.contributor.fullName}` : "Carnet de tontine"}
+              {data ? `Livret de ${data.contributor.fullName}` : "Carnet de tontine"}
+              {data && carnetCount > 1 ? ` · ${carnetCount} carnets` : ""}
             </p>
           </div>
           <Button
@@ -171,90 +270,70 @@ export function PublicCarnetScreen({ token }: { token: string }) {
               <div className="rounded-xl border border-line bg-white p-8 text-center shadow-sm">
                 <p className="font-display text-lg font-bold text-ink">Aucun carnet pour le moment</p>
                 <p className="mt-2 text-sm text-subtle">
-                  Ton carnet apparaîtra ici dès l&apos;ouverture de ta tontine par la structure.
+                  Ton livret annuel apparaîtra ici dès l&apos;ouverture de ta tontine par la structure.
                 </p>
               </div>
             )}
 
-            {data.passbooks.map((pb) => {
-              const progress = Math.round((pb.paidDays / pb.cycleDays) * 100);
-              return (
-                <section key={pb.number} className="mb-5 rounded-xl border border-line bg-white p-4 shadow-sm sm:p-5" aria-label={`Carnet ${pb.number}`}>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* Plusieurs carnets : sélection — tous regroupés sous le même client */}
+            {carnetCount > 1 && (
+              <div className="-mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1" role="tablist" aria-label="Mes carnets">
+                {data.passbooks.map((p) => (
+                  <button
+                    key={p.id}
+                    role="tab"
+                    aria-selected={active?.id === p.id}
+                    onClick={() => setSelectedCarnet(p.id)}
+                    className={cn(
+                      "flex shrink-0 flex-col items-start rounded-xl border px-3.5 py-2 text-left transition-colors",
+                      active?.id === p.id
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-line bg-white text-ink hover:border-primary/40"
+                    )}
+                  >
+                    <span className="amount text-sm font-bold">Carnet {p.number}</span>
+                    <span className={cn("text-[11px]", active?.id === p.id ? "text-primary-foreground/80" : "text-subtle")}>
+                      {p.label ?? p.statusLabel}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {data.passbooks.map((pb) =>
+              active?.id === pb.id ? (
+                <section key={pb.id} className="rounded-xl border border-line bg-white p-4 shadow-sm sm:p-5" aria-label={`Carnet ${pb.number}`}>
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="amount font-display text-base font-bold text-ink">Carnet {pb.number}</p>
+                      <p className="amount font-display text-base font-bold text-ink">
+                        Carnet {pb.number}
+                        {pb.label ? <span className="font-normal text-subtle"> · {pb.label}</span> : null}
+                      </p>
                       <p className="text-xs text-subtle">
-                        Cycle de {pb.cycleDays} jours · commencé le{" "}
-                        {new Date(`${pb.startsOn}T00:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                        Livret annuel · 12 feuilles mensuelles · mise {formatFCFA(pb.dailyAmount)}
                       </p>
                     </div>
                     <StatusPill status={pb.status} label={pb.statusLabel} />
                   </div>
 
-                  {/* Progression du cycle */}
-                  <div className="mt-4">
-                    <div className="flex items-end justify-between text-xs">
-                      <span className="font-semibold text-ink">
-                        {pb.paidDays} / {pb.cycleDays} journées versées
-                      </span>
-                      <span className="text-subtle">jour {pb.elapsedDays} du cycle</span>
-                    </div>
-                    <div
-                      className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-[#EDF2F7]"
-                      role="progressbar"
-                      aria-valuenow={pb.paidDays}
-                      aria-valuemin={0}
-                      aria-valuemax={pb.cycleDays}
-                      aria-label="Journées versées"
-                    >
-                      <div
-                        className="h-full rounded-full bg-primary transition-all duration-500"
-                        style={{ width: `${Math.min(100, progress)}%` }}
-                      />
-                    </div>
-                  </div>
+                  {/* 12 feuilles mensuelles + 13e feuille de récapitulatif */}
+                  <LivretSheets livret={pb.livret} carnetTitle={undefined} />
 
-                  {/* Chiffres clés */}
-                  <div className="mt-4 grid grid-cols-3 gap-2.5">
-                    <div className="rounded-lg bg-[#F4F7FB] px-3 py-2.5">
-                      <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-subtle">
-                        <CircleDollarSign className="h-3 w-3" aria-hidden /> Mise / jour
-                      </p>
-                      <p className="amount mt-0.5 text-sm font-bold text-ink">{formatFCFA(pb.dailyAmount)}</p>
-                    </div>
-                    <div className="rounded-lg bg-[#F4F7FB] px-3 py-2.5">
-                      <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-subtle">
-                        <TrendingUp className="h-3 w-3" aria-hidden /> Solde cumulé
-                      </p>
-                      <p className="amount mt-0.5 text-sm font-bold text-ink">{formatFCFA(pb.balance)}</p>
-                    </div>
-                    <div className="rounded-lg bg-[#F4F7FB] px-3 py-2.5">
-                      <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-subtle">
-                        <XCircle className="h-3 w-3" aria-hidden /> Jours manqués
-                      </p>
-                      <p className={cn("amount mt-0.5 text-sm font-bold", pb.missedDays > 0 ? "text-danger" : "text-ink")}>
-                        {pb.missedDays}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Calendrier du cycle */}
-                  <div className="mt-5">
-                    <p className="mb-2 text-xs font-semibold text-ink">Chaque journée du cycle</p>
-                    <DayGrid pb={pb} />
-                  </div>
-
-                  <p className="mt-4 rounded-lg bg-[#F4F7FB] p-3 text-xs leading-relaxed text-subtle">
-                    Total attendu du cycle : <span className="amount font-semibold text-ink">{formatFCFA(pb.cycleTotal)}</span>
-                    {pb.missedDays > 0 && (
-                      <> · Passe voir ton agent pour régulariser les jours manqués.</>
-                    )}
-                  </p>
+                  {/* Signature de fin de souscription / carnet archivé */}
+                  {pb.status === "closing" && (
+                    <SignaturePanel
+                      token={token}
+                      pb={pb}
+                      contributorName={data.contributor.fullName}
+                      onSigned={load}
+                    />
+                  )}
+                  {pb.status === "completed" && <SignedCard pb={pb} />}
                 </section>
-              );
-            })}
+              ) : null
+            )}
 
-            <p className="mx-auto max-w-md text-center text-[11px] leading-relaxed text-subtle">
+            <p className="mx-auto mt-6 max-w-md text-center text-[11px] leading-relaxed text-subtle">
               Mis à jour{" "}
               {data.generatedAt
                 ? new Date(data.generatedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })

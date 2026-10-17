@@ -10,7 +10,9 @@ import { MethodBadge, PassbookStatusBadge, GapBadge, CashIcon, MobileMoneyIcon, 
 import { DashboardData, formatFCFA } from "@/lib/types";
 import { get } from "@/lib/client";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { AlertTriangle, Users } from "lucide-react";
+import { AlertTriangle, Building2, Copy, TrendingUp, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/use-toast";
 
 export function DashboardTab() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -37,9 +39,49 @@ export function DashboardTab() {
   }
 
   const chartData = data.dailySeries.map((d) => ({ ...d, total: d.cash + d.mobile }));
+  const lastUpgrade = data.alerts?.events.find((e) => e.kind === "plan_upgraded");
 
   return (
     <div className="space-y-6">
+      {/* Montée en charge automatique : confirmation visible par les dirigeants */}
+      {data.scaling?.upgraded && lastUpgrade && (
+        <div className="flex items-start gap-3 rounded-xl border border-[#B5E8E5] bg-[#F6FDFB] p-4" role="status">
+          <TrendingUp className="mt-0.5 h-5 w-5 shrink-0 text-[#00806B]" aria-hidden />
+          <div>
+            <p className="text-sm font-bold text-[#00806B]">Palier supérieur activé automatiquement</p>
+            <p className="mt-1 text-xs leading-relaxed text-ink">{lastUpgrade.message}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Lien dédié de l'entité : propre à cette structure, pour ses agents et ses clients */}
+      {data.entity && (
+        <div className="flex flex-col gap-3 rounded-xl border border-line bg-white p-4 sm:flex-row sm:items-center">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#EEF4FD] text-primary">
+            <Building2 className="h-5 w-5" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-ink">Le lien dédié de ton entité</p>
+            <p className="mt-0.5 break-all font-mono text-xs text-subtle">{data.entity.url}</p>
+            <p className="mt-1 text-xs leading-relaxed text-subtle">
+              Donne-le à tes agents et gérants : leur connexion et les carnets de tes clients restent
+              rattachés à <span className="font-medium text-ink">{data.entity.name}</span> — chaque entité a son propre lien.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 shrink-0 border-line"
+            onClick={() => {
+              void navigator.clipboard?.writeText(data.entity!.url);
+              toast({ title: "Lien de ton entité copié." });
+            }}
+          >
+            <Copy className="h-4 w-4" aria-hidden /> Copier
+          </Button>
+        </div>
+      )}
+
       {/* Cartes de chiffres : 1 colonne mobile, 2 tablette, 4 bureau (§15.8) */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Encaissements du jour" value={formatFCFA(data.today.total)} hint={`${data.today.count} versements`} icon={<CashIcon />} emphasis />

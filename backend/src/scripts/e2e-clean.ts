@@ -1,9 +1,9 @@
-// TontiHelm — nettoyage des données du test E2E « clients + carnet public ».
-// Supprime la structure de test et tout ce qui s'y rattache (idempotent).
+// TontiHelm — nettoyage des données des tests E2E (clients, livret annuel…).
+// Supprime les structures de test et tout ce qui s'y rattache (idempotent).
 // Usage : cd backend && DATABASE_URL="file:dev.db" bun src/scripts/e2e-clean.ts
 import { db } from "../lib/db";
 
-const NAMES = ["Flux Clients E2E"];
+const NAMES = ["Flux Clients E2E", "Livret Annuel E2E"];
 
 async function main() {
   const structures = await db.structure.findMany({ where: { name: { in: NAMES } } });
@@ -15,6 +15,7 @@ async function main() {
     await db.notification.deleteMany({ where: { tenantId: s.id } });
     await db.auditLog.deleteMany({ where: { tenantId: s.id } });
     await db.passbook.deleteMany({ where: { tenantId: s.id } });
+    await db.planEvent.deleteMany({ where: { tenantId: s.id } });
     await db.contributor.deleteMany({ where: { tenantId: s.id } });
     await db.subscription.deleteMany({ where: { tenantId: s.id } });
     await db.invoice.deleteMany({ where: { tenantId: s.id } });
@@ -23,7 +24,7 @@ async function main() {
     console.log(`structure de test supprimée : ${s.name} (${s.id})`);
   }
   const drafts = await db.signupPayment.deleteMany({
-    where: { structureId: null, draft: { contains: "Flux Clients E2E" } },
+    where: { structureId: null, draft: { contains: "E2E" } },
   });
   console.log(`brouillons d'inscription obsolètes : ${drafts.count}`);
 }

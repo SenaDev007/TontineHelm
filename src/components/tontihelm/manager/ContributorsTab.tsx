@@ -70,7 +70,7 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
         fullName: row.fullName,
         phone: row.phone,
         email: row.email,
-        passbookNumber: row.passbook?.number ?? null,
+        passbookNumber: row.carnets[0]?.number ?? null,
         url,
       });
     } catch (err) {
@@ -135,8 +135,9 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
               </p>
             )}
             {contributorsQuotaReached ? (
-              <p className="max-w-xs rounded-md border border-[#F0D48A] bg-[#FFF4D6] px-3 py-2 text-xs font-medium text-[#A66A00]">
-                Palier atteint : passe au palier supérieur (onglet Abonnement) pour enregistrer d&apos;autres cotisants.
+              <p className="max-w-xs rounded-md border border-[#B5E8E5] bg-[#F6FDFB] px-3 py-2 text-xs font-medium text-[#00806B]">
+                Quotas du palier {quota.planLabel} atteints — le système monte de palier tout seul dès le
+                dépassement (alerte envoyée aux dirigeants) : tes créations continuent sans interruption.
               </p>
             ) : (
               <Dialog open={open} onOpenChange={setOpen}>
@@ -211,14 +212,17 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
                 <TableHead>Cotisant</TableHead>
                 <TableHead>Quartier</TableHead>
                 <TableHead>Agent</TableHead>
-                <TableHead>Carnet</TableHead>
-                <TableHead className="text-right">Solde</TableHead>
+                <TableHead>Carnets (livrets)</TableHead>
+                <TableHead className="text-right">Cumul</TableHead>
                 <TableHead>Statut</TableHead>
                 <TableHead className="text-right">Lien du carnet</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((r) => (
+              {filtered.map((r) => {
+                const total = r.carnets.reduce((s, k) => s + k.balance, 0);
+                const worst = r.carnets.find((k) => k.status === "late") ?? r.carnets.find((k) => k.status === "active") ?? r.carnets[0];
+                return (
                 <TableRow key={r.id} className="border-line">
                   <TableCell>
                     <p className="text-sm font-medium text-ink">{r.fullName}</p>
@@ -229,20 +233,22 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
                   <TableCell className="text-sm text-subtle">{r.neighborhood}</TableCell>
                   <TableCell className="text-sm text-subtle">{r.agent}</TableCell>
                   <TableCell>
-                    {r.passbook ? (
-                      <>
-                        <p className="amount text-sm text-ink">{r.passbook.number}</p>
-                        <p className="text-xs text-subtle">Jour {r.passbook.paidDays}/{r.passbook.cycleDays}</p>
-                      </>
+                    {r.carnets.length > 0 ? (
+                      r.carnets.map((k) => (
+                        <p key={k.id} className="amount text-sm text-ink">
+                          {k.number}{k.label ? <span className="text-xs font-normal text-subtle"> · {k.label}</span> : null}{" "}
+                          <span className="text-xs text-subtle">F{k.currentSheet}/12 · L{k.coveredLines}/372</span>
+                        </p>
+                      ))
                     ) : (
                       <span className="text-xs text-subtle">Aucun carnet</span>
                     )}
                   </TableCell>
                   <TableCell className="amount text-sm font-semibold text-ink">
-                    {r.passbook ? formatFCFA(r.passbook.balance) : "—"}
+                    {r.carnets.length > 0 ? formatFCFA(total) : "—"}
                   </TableCell>
                   <TableCell>
-                    {r.passbook ? <PassbookStatusBadge status={r.passbook.status} /> : <span className="text-xs text-subtle">—</span>}
+                    {worst ? <PassbookStatusBadge status={worst.status} /> : <span className="text-xs text-subtle">—</span>}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
@@ -257,7 +263,8 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
@@ -265,7 +272,10 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
 
       {/* Cartes empilées sur mobile */}
       <div className="space-y-3 md:hidden">
-        {filtered.map((r) => (
+        {filtered.map((r) => {
+          const total = r.carnets.reduce((s, k) => s + k.balance, 0);
+          const worst = r.carnets.find((k) => k.status === "late") ?? r.carnets.find((k) => k.status === "active") ?? r.carnets[0];
+          return (
           <Card key={r.id} className="border-line">
             <CardContent className="p-4">
               <div className="flex items-start justify-between gap-2">
@@ -273,18 +283,27 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
                   <p className="text-[15px] font-semibold text-ink">{r.fullName}</p>
                   <p className="amount mt-0.5 text-xs text-subtle">{r.phone ?? "—"}</p>
                 </div>
-                {r.passbook && <PassbookStatusBadge status={r.passbook.status} />}
+                {worst && <PassbookStatusBadge status={worst.status} />}
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                 <span className="flex items-center gap-1 text-subtle"><MapPin className="h-3.5 w-3.5" aria-hidden /> {r.neighborhood}</span>
                 <span className="flex items-center gap-1 text-subtle"><IdCard className="h-3.5 w-3.5" aria-hidden /> {r.idNumber}</span>
                 <span className="text-subtle">Agent : {r.agent}</span>
               </div>
-              {r.passbook && (
-                <div className="mt-3 flex items-center justify-between rounded-lg bg-[#F4F7FB] px-3 py-2">
-                  <span className="text-xs text-subtle">Carnet {r.passbook.number} · Jour {r.passbook.paidDays}/{r.passbook.cycleDays}</span>
-                  <span className="amount text-sm font-semibold text-ink">{formatFCFA(r.passbook.balance)}</span>
+              {r.carnets.length > 0 ? (
+                <div className="mt-3 space-y-1.5">
+                  {r.carnets.map((k) => (
+                    <div key={k.id} className="flex items-center justify-between rounded-lg bg-[#F4F7FB] px-3 py-2">
+                      <span className="amount text-xs text-subtle">
+                        Carnet {k.number}{k.label ? ` · ${k.label}` : ""} · F{k.currentSheet}/12
+                      </span>
+                      <span className="amount text-sm font-semibold text-ink">{formatFCFA(k.balance)}</span>
+                    </div>
+                  ))}
+                  <p className="amount text-right text-xs font-semibold text-ink">Cumul : {formatFCFA(total)}</p>
                 </div>
+              ) : (
+                <p className="mt-3 rounded-lg bg-[#F4F7FB] px-3 py-2 text-xs text-subtle">Aucun carnet pour le moment.</p>
               )}
               <Button
                 variant="outline"
@@ -296,7 +315,8 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
               </Button>
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       {/* Partage du lien de carnet */}

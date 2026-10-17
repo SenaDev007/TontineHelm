@@ -1,22 +1,24 @@
 "use client";
-// TontiHelm — écran d'encaissement multi-jours (maquette §15.9, extension 2026-10) :
-// le cotisant peut régler aujourd'hui, demain, après-demain… sans limite autre que
-// les bornes du cycle, et rattraper les jours manqués. Chaque journée sélectionnée
-// devient une écriture datée sur la journée réelle qu'elle couvre — le carnet
-// calendaire marque chaque jour exact, y compris les jours payés d'avance.
+// TontiHelm — écran d'encaissement du livret annuel (2026-10) :
+// les écritures remplissent les lignes du livret SÉQUENTIELLEMENT, comme le
+// marquage du carnet papier. La ligne due (la prochaine non couverte) se
+// collecte « aujourd'hui » — en retard s'il y a des lignes manquées (rattrapage) ;
+// sélectionner des lignes suivantes = payer d'AVANCE (le système calcule le
+// reste dynamiquement). La 31e ligne d'une feuille est la mise de l'ENTREPRISE :
+// marquée, jamais inscrite.
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PassbookStatusBadge, SyncStatusPill } from "../StatusBadge";
-import { TourData, TourStop, formatFCFA } from "@/lib/types";
-import { Wallet, ChevronRight, Link2, Check, CalendarClock, RotateCcw } from "lucide-react";
+import { PayableLine, TourData, TourStop, formatFCFA } from "@/lib/types";
+import { Building2, Wallet, ChevronRight, Link2, Check, RotateCcw, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** Allocation d'un encaissement : une écriture par journée couverte. */
+/** Allocation d'un encaissement : une écriture par ligne du livret. */
 export interface CollectAllocation {
-  date: string; // "AAAA-MM-JJ"
+  line: number; // ligne absolue du livret (1..372)
   amount: number;
 }
 
@@ -51,74 +53,53 @@ function AmountKeypad({
   );
 }
 
-/** Clé locale « YYYY-MM-DD ». */
-function todayKey(): string {
-  const t = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`;
-}
-
-/** Parse « YYYY-MM-DD » en date locale (sans décalage de fuseau). */
-function parseDay(iso: string): Date {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-/** « sam. 17 oct. » */
-function formatDayShort(iso: string): string {
-  return parseDay(iso).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
-}
-
-/* ── Puce de journée ── */
-function DayChip({
-  iso,
-  net,
+/* ── Puce de ligne du livret ── */
+function LineChip({
+  payable,
   dailyAmount,
-  isToday,
+  state,
   selected,
   onToggle,
 }: {
-  iso: string;
-  net: number;
+  payable: PayableLine;
   dailyAmount: number;
-  isToday: boolean;
+  state: "due" | "late" | "advance";
   selected: boolean;
   onToggle: () => void;
 }) {
-  const remaining = Math.max(0, dailyAmount - net);
-  const covered = remaining === 0;
-  const partial = net > 0 && remaining > 0;
+  const label =
+    state === "due" ? "Ligne due" : state === "late" ? "Rattrapage" : `+${payable.lineInSheet}`;
   return (
     <button
       type="button"
-      disabled={covered}
       onClick={onToggle}
       aria-pressed={selected}
-      aria-label={`${formatDayShort(iso)}${covered ? ", journée déjà couverte" : partial ? `, il reste ${formatFCFA(remaining)}` : ""}`}
+      aria-label={`${payable.company ? "Mise de l'entreprise" : `Ligne ${payable.lineInSheet} de la feuille ${payable.sheet}`} — ${formatFCFA(dailyAmount)}`}
       className={cn(
-        "flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-lg border px-2.5 py-1.5 text-center transition-colors",
-        covered && "cursor-default border-line bg-[#EDF2F7] text-subtle",
-        !covered && !selected && "border-line bg-surface text-ink hover:border-primary/40 hover:bg-[#F0F5FC]",
+        "flex min-h-[52px] w-[86px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border px-2.5 py-1.5 text-center transition-colors",
         selected && "border-primary bg-primary text-primary-foreground",
-        isToday && !covered && !selected && "border-[#FFB800] bg-[#FFF7E0]",
-        isToday && selected && "ring-2 ring-[#FFB800] ring-offset-1"
+        !selected && state === "due" && "border-[#FFB800] bg-[#FFF7E0] text-ink hover:border-primary/40",
+        !selected && state === "late" && "border-[#F5C6C0] bg-[#FDECEA] text-[#B3261E] hover:border-primary/40",
+        !selected && state === "advance" && "border-line bg-surface text-ink hover:border-primary/40 hover:bg-[#F0F5FC]",
+        !selected && payable.company && "border-primary/50 bg-[#EEF4FD] text-primary"
       )}
     >
-      <span className="text-xs font-semibold leading-none">
-        {isToday ? "Aujourd'hui" : formatDayShort(iso)}
-      </span>
-      {covered ? (
-        <span className={cn("inline-flex items-center gap-1 text-[10px] font-medium leading-none", selected ? "text-primary-foreground" : "text-primary")}>
-          <Check className="h-3 w-3" aria-hidden /> couvert
-        </span>
-      ) : partial ? (
-        <span className={cn("amount text-[10px] font-medium leading-none", selected ? "text-primary-foreground/90" : "text-primary")}>
-          reste {formatFCFA(remaining)}
-        </span>
+      {payable.company ? (
+        <>
+          <span className="flex items-center gap-1 text-[10px] font-bold uppercase leading-none">
+            <Building2 className="h-3 w-3" aria-hidden /> Entreprise
+          </span>
+          <span className="amount mt-0.5 text-[10px] font-medium leading-none opacity-80">
+            {formatFCFA(dailyAmount)}
+          </span>
+        </>
       ) : (
-        <span className={cn("amount text-[10px] leading-none", selected ? "text-primary-foreground/80" : "text-subtle")}>
-          {formatFCFA(dailyAmount)}
-        </span>
+        <>
+          <span className="text-xs font-semibold leading-none">{label}</span>
+          <span className="amount text-[10px] font-medium leading-none opacity-80">
+            L{payable.lineInSheet} · {formatFCFA(dailyAmount)}
+          </span>
+        </>
       )}
     </button>
   );
@@ -142,50 +123,48 @@ export function CollectScreen({
   loading: boolean;
 }) {
   const [amountInput, setAmountInput] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string[] | null>(null); // null = sélection par défaut (aujourd'hui)
+  const [selected, setSelected] = useState<number[] | null>(null); // null = sélection par défaut (ligne due)
 
   const view = useMemo(() => {
     if (!stop) return null;
-    const tKey = todayKey();
-    const netOf = new Map(stop.days.map((d) => [d.date, d.net]));
-    const remaining = (iso: string) => Math.max(0, stop.dailyAmount - (netOf.get(iso) ?? 0));
-    const payable = stop.days.filter((d) => remaining(d.date) > 0).map((d) => d.date);
-    const missed = payable.filter((iso) => iso < tKey);
-    const todayPayable = payable.includes(tKey);
-    const future = payable.filter((iso) => iso > tKey);
-    return { tKey, netOf, remaining, payable, missed, todayPayable, future };
+    const payable = stop.livret.payable ?? [];
+    const due = payable[0] ?? null; // première ligne non couverte = ligne due
+    const rest = payable.slice(1);
+    const late = stop.livret.missedLines > 0;
+    return { payable, due, rest, late };
   }, [stop]);
 
-  // Sélection effective : aujourd'hui par défaut, sinon choix explicite.
+  // Sélection effective : la ligne due par défaut, sinon choix explicite.
   const effectiveSelected = useMemo(() => {
-    if (!view) return [];
+    if (!view) return [] as number[];
     if (selected !== null) return selected;
-    return view.todayPayable ? [view.tKey] : [];
+    return view.due ? [view.due.line] : [];
   }, [selected, view]);
 
   const suggestedTotal = useMemo(
-    () => effectiveSelected.reduce((s, iso) => s + (view?.remaining(iso) ?? 0), 0),
-    [effectiveSelected, view]
+    () => effectiveSelected.length * (stop?.dailyAmount ?? 0),
+    [effectiveSelected, stop]
   );
 
   const amount = amountInput === null ? suggestedTotal : parseInt(amountInput || "0", 10) || 0;
 
-  // Allocation : remplit les journées sélectionnées dans l'ordre, la dernière peut être partielle.
+  // Allocation : remplit les lignes sélectionnées dans l'ordre (1 mise par ligne,
+  // la dernière peut être partielle).
   const allocations = useMemo<CollectAllocation[]>(() => {
-    if (!view) return [];
+    if (!view || !stop) return [];
     let left = amount;
     const out: CollectAllocation[] = [];
-    for (const iso of effectiveSelected) {
-      const take = Math.min(view.remaining(iso), left);
-      if (take > 0) out.push({ date: iso, amount: take });
+    for (const line of effectiveSelected) {
+      const take = Math.min(stop.dailyAmount, left);
+      if (take > 0) out.push({ line, amount: take });
       left -= take;
     }
     return out;
-  }, [amount, effectiveSelected, view]);
+  }, [amount, effectiveSelected, view, stop]);
 
-  const cycleTotal = (stop?.dailyAmount ?? 0) * (stop?.cycleDays ?? 0);
+  const cycleTotal = stop?.livret?.recap.attendu ?? 0;
   const overMax = stop !== null && amount > cycleTotal - stop.balance;
-  const unallocated = amount > suggestedTotal; // trop de montant pour les journées choisies
+  const unallocated = amount > suggestedTotal; // trop de montant pour les lignes choisies
   const canSubmit =
     stop !== null && allocations.length > 0 && amount > 0 && !overMax && !unallocated;
 
@@ -225,7 +204,7 @@ export function CollectScreen({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[15px] font-semibold text-ink">{s.contributorName}</p>
                 <p className="mt-0.5 text-xs text-subtle">
-                  {s.neighborhood} · Jour {s.dayIndex}/{s.cycleDays} · {formatFCFA(s.dailyAmount)}
+                  {s.neighborhood} · F{s.livret.currentSheet}/12 · L{s.livret.dueLineInSheet} · {formatFCFA(s.dailyAmount)}
                 </p>
               </div>
               <ChevronRight className="h-5 w-5 shrink-0 text-subtle" aria-hidden />
@@ -234,7 +213,7 @@ export function CollectScreen({
           {remaining.length === 0 && (
             <Card className="border-line">
               <CardContent className="p-8 text-center">
-                <p className="text-sm text-subtle">Reviens demain, ou rouvre un carnet depuis la tournée.</p>
+                <p className="text-sm text-subtle">Reviens demain, ou rouvre un carnet depuis la tournée ou l&apos;onglet Clients.</p>
               </CardContent>
             </Card>
           )}
@@ -243,10 +222,10 @@ export function CollectScreen({
     );
   }
 
-  const toggleDay = (iso: string) => {
+  const toggleLine = (line: number) => {
     setSelected((prev) => {
-      const base = prev ?? (view.todayPayable ? [view.tKey] : []);
-      const next = base.includes(iso) ? base.filter((d) => d !== iso) : [...base, iso].sort();
+      const base = prev ?? (view.due ? [view.due.line] : []);
+      const next = base.includes(line) ? base.filter((l) => l !== line) : [...base, line].sort((a, b) => a - b);
       return next;
     });
     setAmountInput(null);
@@ -257,7 +236,7 @@ export function CollectScreen({
     setSelected(null);
   };
 
-  const fullDays = allocations.filter((a) => a.amount >= (view.remaining(a.date) || a.amount)).length;
+  const sheet = stop.livret.sheet;
 
   return (
     <div>
@@ -266,34 +245,53 @@ export function CollectScreen({
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-subtle">Carnet {stop.passbookNumber}</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-subtle">
+                Carnet {stop.passbookNumber}{stop.passbookLabel ? ` · ${stop.passbookLabel}` : ""}
+              </p>
               <p className="font-display mt-0.5 text-xl font-bold text-ink">{stop.contributorName}</p>
               <p className="mt-0.5 text-sm text-subtle">
-                Jour {stop.dayIndex} sur {stop.cycleDays} · {stop.neighborhood}
+                Feuille {sheet.index}/12 ({sheet.label}) · ligne {stop.livret.dueLineInSheet} · {stop.neighborhood}
               </p>
             </div>
             <PassbookStatusBadge status={stop.status} />
           </div>
-          <div className="mt-4 flex items-center justify-between rounded-lg border border-line bg-[#F4F7FB] px-3 py-2.5">
-            <span className="text-sm text-subtle">Solde cumulé</span>
-            <span className="amount text-base font-semibold text-ink">{formatFCFA(stop.balance)}</span>
+          <div className="mt-4 grid grid-cols-3 gap-2.5">
+            <div className="rounded-lg border border-line bg-[#F4F7FB] px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-subtle">Solde cumulé</p>
+              <p className="amount text-sm font-bold text-ink">{formatFCFA(stop.balance)}</p>
+            </div>
+            <div className="rounded-lg border border-[#F0D48A]/60 bg-[#FFF4D6] px-3 py-2.5">
+              <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[#A66A00]">
+                <TrendingUp className="h-3 w-3" aria-hidden /> Avance (feuille)
+              </p>
+              <p className="amount text-sm font-bold text-[#A66A00]">{formatFCFA(sheet.avance)}</p>
+            </div>
+            <div className="rounded-lg border border-[#B5D4F5] bg-[#E8F1FD] px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">Reste (feuille)</p>
+              <p className="amount text-sm font-bold text-primary">{formatFCFA(sheet.reste)}</p>
+            </div>
           </div>
           <div className="mt-2 flex items-center justify-between px-1">
-            <span className="text-xs text-subtle">Jours payés : {stop.paidDays} · Manqués : {stop.missedDays}</span>
+            <span className="text-xs text-subtle">
+              Lignes couvertes : {stop.livret.coveredLines}/372
+              {stop.livret.missedLines > 0 && (
+                <span className="font-semibold text-danger"> · {stop.livret.missedLines} en retard</span>
+              )}
+            </span>
             {stop.collectedToday && (
-              <span className="text-xs font-semibold text-success">
-                + {formatFCFA(stop.collectedToday.amount)} aujourd'hui
+              <span className="amount text-xs font-semibold text-success">
+                + {formatFCFA(stop.collectedToday.amount)} aujourd&apos;hui
               </span>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* ── Sélecteur de journées : le cœur du multi-jours ── */}
+      {/* ── Sélecteur de lignes : due / rattrapage / avance ── */}
       <div className="mt-4">
         <div className="mb-1.5 flex items-center justify-between">
           <Label className="text-xs font-medium uppercase tracking-wide text-subtle">
-            Journées à régler
+            Lignes du livret à régler
           </Label>
           <button
             className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-2 hover:underline"
@@ -307,66 +305,49 @@ export function CollectScreen({
           <Card className="border-line bg-[#F4F7FB]">
             <CardContent className="flex items-center gap-2 p-4 text-sm text-subtle">
               <Check className="h-4 w-4 text-primary" aria-hidden />
-              Cycle entièrement réglé : toutes les journées sont couvertes.
+              Livret entièrement réglé : les 372 lignes sont couvertes.
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3" role="group" aria-label="Journées couvrables du cycle">
-            {/* Rattrapage des jours manqués */}
-            {view.missed.length > 0 && (
+          <div className="space-y-3" role="group" aria-label="Lignes couvrables du livret">
+            {/* Ligne due — aujourd'hui, ou rattrapage si en retard */}
+            {view.due && (
               <div>
-                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-danger">
-                  <RotateCcw className="h-3 w-3" aria-hidden /> Rattrapage · {view.missed.length} jour{view.missed.length > 1 ? "s" : ""} manqué{view.missed.length > 1 ? "s" : ""}
+                <p className={cn(
+                  "mb-1 text-[11px] font-semibold uppercase tracking-wide",
+                  view.late ? "text-danger" : "text-subtle"
+                )}>
+                  {view.late
+                    ? `Rattrapage · ${stop.livret.missedLines} ligne${stop.livret.missedLines > 1 ? "s" : ""} en retard`
+                    : "Aujourd'hui"}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {view.missed.map((iso) => (
-                    <DayChip
-                      key={iso}
-                      iso={iso}
-                      net={view.netOf.get(iso) ?? 0}
-                      dailyAmount={stop.dailyAmount}
-                      isToday={false}
-                      selected={effectiveSelected.includes(iso)}
-                      onToggle={() => toggleDay(iso)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Aujourd'hui (même déjà couvert : visible et verrouillé) */}
-            {stop.days.some((d) => d.date === view.tKey) && (
-              <div>
-                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-subtle">Aujourd'hui</p>
-                <div className="flex flex-wrap gap-1.5">
-                  <DayChip
-                    iso={view.tKey}
-                    net={view.netOf.get(view.tKey) ?? 0}
+                  <LineChip
+                    payable={view.due}
                     dailyAmount={stop.dailyAmount}
-                    isToday
-                    selected={effectiveSelected.includes(view.tKey)}
-                    onToggle={() => toggleDay(view.tKey)}
+                    state={view.late ? "late" : "due"}
+                    selected={effectiveSelected.includes(view.due.line)}
+                    onToggle={() => toggleLine(view.due!.line)}
                   />
                 </div>
               </div>
             )}
 
-            {/* Journées à venir : autant que le cycle comporte de jours restants */}
-            {view.future.length > 0 && (
+            {/* Lignes à venir : payer plusieurs lignes d'avance */}
+            {view.rest.length > 0 && (
               <div>
-                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-subtle">
-                  <CalendarClock className="h-3 w-3" aria-hidden /> Journées à venir · payer plusieurs jours d'avance
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-subtle">
+                  Lignes suivantes · payer d&apos;avance
                 </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {view.future.map((iso) => (
-                    <DayChip
-                      key={iso}
-                      iso={iso}
-                      net={view.netOf.get(iso) ?? 0}
+                <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1.5">
+                  {view.rest.map((p) => (
+                    <LineChip
+                      key={p.line}
+                      payable={p}
                       dailyAmount={stop.dailyAmount}
-                      isToday={false}
-                      selected={effectiveSelected.includes(iso)}
-                      onToggle={() => toggleDay(iso)}
+                      state="advance"
+                      selected={effectiveSelected.includes(p.line)}
+                      onToggle={() => toggleLine(p.line)}
                     />
                   ))}
                 </div>
@@ -392,26 +373,27 @@ export function CollectScreen({
         <div className="mt-2 flex min-h-[20px] items-center justify-between">
           <p className="text-xs text-subtle">
             {effectiveSelected.length > 0
-              ? `${effectiveSelected.length} journée${effectiveSelected.length > 1 ? "s" : ""} × ${formatFCFA(stop.dailyAmount)} · reste du cycle : ${formatFCFA(Math.max(0, cycleTotal - stop.balance))}`
-              : `Mise du jour : ${formatFCFA(stop.dailyAmount)} · reste du cycle : ${formatFCFA(Math.max(0, cycleTotal - stop.balance))}`}
+              ? `${effectiveSelected.length} ligne${effectiveSelected.length > 1 ? "s" : ""} × ${formatFCFA(stop.dailyAmount)} · reste du livret : ${formatFCFA(Math.max(0, cycleTotal - stop.balance))}`
+              : `Mise du jour : ${formatFCFA(stop.dailyAmount)} · reste du livret : ${formatFCFA(Math.max(0, cycleTotal - stop.balance))}`}
           </p>
         </div>
       </div>
 
-      {/* Répartition du montant sur les journées choisies */}
+      {/* Répartition du montant sur les lignes choisies */}
       {allocations.length > 0 && (
         <div className="mt-3 rounded-lg border border-line bg-[#F4F7FB] px-3 py-2.5">
           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-subtle">Répartition</p>
           <ul className="space-y-1">
             {allocations.map((a) => {
-              const rem = view.remaining(a.date);
-              const partialDay = a.amount < rem;
+              const p = view.payable.find((x) => x.line === a.line);
+              const partialDay = a.amount < stop.dailyAmount;
+              const isDue = view.due?.line === a.line;
               return (
-                <li key={a.date} className="flex items-center justify-between text-xs">
+                <li key={a.line} className="flex items-center justify-between text-xs">
                   <span className="font-medium text-ink">
-                    {a.date === view.tKey ? "Aujourd'hui" : formatDayShort(a.date)}
-                    {a.date > view.tKey && <span className="ml-1 font-medium text-primary/80">d'avance</span>}
-                    {a.date < view.tKey && <span className="ml-1 font-medium text-danger/80">rattrapage</span>}
+                    {p?.company ? "Mise entreprise" : `Ligne ${p?.lineInSheet ?? a.line} (feuille ${p?.sheet ?? "—"})`}
+                    {!isDue && <span className="ml-1 font-medium text-primary/80">d&apos;avance</span>}
+                    {isDue && view.late && <span className="ml-1 font-medium text-danger/80">rattrapage</span>}
                   </span>
                   <span className={cn("amount font-semibold", partialDay ? "text-warning" : "text-ink")}>
                     {formatFCFA(a.amount)}{partialDay && " (partiel)"}
@@ -427,17 +409,17 @@ export function CollectScreen({
       <div className="mt-3 space-y-1.5">
         {unallocated && (
           <p className="text-xs font-medium text-danger" role="alert">
-            Montant supérieur aux journées sélectionnées. Sélectionne davantage de journées à venir.
+            Montant supérieur aux lignes sélectionnées. Sélectionne davantage de lignes à venir.
           </p>
         )}
         {overMax && (
           <p className="text-xs font-medium text-danger" role="alert">
-            Montant supérieur au restant du cycle ({formatFCFA(Math.max(0, cycleTotal - stop.balance))}).
+            Montant supérieur au restant du livret ({formatFCFA(Math.max(0, cycleTotal - stop.balance))}).
           </p>
         )}
         {effectiveSelected.length === 0 && amount > 0 && (
           <p className="text-xs font-medium text-warning" role="alert">
-            Choisis au moins une journée pour attribuer l'encaissement.
+            Choisis au moins une ligne pour attribuer l&apos;encaissement.
           </p>
         )}
       </div>
@@ -467,7 +449,7 @@ export function CollectScreen({
         </span>
         {allocations.length > 1 && (
           <span className="text-[11px] font-medium text-primary-foreground/80">
-            {allocations.length} journées · du {formatDayShort(allocations[0].date)} au {formatDayShort(allocations[allocations.length - 1].date)}
+            {allocations.length} lignes · du n°{allocations[0].line} au n°{allocations[allocations.length - 1].line}
           </span>
         )}
       </Button>

@@ -8,9 +8,13 @@ import { requireUser, requireRole, requireTenant, errorResponse, ApiError, h } f
 import { appendAudit, verifyAuditChain } from "../lib/audit";
 import { assertWritable, getSubscription } from "../lib/tenant";
 import { hashPin } from "../lib/auth";
-import { passbookBalance, paidDays, missedDays, elapsedDays, isLate, buildDayLedger } from "../lib/domain";
+import { passbookBalance, formatFCFA } from "../lib/domain";
 import { planOf } from "../lib/plans";
-import { ensureShareToken, carnetUrl, whatsappShareUrl, shareMessage } from "../lib/share";
+import { ensureShareToken, ensureStructureSlug, carnetUrl, entityUrl, whatsappShareUrl } from "../lib/share";
+import {
+  LIVRET_DAYS, LIVRET_MONTHS, buildLivret, monthStart as livretMonthStart, serializeLivret,
+} from "../lib/livret";
+import { autoScale, recentPlanEvents, markPlanEventsRead } from "../lib/autoscale";
 
 const router = Router();
 
@@ -70,7 +74,7 @@ router.get(
       byArea.set(ar, (byArea.get(ar) ?? 0) + c.amount);
     }
 
-    // Carnets en retard, classés par nombre de jours manqués.
+    // Carnets en retard, classés par lignes manquées (livret annuel).
     const passbooks = await db.passbook.findMany({
       where: { tenantId, status: { in: ["active", "late"] } },
       include: { contributor: true, collections: true, agent: { select: { fullName: true } } },
@@ -78,21 +82,23 @@ router.get(
     const latePassbooks = passbooks
       .map((pb) => {
         const balance = passbookBalance(pb.collections);
+        const livret = buildLivret(pb, balance);
         return {
           passbookId: pb.id,
           number: pb.number,
+          label: pb.label,
           contributor: pb.contributor.fullName,
           neighborhood: pb.contributor.neighborhood ?? "",
           dailyAmount: pb.dailyAmount,
           cycleDays: pb.cycleDays,
           startsOn: pb.startsOn,
           balance,
-          paidDays: paidDays(balance, pb.dailyAmount),
-          missedDays: missedDays(pb, balance),
+          paidDays: livret.coveredLines,
+          missedDays: livret.missedLines,
           agent: pb.agent?.fullName ?? "—",
         };
       })
-      .filter((p) => isLate(p, p.balance, structure?.lateThreshold ?? 3))
+      .filter((p) => p.missedDays >= (structure?.lateThreshold ?? 3))
       .sort((a, b) => b.missedDays - a.missedDays);
 
     // Écarts de caisse non résolus.
@@ -116,6 +122,13 @@ router.get(
     const contributorsCount = await db.contributor.count({ where: { tenantId, status: "active" } });
     const activeThisMonth = new Set(collections.filter((c) => c.amount > 0).map((c) => c.passbook.contributorId)).size;
 
+    // ── Montée en charge automatique + alertes dirigeants + lien dédié de l'entité ──
+    const [scale, alerts, slug] = await Promise.all([
+      autoScale(tenantId, { actorId: user.id }),
+      recentPlanEvents(tenantId, 10),
+      ensureStructureSlug(tenantId),
+    ]);
+
     res.json({
       today: { total: todayTotal, count: todayColl.length, cash: todayColl.filter((c) => c.method === "cash").reduce((s, c) => s + c.amount, 0), mobile: todayColl.filter((c) => c.method === "mobile_money").reduce((s, c) => s + c.amount, 0) },
       week: { total: weekTotal, count: weekColl.length },
@@ -135,6 +148,17 @@ router.get(
       })),
       recent,
       contributors: { total: contributorsCount, activeThisMonth },
+      scaling: {
+        plan: scale.snapshot.plan,
+        planLabel: scale.snapshot.planLabel,
+        contributors: scale.snapshot.contributors,
+        agents: scale.snapshot.agents,
+        volumeMonth: scale.snapshot.volumeMonth,
+        requiredPlan: scale.requiredPlan,
+        upgraded: scale.upgraded,
+      },
+      alerts: { unread: alerts.unread, events: alerts.events },
+      entity: { name: structure?.name ?? "", slug, url: entityUrl(slug) },
     });
   })
 );
@@ -192,16 +216,19 @@ router.post(
       throw new ApiError("phone_taken", "Ce numéro a déjà un compte.");
     }
 
-    // Quota d'agents du palier courant (les agents collecteurs seulement) :
-    // interdiction de dépasser, invitation à monter de palier.
+    // Quota d'agents du palier courant — avec montée en charge AUTOMATIQUE :
+    // la création projette +1 agent ; si le palier ne suffit plus, le système
+    // bascule le palier supérieur et prévient les dirigeants, sans bloquer l'équipe.
+    let autoUpgrade: { from: string | null; to: string } | null = null;
     if (body.data.role === "agent") {
-      const sub = await getSubscription(tenantId);
-      const plan = planOf(sub?.plan);
-      const agentsCount = await db.user.count({ where: { tenantId, role: "agent" } });
+      const scale = await autoScale(tenantId, { extraAgents: 1, actorId: user.id });
+      autoUpgrade = scale.upgraded ? { from: scale.fromPlan, to: scale.toPlan } : null;
+      const plan = planOf(scale.snapshot.plan);
+      const agentsCount = scale.snapshot.agents;
       if (agentsCount >= plan.agents) {
         throw new ApiError(
           "agent_quota_reached",
-          `Ton palier ${plan.label} inclut ${plan.agents} agent${plan.agents > 1 ? "s" : ""} de collecte. Passe au palier supérieur pour en ajouter d'autres.`,
+          `Ton palier ${plan.label} inclut ${plan.agents} agent${plan.agents > 1 ? "s" : ""} de collecte et tu les as tous atteints : c'est le palier maximum. Contacte le support TontiHelm.`,
           403
         );
       }
@@ -232,11 +259,12 @@ router.post(
         phone: created.phone,
         role: created.role,
       },
+      autoUpgrade,
     });
   })
 );
 
-// ── GET /api/manager/contributors — liste des cotisants. ──
+// ── GET /api/manager/contributors — liste des cotisants, avec TOUS leurs carnets. ──
 router.get(
   "/contributors",
   h(async (req, res) => {
@@ -244,19 +272,35 @@ router.get(
     requireRole(user, ["manager", "owner", "controller"]);
     const tenantId = requireTenant(user);
 
-    const contributors = await db.contributor.findMany({
-      where: { tenantId },
-      include: {
-        agent: { select: { fullName: true } },
-        passbooks: { where: { status: { in: ["active", "late"] } }, include: { collections: true } },
-      },
-      orderBy: { fullName: "asc" },
-    });
+    const [contributors, slug] = await Promise.all([
+      db.contributor.findMany({
+        where: { tenantId },
+        include: {
+          agent: { select: { fullName: true } },
+          passbooks: { where: { status: { in: ["active", "late", "closing", "completed", "closed"] } }, include: { collections: true }, orderBy: { createdAt: "asc" } },
+        },
+        orderBy: { fullName: "asc" },
+      }),
+      ensureStructureSlug(tenantId),
+    ]);
 
     res.json({
       contributors: contributors.map((c) => {
-        const pb = c.passbooks[0];
-        const balance = pb ? passbookBalance(pb.collections) : 0;
+        const carnets = c.passbooks.map((pb) => {
+          const balance = passbookBalance(pb.collections);
+          const livret = buildLivret(pb, balance);
+          return {
+            id: pb.id,
+            number: pb.number,
+            label: pb.label,
+            dailyAmount: pb.dailyAmount,
+            balance,
+            coveredLines: livret.coveredLines,
+            missedLines: livret.missedLines,
+            currentSheet: livret.currentSheet,
+            status: pb.status,
+          };
+        });
         return {
           id: c.id,
           fullName: c.fullName,
@@ -268,19 +312,9 @@ router.get(
           status: c.status,
           createdAt: c.createdAt,
           shareToken: c.shareToken,
-          shareUrl: c.shareToken ? carnetUrl(c.shareToken) : null,
-          passbook: pb
-            ? {
-                id: pb.id,
-                number: pb.number,
-                dailyAmount: pb.dailyAmount,
-                cycleDays: pb.cycleDays,
-                balance,
-                paidDays: paidDays(balance, pb.dailyAmount),
-                missedDays: missedDays(pb, balance),
-                status: pb.status,
-              }
-            : null,
+          shareUrl: c.shareToken ? carnetUrl(slug, c.shareToken) : null,
+          carnets,
+          activeCarnets: carnets.filter((k) => k.status === "active" || k.status === "late").length,
         };
       }),
     });
@@ -315,14 +349,15 @@ router.post(
     });
     if (!agent) throw new ApiError("not_found", "Agent introuvable dans ta structure.", 404);
 
-    // Quota de cotisants du palier courant : interdiction de dépasser, invitation à monter de palier.
-    const sub = await getSubscription(tenantId);
-    const plan = planOf(sub?.plan);
-    const contributorsCount = await db.contributor.count({ where: { tenantId, status: "active" } });
+    // ── Montée en charge automatique : la création projette +1 cotisant ; le
+    // système scale le palier tout seul au besoin (alerte aux dirigeants incluse). ──
+    const scale = await autoScale(tenantId, { extraContributors: 1, actorId: user.id });
+    const contributorsCount = scale.snapshot.contributors;
+    const plan = planOf(scale.snapshot.plan);
     if (contributorsCount >= plan.contributors) {
       throw new ApiError(
         "contributor_quota_reached",
-        `Ton palier ${plan.label} inclut ${plan.contributors} cotisants. Passe au palier supérieur pour enregistrer d'autres cotisants.`,
+        `Ton palier ${plan.label} inclut ${plan.contributors} cotisants et tu les as tous atteints : c'est le palier maximum. Contacte le support TontiHelm.`,
         403
       );
     }
@@ -371,7 +406,7 @@ router.post(
   })
 );
 
-// ── GET /api/manager/passbooks — liste des carnets avec soldes. ──
+// ── GET /api/manager/passbooks — liste des carnets (livrets annuels) avec soldes. ──
 router.get(
   "/passbooks",
   h(async (req, res) => {
@@ -393,10 +428,12 @@ router.get(
     res.json({
       passbooks: passbooks.map((pb) => {
         const balance = passbookBalance(pb.collections);
-        const late = pb.status === "active" && isLate(pb, balance, structure?.lateThreshold ?? 3);
+        const livret = buildLivret(pb, balance);
+        const late = pb.status === "active" && livret.missedLines >= (structure?.lateThreshold ?? 3);
         return {
           id: pb.id,
           number: pb.number,
+          label: pb.label,
           contributor: pb.contributor.fullName,
           phone: pb.contributor.phone,
           neighborhood: pb.contributor.neighborhood,
@@ -406,21 +443,23 @@ router.get(
           startsOn: pb.startsOn,
           status: late ? "late" : pb.status,
           balance,
-          paidDays: paidDays(balance, pb.dailyAmount),
-          missedDays: missedDays(pb, balance),
-          cycleTotal: pb.dailyAmount * pb.cycleDays,
+          coveredLines: livret.coveredLines,
+          missedLines: livret.missedLines,
+          currentSheet: livret.currentSheet,
+          cycleTotal: livret.recap.attendu,
         };
       }),
     });
   })
 );
 
-// ── POST /api/manager/passbooks — nouveau carnet (M2). ──
+// ── POST /api/manager/passbooks — nouveau livret annuel pour un cotisant (M2). ──
+// La mise journalière suffit : le livret démarre automatiquement au mois en
+// cours et compte 12 feuilles mensuelles + la 13e feuille de récapitulatif.
 const createPassbookSchema = z.object({
   contributorId: z.string().min(1, "Choisis le cotisant."),
   dailyAmount: z.number().int().min(100, "La mise journalière minimum est de 100 FCFA."),
-  cycleDays: z.number().int().min(1, "Durée du cycle invalide.").max(366, "Durée du cycle invalide."),
-  startsOn: z.string().min(8, "Date de début invalide."),
+  label: z.string().max(60, "Le surnom du carnet est trop long.").optional().or(z.literal("")),
 });
 
 router.post(
@@ -443,6 +482,7 @@ router.post(
 
     const last = await db.passbook.findFirst({ where: { tenantId }, orderBy: { number: "desc" } });
     const nextNumber = String((last ? parseInt(last.number, 10) : 100) + 1).padStart(4, "0");
+    const startsOn = livretMonthStart(new Date());
 
     const passbook = await db.passbook.create({
       data: {
@@ -451,8 +491,9 @@ router.post(
         agentId: contributor.agentId,
         number: nextNumber,
         dailyAmount: body.data.dailyAmount,
-        cycleDays: body.data.cycleDays,
-        startsOn: new Date(body.data.startsOn),
+        cycleDays: LIVRET_DAYS,
+        startsOn,
+        label: body.data.label || null,
       },
     });
     await appendAudit({
@@ -463,22 +504,22 @@ router.post(
       entityId: passbook.id,
       payload: {
         number: nextNumber,
+        label: passbook.label,
         contributor: contributor.fullName,
         dailyAmount: body.data.dailyAmount,
-        cycleDays: body.data.cycleDays,
-        startsOn: body.data.startsOn,
+        months: LIVRET_MONTHS,
+        startsOn: startsOn.toISOString().slice(0, 10),
       },
     });
 
-    res.json({ passbook: { id: passbook.id, number: nextNumber } });
+    res.json({ passbook: { id: passbook.id, number: nextNumber, label: passbook.label } });
   })
 );
 
-// ── GET /api/manager/passbooks/:id/carnet — carnet détaillé (vue calendrier réel). ──
-// Renvoie le carnet, TOUTES ses écritures avec leurs dates réelles, et les règles de
-// la structure : le frontend reconstruit le calendrier calendaire vrai (mois, jours,
-// bornes du cycle) à partir de startsOn + cycleDays et positionne chaque marquage
-// à sa date exacte.
+// ── GET /api/manager/passbooks/:id/carnet — livret annuel détaillé. ──
+// Renvoie le livret complet : 12 feuilles mensuelles (31 lignes, la 31e = mise
+// de l'entreprise, champs avance/reste) + la 13e feuille de récapitulatif,
+// l'état de la signature de fin de souscription, et toutes les écritures.
 router.get(
   "/passbooks/:id/carnet",
   h(async (req, res) => {
@@ -504,25 +545,14 @@ router.get(
 
     const structure = await db.structure.findUnique({ where: { id: tenantId } });
     const balance = passbookBalance(passbook.collections);
-    const late = passbook.status === "active" && isLate(passbook, balance, structure?.lateThreshold ?? 3);
-
-    // Registre des journées du cycle (multi-jours) : le calendrier marque chaque
-    // journée réellement couverte — rattrapage, jour courant comme jours payés d'avance.
-    const ledger = buildDayLedger(
-      passbook,
-      passbook.collections.map((c) => ({
-        id: c.id,
-        amount: c.amount,
-        coversOn: c.coversOn,
-        collectedAt: c.collectedAt,
-        reversesId: c.reversesId,
-      }))
-    );
+    const livret = buildLivret(passbook, balance);
+    const late = passbook.status === "active" && livret.missedLines >= (structure?.lateThreshold ?? 3);
 
     res.json({
       passbook: {
         id: passbook.id,
         number: passbook.number,
+        label: passbook.label,
         dailyAmount: passbook.dailyAmount,
         cycleDays: passbook.cycleDays,
         startsOn: passbook.startsOn,
@@ -530,10 +560,10 @@ router.get(
         closedAt: passbook.closedAt,
         createdAt: passbook.createdAt,
         balance,
-        paidDays: paidDays(balance, passbook.dailyAmount),
-        missedDays: missedDays(passbook, balance),
-        cycleTotal: passbook.dailyAmount * passbook.cycleDays,
-        elapsedDays: elapsedDays(passbook, new Date()),
+        coveredLines: livret.coveredLines,
+        missedLines: livret.missedLines,
+        currentSheet: livret.currentSheet,
+        cycleTotal: livret.recap.attendu,
         contributor: {
           id: passbook.contributor.id,
           fullName: passbook.contributor.fullName,
@@ -543,7 +573,15 @@ router.get(
         },
         agent: passbook.agent?.fullName ?? "—",
       },
-      days: ledger.map((d) => ({ date: d.date.toISOString().slice(0, 10), net: d.net })),
+      livret: serializeLivret(livret),
+      completion: {
+        status: passbook.status,
+        completedAt: passbook.completedAt,
+        payoutAmount: passbook.payoutAmount,
+        companyAmount: passbook.companyAmount,
+        signatureName: passbook.signatureName,
+        signedAt: passbook.signedAt,
+      },
       collections: passbook.collections.map((c) => ({
         id: c.id,
         amount: c.amount,
@@ -559,6 +597,196 @@ router.get(
         lateThreshold: structure?.lateThreshold ?? 3,
       },
     });
+  })
+);
+
+// ── POST /api/manager/passbooks/:id/complete — fin de souscription du client. ──
+// Le client a fini de cotiser et prend définitivement son argent : le système
+// calcule le récapitulatif (part entreprise = 31es mises, part client), prépare
+// la remise et renvoie le lien de signature — le client signe SUR SON lien de
+// carnet pour certifier qu'il a fini et pris son argent ; le carnet est alors
+// archivé automatiquement (module Archive).
+router.post(
+  "/passbooks/:id/complete",
+  h(async (req, res) => {
+    const user = await requireUser(req);
+    requireRole(user, ["manager", "owner", "agent"]);
+    const tenantId = requireTenant(user);
+    await assertWritable(tenantId);
+
+    const where =
+      user.role === "agent"
+        ? { id: req.params.id, tenantId, agentId: user.id }
+        : { id: req.params.id, tenantId };
+    const passbook = await db.passbook.findFirst({
+      where,
+      include: { contributor: true, collections: true },
+    });
+    if (!passbook) throw new ApiError("not_found", "Carnet introuvable.", 404);
+    if (passbook.status === "completed") {
+      throw new ApiError("bad_state", "Ce carnet est déjà clôturé et signé.", 409);
+    }
+    if (passbook.status === "closing") {
+      // Idempotent : la remise est déjà préparée, on renvoie le lien de signature.
+      const shareUrl = await ensureShareToken(passbook.contributorId);
+      res.json({
+        passbook: { id: passbook.id, number: passbook.number, status: "closing" },
+        payoutAmount: passbook.payoutAmount,
+        companyAmount: passbook.companyAmount,
+        signUrl: shareUrl,
+        message: "Remise déjà préparée : le client doit signer sur son lien de carnet.",
+      });
+      return;
+    }
+
+    const balance = passbookBalance(passbook.collections);
+    const livret = buildLivret(passbook, balance);
+    const payoutAmount = livret.recap.partClient;
+    const companyAmount = livret.recap.partEntreprise;
+
+    await db.passbook.update({
+      where: { id: passbook.id },
+      data: {
+        status: "closing",
+        closedAt: new Date(),
+        payoutAmount,
+        companyAmount,
+      },
+    });
+    await appendAudit({
+      tenantId,
+      actorId: user.id,
+      action: "passbook_completion_initiated",
+      entity: "passbook",
+      entityId: passbook.id,
+      payload: {
+        number: passbook.number,
+        contributor: passbook.contributor.fullName,
+        totalEncaisse: livret.recap.encaisse,
+        payoutAmount,
+        companyAmount,
+      },
+    });
+
+    const shareUrl = await ensureShareToken(passbook.contributorId);
+    res.json({
+      passbook: { id: passbook.id, number: passbook.number, status: "closing" },
+      totalEncaisse: livret.recap.encaisse,
+      payoutAmount,
+      companyAmount,
+      signUrl: shareUrl,
+      message:
+        `Remise préparée : ${formatFCFA(payoutAmount)} à remettre à ${passbook.contributor.fullName} ` +
+        `(part entreprise : ${formatFCFA(companyAmount)}). Envoie-lui son lien de carnet : il y signe ` +
+        `pour certifier qu'il a pris son argent, puis le carnet sera archivé automatiquement.`,
+    });
+  })
+);
+
+// ── GET /api/manager/archive — carnets archivés (fin de souscription signée). ──
+// Catalogue année par année, par quartier et par client : chaque entrée conserve
+// le numéro et le surnom du carnet, les totaux (encaissé, part entreprise, part
+// client) et la signature numérique du client.
+router.get(
+  "/archive",
+  h(async (req, res) => {
+    const user = await requireUser(req);
+    requireRole(user, ["manager", "owner", "controller"]);
+    const tenantId = requireTenant(user);
+
+    const year = parseInt((req.query.year as string) ?? "", 10) || null;
+    const neighborhood = ((req.query.neighborhood as string) ?? "").trim() || null;
+    const contributorId = ((req.query.contributorId as string) ?? "").trim() || null;
+    const search = ((req.query.search as string) ?? "").toLowerCase();
+
+    const whereCompleted = { tenantId, status: "completed" as const };
+    const archived = await db.passbook.findMany({
+      where: whereCompleted,
+      include: { contributor: true, agent: { select: { fullName: true } } },
+      orderBy: [{ completedAt: "desc" }],
+    });
+
+    // Facettes : années et quartiers disponibles.
+    const years = [...new Set(archived.map((p) => p.completedAt?.getUTCFullYear() ?? 0))].sort((a, b) => b - a);
+    const neighborhoodsList = [...new Set(archived.map((p) => p.contributor.neighborhood ?? "—"))].sort((a, b) =>
+      a.localeCompare(b, "fr")
+    );
+
+    const items = archived
+      .filter((p) => (year ? (p.completedAt?.getUTCFullYear() ?? 0) === year : true))
+      .filter((p) => (neighborhood ? (p.contributor.neighborhood ?? "—") === neighborhood : true))
+      .filter((p) => (contributorId ? p.contributorId === contributorId : true))
+      .filter((p) =>
+        search
+          ? p.contributor.fullName.toLowerCase().includes(search) ||
+            p.number.includes(search) ||
+            (p.label ?? "").toLowerCase().includes(search)
+          : true
+      )
+      .map((p) => {
+        return {
+          id: p.id,
+          number: p.number,
+          label: p.label,
+          dailyAmount: p.dailyAmount,
+          contributor: {
+            id: p.contributor.id,
+            fullName: p.contributor.fullName,
+            neighborhood: p.contributor.neighborhood,
+          },
+          agent: p.agent?.fullName ?? "—",
+          completedAt: p.completedAt,
+          year: p.completedAt?.getUTCFullYear() ?? 0,
+          totalEncaisse: (p.payoutAmount ?? 0) + (p.companyAmount ?? 0),
+          payoutAmount: p.payoutAmount,
+          companyAmount: p.companyAmount,
+          signature: {
+            name: p.signatureName,
+            signedAt: p.signedAt,
+          },
+        };
+      });
+
+    const totals = items.reduce(
+      (acc, it) => ({
+        count: acc.count + 1,
+        totalEncaisse: acc.totalEncaisse + it.totalEncaisse,
+        payoutAmount: acc.payoutAmount + (it.payoutAmount ?? 0),
+        companyAmount: acc.companyAmount + (it.companyAmount ?? 0),
+      }),
+      { count: 0, totalEncaisse: 0, payoutAmount: 0, companyAmount: 0 }
+    );
+
+    res.json({
+      years,
+      neighborhoods: neighborhoodsList,
+      items,
+      totals,
+    });
+  })
+);
+
+// ── GET /api/manager/alerts — alertes de palier aux dirigeants (cloche). ──
+router.get(
+  "/alerts",
+  h(async (req, res) => {
+    const user = await requireUser(req);
+    requireRole(user, ["manager", "owner", "controller"]);
+    const tenantId = requireTenant(user);
+    const alerts = await recentPlanEvents(tenantId, 20);
+    res.json(alerts);
+  })
+);
+
+// ── POST /api/manager/alerts/read — marque toutes les alertes comme lues. ──
+router.post(
+  "/alerts/read",
+  h(async (req, res) => {
+    const user = await requireUser(req);
+    requireRole(user, ["manager", "owner", "controller"]);
+    const tenantId = requireTenant(user);
+    const read = await markPlanEventsRead(tenantId);
+    res.json({ read });
   })
 );
 
@@ -874,9 +1102,9 @@ router.post(
     }
 
     const balance = passbookBalance(passbook.collections);
-    const missed = missedDays(passbook, balance);
+    const missed = buildLivret(passbook, balance).missedLines;
     if (missed < 1) {
-      throw new ApiError("bad_state", "Ce carnet n'a aucun jour manqué : aucune relance à envoyer.", 400);
+      throw new ApiError("bad_state", "Ce carnet n'a aucune ligne manquée : aucune relance à envoyer.", 400);
     }
 
     // Lien personnel du carnet : le cotisant y voit les jours manqués et verse.
@@ -916,7 +1144,7 @@ router.post(
   })
 );
 
-// ── GET /api/manager/billing — abonnement, factures et usage de la structure (M9). ──
+// ── GET /api/manager/billing — abonnement, montée en charge, factures et usage (M9). ──
 router.get(
   "/billing",
   h(async (req, res) => {
@@ -924,20 +1152,29 @@ router.get(
     requireRole(user, ["manager", "owner", "controller"]);
     const tenantId = requireTenant(user);
 
-    const [structure, subscription, invoices, agentsCount, contributorsCount] =
+    const [structure, subscription, invoices, agentsCount, contributorsCount, alerts, slug] =
       await Promise.all([
         db.structure.findUnique({ where: { id: tenantId } }),
         db.subscription.findUnique({ where: { tenantId } }),
         db.invoice.findMany({ where: { tenantId }, orderBy: { period: "desc" } }),
         db.user.count({ where: { tenantId, role: "agent" } }),
         db.contributor.count({ where: { tenantId, status: "active" } }),
+        recentPlanEvents(tenantId, 20),
+        ensureStructureSlug(tenantId),
       ]);
 
     const planKey = subscription?.plan ?? "demarrage";
     const plan = planOf(planKey);
+    const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const volumeAgg = await db.collection.aggregate({
+      where: { tenantId, collectedAt: { gte: since30 } },
+      _sum: { amount: true },
+    });
+    const volumeMonth = Math.max(0, volumeAgg._sum.amount ?? 0);
 
     res.json({
       structure: { name: structure?.name, status: structure?.status },
+      entity: { slug, url: entityUrl(slug) },
       subscription: subscription
         ? {
             plan: planKey,
@@ -957,7 +1194,9 @@ router.get(
         extraContributors: Math.max(0, contributorsCount - plan.contributors),
         extraAgents: Math.max(0, agentsCount - plan.agents),
         remindersIncluded: plan.reminders,
+        volumeMonth,
       },
+      alerts,
       invoices: invoices.map((inv) => ({
         id: inv.id,
         period: inv.period,

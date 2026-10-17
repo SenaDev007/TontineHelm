@@ -23,6 +23,9 @@ model Structure {
   commissionDays Int      @default(1) // règle jours : valeur × mise journalière
   lateThreshold  Int      @default(3) // jours manqués avant statut « en retard »
   rejectionNote  String?
+  // Lien dédié de l'entité : /e/{slug} — portail propre à chaque PME/particulier,
+  // utilisé par ses agents, ses gérants et les liens de carnet de ses clients.
+  slug           String?  @unique
   createdAt      DateTime @default(now())
 
   users         User[]
@@ -35,6 +38,7 @@ model Structure {
   auditLogs     AuditLog[]
   subscription  Subscription?
   invoices      Invoice[]
+  planEvents    PlanEvent[]
 
   @@index([status])
 }
@@ -104,9 +108,23 @@ model Passbook {
   dailyAmount   Int
   cycleDays     Int
   startsOn      DateTime
-  status        String    @default("active") // active | late | closed | withdrawn
+  status        String    @default("active") // active | late | closed | withdrawn | closing | completed
   closedAt      DateTime?
   createdAt     DateTime  @default(now())
+
+  // ── Livret annuel : surnom du carnet (un client peut prendre plusieurs carnets,
+  // chacun dédié à un usage — « boutique », « école », etc.). ──
+  label         String?
+
+  // ── Fin de souscription : récapitulatif + signature numérique du client ──
+  // Le gérant déclenche la remise ; le client certifie sur SON lien de carnet
+  // qu'il a fini de cotiser et pris son argent ; le carnet est alors archivé.
+  completedAt   DateTime?
+  payoutAmount  Int? // montant remis au client
+  companyAmount Int? // part de l'entreprise (31es mises)
+  signatureName String? // nom saisi par le signataire
+  signatureData String? // tracé de signature (PNG dataURL, léger)
+  signedAt      DateTime?
 
   contributor Contributor  @relation(fields: [contributorId], references: [id])
   agent       User         @relation("AgentPassbooks", fields: [agentId], references: [id])
@@ -117,6 +135,7 @@ model Passbook {
   @@unique([tenantId, number])
   @@index([tenantId, status])
   @@index([agentId])
+  @@index([tenantId, status, completedAt])
 }
 
 model Collection {
@@ -277,4 +296,26 @@ model Invoice {
   structure Structure @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId, period])
+}
+
+// ── Alertes de palier aux dirigeants (montée en charge automatique) ──
+// Le système surveille cotisants actifs, agents et volume encaissé : à l'approche
+// des quotas il prévient (« tu vas scaler »), au dépassement il bascule le palier
+// supérieur tout seul et en accuse réception aux dirigeants.
+model PlanEvent {
+  id           String   @id @default(cuid())
+  tenantId     String
+  kind         String // 'scaling_warning' | 'plan_upgraded'
+  fromPlan     String?
+  toPlan       String
+  contributors Int      @default(0) // cotisants actifs au moment de l'événement
+  agents       Int      @default(0)
+  volumeMonth  Int      @default(0) // FCFA encaissés sur 30 jours glissants
+  message      String
+  readAt       DateTime?
+  createdAt    DateTime @default(now())
+
+  structure Structure @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
 }

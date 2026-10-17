@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { SubscriptionStatusBadge } from "../StatusBadge";
 import { BillingData, SessionUser, SUB_STATUS, formatFCFA } from "@/lib/types";
 import { get } from "@/lib/client";
-import { CreditCard, Smartphone, Users, CheckCircle2, Clock, BellRing, Link2 } from "lucide-react";
+import { Building2, Copy, CreditCard, Smartphone, Users, CheckCircle2, Clock, BellRing, Link2, TrendingUp } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 export function BillingTab({ user }: { user: SessionUser }) {
@@ -85,8 +85,8 @@ export function BillingTab({ user }: { user: SessionUser }) {
         </CardContent>
       </Card>
 
-      {/* Usage et quotas */}
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* Usage et quotas — le système scale tout seul au dépassement */}
+      <div className="grid gap-4 md:grid-cols-3">
         <Card className="border-line">
           <CardHeader className="pb-3">
             <CardTitle className="font-display flex items-center gap-2 text-base font-bold">
@@ -99,11 +99,10 @@ export function BillingTab({ user }: { user: SessionUser }) {
               <p className="text-sm text-subtle">sur {usage.contributorsQuota} inclus</p>
             </div>
             <Progress value={Math.min(100, (usage.contributors / usage.contributorsQuota) * 100)} className="h-2" aria-label={`Quota cotisants : ${usage.contributors} sur ${usage.contributorsQuota}`} />
-            {usage.contributors >= usage.contributorsQuota ? (
-              <p className="text-xs font-medium text-warning">Palier atteint : passe au palier supérieur pour enregistrer d&apos;autres cotisants.</p>
-            ) : usage.contributorsQuota - usage.contributors <= 5 ? (
-              <p className="text-xs text-subtle">Il te reste {usage.contributorsQuota - usage.contributors} place{(usage.contributorsQuota - usage.contributors) > 1 ? "s" : ""} de cotisants sur ce palier.</p>
-            ) : null}
+            <p className="text-xs leading-relaxed text-subtle">
+              Au dépassement, le palier supérieur s&apos;active automatiquement (alerte à tes dirigeants) —
+              plus aucun blocage à la création d&apos;un client.
+            </p>
           </CardContent>
         </Card>
         <Card className="border-line">
@@ -118,12 +117,87 @@ export function BillingTab({ user }: { user: SessionUser }) {
               <p className="text-sm text-subtle">sur {usage.agentsQuota} inclus</p>
             </div>
             <Progress value={Math.min(100, (usage.agents / usage.agentsQuota) * 100)} className="h-2" aria-label={`Quota agents : ${usage.agents} sur ${usage.agentsQuota}`} />
-            {usage.agents >= usage.agentsQuota ? (
-              <p className="text-xs font-medium text-warning">Palier atteint : passe au palier supérieur pour ajouter d&apos;autres agents.</p>
-            ) : null}
+            <p className="text-xs leading-relaxed text-subtle">Même règle pour l&apos;équipe : la montée en charge est automatique.</p>
+          </CardContent>
+        </Card>
+        <Card className="border-line">
+          <CardHeader className="pb-3">
+            <CardTitle className="font-display flex items-center gap-2 text-base font-bold">
+              <TrendingUp className="h-4 w-4 tontihelm-icon text-primary" aria-hidden /> Argent suivi (30 j)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-end justify-between">
+              <p className="amount font-display text-2xl font-bold text-ink">{formatFCFA(usage.volumeMonth)}</p>
+              <p className="text-sm text-subtle">encaissés glissants</p>
+            </div>
+            <p className="text-xs leading-relaxed text-subtle">
+              Le volume d&apos;argent encaissé fait aussi monter le palier automatiquement : 2 M FCFA sur
+              30 jours → Pro, 20 M FCFA → Institution.
+            </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Historique des alertes de palier (montée en charge) */}
+      {data.alerts && data.alerts.events.length > 0 && (
+        <Card className="border-line">
+          <CardHeader className="pb-3">
+            <CardTitle className="font-display flex items-center gap-2 text-base font-bold">
+              <TrendingUp className="h-4 w-4 tontihelm-icon text-primary" aria-hidden /> Montée en charge — historique
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {data.alerts.events.slice(0, 8).map((e) => (
+              <div
+                key={e.id}
+                className={e.kind === "plan_upgraded"
+                  ? "rounded-lg border border-[#B5E8E5] bg-[#F6FDFB] p-3"
+                  : "rounded-lg border border-[#F0D48A]/60 bg-[#FFFCF2] p-3"}
+              >
+                <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide">
+                  <TrendingUp className={e.kind === "plan_upgraded" ? "h-3.5 w-3.5 text-[#00806B]" : "h-3.5 w-3.5 text-[#A66A00]"} aria-hidden />
+                  {e.kind === "plan_upgraded" ? "Palier supérieur activé automatiquement" : "Alerte : tu vas scaler"}
+                  <span className="ml-auto font-normal text-subtle">
+                    {new Date(e.createdAt).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}
+                  </span>
+                </p>
+                <p className="mt-1.5 text-xs leading-relaxed text-ink">{e.message}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Lien dédié de l'entité */}
+      {data.entity && (
+        <Card className="border-line">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#EEF4FD] text-primary">
+              <Building2 className="h-5 w-5" aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-ink">Le lien dédié de ton entité</p>
+              <p className="mt-0.5 break-all font-mono text-xs text-subtle">{data.entity.url}</p>
+              <p className="mt-1 text-xs leading-relaxed text-subtle">
+                Connexions de tes agents/gérants et liens de carnet de tes clients : tout reste rattaché à
+                ton entité — chaque structure a son propre lien.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 shrink-0 border-line"
+              onClick={() => {
+                void navigator.clipboard?.writeText(data.entity!.url);
+                toast({ title: "Lien de ton entité copié." });
+              }}
+            >
+              <Copy className="h-4 w-4" aria-hidden /> Copier
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="border-line">
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">

@@ -15,13 +15,15 @@ import { ClosingsTab } from "./ClosingsTab";
 import { AuditTab } from "./AuditTab";
 import { BillingTab } from "./BillingTab";
 import { TeamTab } from "./TeamTab";
+import { ArchiveTab } from "./ArchiveTab";
+import { AlertsBell } from "./AlertsBell";
 import {
   LayoutDashboard, Users, BookOpen, Receipt, Scale, FileClock,
-  CreditCard, Menu, LogOut, ShieldCheck, UserCog,
+  CreditCard, Menu, LogOut, ShieldCheck, UserCog, Archive,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Tab = "dashboard" | "team" | "contributors" | "passbooks" | "collections" | "closings" | "audit" | "billing";
+type Tab = "dashboard" | "team" | "contributors" | "passbooks" | "collections" | "closings" | "archive" | "audit" | "billing";
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
@@ -30,6 +32,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "passbooks", label: "Carnets", icon: BookOpen },
   { id: "collections", label: "Encaissements", icon: Receipt },
   { id: "closings", label: "Clôtures", icon: Scale },
+  { id: "archive", label: "Archive", icon: Archive },
   { id: "audit", label: "Journal d'audit", icon: FileClock },
   { id: "billing", label: "Abonnement", icon: CreditCard },
 ];
@@ -145,7 +148,10 @@ export function ManagerApp({
               <p className="truncate text-sm font-semibold text-ink">{visibleTabs.find((t) => t.id === tab)?.label}</p>
               <p className="truncate text-xs text-subtle">{spaceLabel} · {user.structureName}</p>
             </div>
-            <LogoMark size={30} />
+            <div className="flex shrink-0 items-center gap-2">
+              <AlertsBell />
+              <LogoMark size={30} />
+            </div>
           </div>
         </header>
 
@@ -165,14 +171,17 @@ export function ManagerApp({
                 {spaceLabel} · {user.structureName} · <span className="font-medium text-ink">{user.fullName}</span>
               </p>
             </div>
-            {subscription && (
-              <Badge variant="outline" className={cn(
-                "rounded-md px-3 py-1 text-xs font-medium",
-                subscription.status === "active" ? "border-[#B5E8E5] bg-[#DFF6F4] text-[#00806B]" : "border-[#F5C6C0] bg-[#FDECEA] text-[#B3261E]"
-              )}>
-                {subscription.plan === "pro" ? "Palier Pro" : subscription.plan === "demarrage" ? "Palier Démarrage" : subscription.plan === "institution" ? "Palier Institution" : subscription.plan}
-              </Badge>
-            )}
+            <div className="flex items-center gap-3">
+              {subscription && (
+                <Badge variant="outline" className={cn(
+                  "rounded-md px-3 py-1 text-xs font-medium",
+                  subscription.status === "active" ? "border-[#B5E8E5] bg-[#DFF6F4] text-[#00806B]" : "border-[#F5C6C0] bg-[#FDECEA] text-[#B3261E]"
+                )}>
+                  {subscription.plan === "pro" ? "Palier Pro" : subscription.plan === "demarrage" ? "Palier Démarrage" : subscription.plan === "institution" ? "Palier Institution" : subscription.plan}
+                </Badge>
+              )}
+              <AlertsBell />
+            </div>
           </div>
         </div>
 
@@ -183,6 +192,7 @@ export function ManagerApp({
           {tab === "passbooks" && <PassbooksTab readOnly={readOnly} />}
           {tab === "collections" && <CollectionsTab readOnly={readOnly} structureName={user.structureName ?? "Structure"} />}
           {tab === "closings" && <ClosingsTab readOnly={readOnly} />}
+          {tab === "archive" && <ArchiveTab />}
           {tab === "audit" && <AuditTab structureName={user.structureName ?? "Structure"} />}
           {tab === "billing" && isOwner && <BillingTab user={user} />}
         </main>

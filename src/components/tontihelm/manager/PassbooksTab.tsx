@@ -1,6 +1,7 @@
 "use client";
-// TontiHelm — liste des carnets (M2) : mise journalière, durée du cycle, statut, solde.
-// Chaque carnet s'ouvre en vue calendrier réel (marquage journalier dynamique).
+// TontiHelm — liste des carnets (livrets annuels) : mise journalière, feuille en
+// cours, statut, solde. Chaque carnet s'ouvre en vue livret (12 feuilles + récap)
+// avec préparation de la remise de fin de souscription.
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ import { CarnetCalendar } from "./CarnetCalendar";
 import { ContributorRow, PassbookRow, formatFCFA } from "@/lib/types";
 import { get, isOfflineQueued, post } from "@/lib/client";
 import { useSyncDone } from "@/lib/offline/hooks";
-import { BookOpen, Search, CalendarDays, User, BellRing } from "lucide-react";
+import { BookOpen, Search, CalendarDays, BellRing } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
@@ -26,7 +27,7 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
   const [openCarnetId, setOpenCarnetId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
-    contributorId: "", dailyAmount: "", cycleDays: "31", startsOn: new Date().toISOString().slice(0, 10),
+    contributorId: "", dailyAmount: "", label: "",
   });
 
   const load = () => {
@@ -79,17 +80,16 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
       const res = await post("/api/manager/passbooks", {
         contributorId: form.contributorId,
         dailyAmount: parseInt(form.dailyAmount, 10) || 0,
-        cycleDays: parseInt(form.cycleDays, 10) || 0,
-        startsOn: form.startsOn,
+        label: form.label.trim(),
       });
       if (isOfflineQueued(res)) {
         toast({ title: "Enregistré hors ligne.", description: "Le carnet partira au serveur dès le retour du réseau." });
       } else {
-        toast({ title: "Carnet créé.", description: "Il apparaît dans la tournée de l'agent référent." });
+        toast({ title: "Livret annuel créé.", description: "12 feuilles mensuelles démarrent ce mois-ci — visible dans la tournée de l'agent référent." });
         load();
       }
       setOpen(false);
-      setForm({ ...form, contributorId: "", dailyAmount: "" });
+      setForm({ ...form, contributorId: "", dailyAmount: "", label: "" });
     } catch (err) {
       toast({ title: "Création impossible", description: err instanceof Error ? err.message : "Réessaie." });
     } finally {
@@ -123,8 +123,8 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle className="font-display">Nouveau carnet</DialogTitle>
-                <DialogDescription>Mise journalière, durée du cycle et date de début. La commission de la structure s'applique à la clôture du cycle.</DialogDescription>
+                <DialogTitle className="font-display">Nouveau carnet (livret annuel)</DialogTitle>
+                <DialogDescription>Choisis le cotisant et sa mise journalière : le livret de 12 feuilles mensuelles démarre automatiquement au mois en cours, avec sa 13e feuille de récapitulatif.</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">
                 <div className="space-y-2">
@@ -146,23 +146,20 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                     <Input id="pb-amount" inputMode="numeric" value={form.dailyAmount} onChange={(e) => setForm({ ...form, dailyAmount: e.target.value.replace(/\D/g, "") })} className="amount h-11 border-line" placeholder="500" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="pb-cycle">Durée du cycle (jours)</Label>
-                    <Input id="pb-cycle" inputMode="numeric" value={form.cycleDays} onChange={(e) => setForm({ ...form, cycleDays: e.target.value.replace(/\D/g, "") })} className="amount h-11 border-line" placeholder="31" />
+                    <Label htmlFor="pb-label">Surnom du carnet</Label>
+                    <Input id="pb-label" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className="h-11 border-line" placeholder="Boutique, école…" />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="pb-start">Date de début</Label>
-                  <Input id="pb-start" type="date" value={form.startsOn} onChange={(e) => setForm({ ...form, startsOn: e.target.value })} className="h-11 border-line" />
-                </div>
                 <p className="rounded-lg bg-[#F4F7FB] p-3 text-xs leading-relaxed text-subtle">
-                  Commission de la structure : 1 jour de cotisation par cycle (paramétrable). Un cycle de 31
-                  jours à 500 FCFA laisse 500 FCFA de commission et 15 000 FCFA restitués au cotisant.
+                  Chaque feuille mensuelle compte 31 mises : les 30 premières créditent le cotisant, la 31e
+                  revient à l&apos;entreprise (marquée, sans inscription). Sur l&apos;année : 12 mises pour
+                  l&apos;entreprise, le reste lui est restitué à la fin de sa souscription (signature numérique).
                 </p>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOpen(false)} className="border-line">Annuler</Button>
                 <Button onClick={submit} disabled={submitting || !form.contributorId} className="bg-primary text-primary-foreground hover:bg-primary-hover">
-                  {submitting ? "Création…" : "Créer le carnet"}
+                  {submitting ? "Création…" : "Créer le livret annuel"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -179,9 +176,9 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                 <TableHead>Carnet</TableHead>
                 <TableHead>Cotisant</TableHead>
                 <TableHead>Agent</TableHead>
-                <TableHead>Mise / cycle</TableHead>
+                <TableHead>Mise / livret</TableHead>
                 <TableHead className="text-right">Solde</TableHead>
-                <TableHead className="text-right">Jours</TableHead>
+                <TableHead className="text-right">Feuille / lignes</TableHead>
                 <TableHead>Statut</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -189,24 +186,27 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
             <TableBody>
               {filtered.map((r) => (
                 <TableRow key={r.id} className="border-line">
-                  <TableCell className="amount text-sm font-semibold text-ink">{r.number}</TableCell>
+                  <TableCell className="amount text-sm font-semibold text-ink">
+                    {r.number}
+                    {r.label && <p className="text-xs font-normal text-subtle">{r.label}</p>}
+                  </TableCell>
                   <TableCell>
                     <p className="text-sm font-medium text-ink">{r.contributor}</p>
                     <p className="text-xs text-subtle">{r.neighborhood}</p>
                   </TableCell>
                   <TableCell className="text-sm text-subtle">{r.agent}</TableCell>
                   <TableCell className="amount text-sm text-ink">
-                    {formatFCFA(r.dailyAmount)} <span className="text-subtle">/ {r.cycleDays} j</span>
+                    {formatFCFA(r.dailyAmount)} <span className="text-subtle">/ an</span>
                   </TableCell>
                   <TableCell className="amount text-sm font-semibold text-ink">{formatFCFA(r.balance)}</TableCell>
                   <TableCell className="amount text-sm text-subtle">
-                    {r.paidDays}/{r.cycleDays}
-                    {r.missedDays > 0 && <span className="ml-1 font-semibold text-danger">−{r.missedDays}</span>}
+                    F{r.currentSheet}/12 · {r.coveredLines}/372
+                    {r.missedLines > 0 && <span className="ml-1 font-semibold text-danger">−{r.missedLines}</span>}
                   </TableCell>
                   <TableCell><PassbookStatusBadge status={r.status} /></TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      {r.missedDays > 0 && r.status === "late" && r.phone && !readOnly && (
+                      {r.missedLines > 0 && r.status === "late" && r.phone && !readOnly && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -214,7 +214,7 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                           disabled={reminding === r.id}
                           onClick={() => remind(r)}
                           aria-label={`Relancer ${r.contributor} par WhatsApp`}
-                          title={`Relance WhatsApp : ${r.missedDays} jours manqués`}
+                          title={`Relance WhatsApp : ${r.missedLines} lignes manquées`}
                         >
                           <BellRing className="h-4 w-4" aria-hidden /> <span className="hidden xl:inline">Relancer</span>
                         </Button>
@@ -224,9 +224,9 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                         size="sm"
                         className="border-line"
                         onClick={() => setOpenCarnetId(r.id)}
-                        aria-label={`Ouvrir le carnet calendrier de ${r.contributor}`}
+                        aria-label={`Ouvrir le livret de ${r.contributor}`}
                       >
-                        <CalendarDays className="h-4 w-4" aria-hidden /> Carnet
+                        <CalendarDays className="h-4 w-4" aria-hidden /> Livret
                       </Button>
                     </div>
                   </TableCell>
@@ -244,22 +244,22 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
             <CardContent className="p-4">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="amount text-sm font-bold text-ink">Carnet {r.number}</p>
+                  <p className="amount text-sm font-bold text-ink">Carnet {r.number}{r.label ? ` · ${r.label}` : ""}</p>
                   <p className="mt-0.5 text-sm text-ink">{r.contributor}</p>
                   <p className="text-xs text-subtle">{r.neighborhood} · {r.agent}</p>
                 </div>
                 <PassbookStatusBadge status={r.status} />
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-[#F4F7FB] px-3 py-2 text-xs">
-                <span className="amount flex items-center gap-1 text-subtle"><CalendarDays className="h-3.5 w-3.5" aria-hidden /> {r.cycleDays} j</span>
+                <span className="amount flex items-center gap-1 text-subtle"><CalendarDays className="h-3.5 w-3.5" aria-hidden /> F{r.currentSheet}/12</span>
                 <span className="amount text-subtle">Mise {formatFCFA(r.dailyAmount)}</span>
                 <span className="amount font-semibold text-ink">{formatFCFA(r.balance)}</span>
               </div>
               <div className="mt-2 flex items-center justify-between text-xs">
-                <span className="flex items-center gap-1 text-subtle"><User className="h-3.5 w-3.5" aria-hidden /> {r.paidDays}/{r.cycleDays} jours payés</span>
-                {r.missedDays > 0 && <span className="font-semibold text-danger">{r.missedDays} manqués</span>}
+                <span className="amount text-subtle">{r.coveredLines}/372 lignes couvertes</span>
+                {r.missedLines > 0 && <span className="font-semibold text-danger">{r.missedLines} manquées</span>}
               </div>
-              {r.missedDays > 0 && r.status === "late" && r.phone && !readOnly && (
+              {r.missedLines > 0 && r.status === "late" && r.phone && !readOnly && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -267,28 +267,28 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                   disabled={reminding === r.id}
                   onClick={() => remind(r)}
                 >
-                  <BellRing className="h-4 w-4" aria-hidden /> Relancer par WhatsApp : {r.missedDays} jours manqués
+                  <BellRing className="h-4 w-4" aria-hidden /> Relancer par WhatsApp : {r.missedLines} lignes manquées
                 </Button>
               )}
               <Button
                 variant="outline"
                 className="mt-3 w-full border-line"
                 onClick={() => setOpenCarnetId(r.id)}
-                aria-label={`Ouvrir le carnet calendrier de ${r.contributor}`}
+                aria-label={`Ouvrir le livret de ${r.contributor}`}
               >
-                <CalendarDays className="h-4 w-4" aria-hidden /> Voir le carnet en calendrier
+                <CalendarDays className="h-4 w-4" aria-hidden /> Voir le livret annuel
               </Button>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Vue calendrier réel du carnet sélectionné */}
+      {/* Vue livret annuel du carnet sélectionné */}
       <Dialog open={openCarnetId !== null} onOpenChange={(v) => !v && setOpenCarnetId(null)}>
         <DialogContent className="max-h-[92vh] gap-0 overflow-y-auto border-line bg-canvas p-4 sm:max-w-3xl md:p-5 lg:max-w-4xl">
           <DialogHeader className="sr-only">
-            <DialogTitle>Carnet en calendrier réel</DialogTitle>
-            <DialogDescription>Marquage journalier du carnet sur le calendrier calendaire.</DialogDescription>
+            <DialogTitle>Livret annuel du carnet</DialogTitle>
+            <DialogDescription>12 feuilles mensuelles, récapitulatif et fin de souscription.</DialogDescription>
           </DialogHeader>
           {openCarnetId && <CarnetCalendar passbookId={openCarnetId} />}
         </DialogContent>

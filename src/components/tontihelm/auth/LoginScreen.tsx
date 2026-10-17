@@ -14,9 +14,12 @@ import { ArrowLeft, LogIn, ShieldCheck } from "lucide-react";
 export function LoginScreen({
   onBack,
   onLoggedIn,
+  entityName,
 }: {
   onBack: () => void;
   onLoggedIn: (user: SessionUser) => void;
+  /** Portail d'entité : nom de la structure qui accueille ses agents/gérants. */
+  entityName?: string | null;
 }) {
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
@@ -69,8 +72,17 @@ export function LoginScreen({
             <div className="flex justify-center">
               <LogoMark size={72} priority />
             </div>
-            <CardTitle className="font-display mt-4 text-xl font-bold">Connexion</CardTitle>
-            <p className="text-sm text-subtle">Numéro de téléphone et code PIN à 6 chiffres.</p>
+            <CardTitle className="font-display mt-4 text-xl font-bold">
+              {entityName ? "Espace de ta structure" : "Connexion"}
+            </CardTitle>
+            {entityName ? (
+              <>
+                <p className="font-display text-lg font-bold text-primary">{entityName}</p>
+                <p className="text-sm text-subtle">Connexion réservée à ses gérants et agents collecteurs.</p>
+              </>
+            ) : (
+              <p className="text-sm text-subtle">Numéro de téléphone et code PIN à 6 chiffres.</p>
+            )}
           </CardHeader>
           <CardContent>
             <form onSubmit={submit} className="space-y-5" noValidate>

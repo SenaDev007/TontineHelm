@@ -17,6 +17,7 @@ import { db } from "../lib/db";
 import { hashPin, createSession, setSessionCookie, errorResponse, ApiError, h } from "../lib/auth";
 import { appendAudit } from "../lib/audit";
 import { PLANS } from "../lib/plans";
+import { ensureStructureSlug, entityUrl } from "../lib/share";
 import {
   fedapayConfigured,
   fedapayTestMode,
@@ -364,6 +365,9 @@ router.post(
         status: "active", // le paiement tient lieu de vérification initiale
       },
     });
+    // Lien dédié de l'entité : généré dès l'activation (portail /e/{slug} propre
+    // à la structure — ses agents, ses gérants et les liens de carnet de ses clients).
+    const structureSlug = await ensureStructureSlug(structure.id);
     const owner = await db.user.create({
       data: {
         tenantId: structure.id,
@@ -414,7 +418,7 @@ router.post(
     // Session ouverte immédiatement : « Ouvrir mon espace » sans ressaisir le PIN.
     const token = await createSession(owner.id);
     setSessionCookie(res, token);
-    res.json(activationPayload(payment, token));
+    res.json(activationPayload(payment, token, structureSlug));
   })
 );
 
@@ -439,6 +443,7 @@ function draftOf(payment: { draft: string }): SignupDraft {
 function activationPayload(
   payment: { id: string; structureId: string | null; plan: string; amount: number; billingPeriod: string; draft: string },
   token: string | null,
+  structureSlug?: string,
 ) {
   // structureName/ownerPhone resservent l'écran de succès APRÈS le retour de
   // la page hébergée FedaPay (rechargement complet → formulaire vide).
@@ -454,6 +459,7 @@ function activationPayload(
     plan: payment.plan,
     billingPeriod: payment.billingPeriod,
     amount: payment.amount,
+    entityUrl: structureSlug ? entityUrl(structureSlug) : null,
     message: "Paiement confirmé. Ton espace est créé et actif.",
   };
 }

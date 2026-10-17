@@ -15,6 +15,7 @@ import { CollectScreen, CollectAllocation } from "./CollectScreen";
 import { ClosingScreen } from "./ClosingScreen";
 import { AccountScreen } from "./AccountScreen";
 import { ClientsScreen } from "./ClientsScreen";
+import { AgentCarnetRow, AgentClientRow } from "@/lib/types";
 import { MapPin, Wallet, Scale, User, Users, ArrowLeft, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -132,8 +133,8 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
     }
   }, [online, outbox, flushOutbox]);
 
-  // ── Encaissement local : une écriture par journée couverte, dans l'outbox,
-  // avec retour visuel immédiat (solde + marquage du jour). ──
+  // ── Encaissement local : une écriture par ligne du livret, dans l'outbox,
+  // avec retour visuel immédiat (solde + marquage des lignes). ──
   const collect = useCallback(
     (stop: TourStop, allocations: CollectAllocation[]) => {
       const total = allocations.reduce((s, a) => s + a.amount, 0);
@@ -145,7 +146,7 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
           amount: a.amount,
           method: "cash" as const,
           advance: false,
-          coversOn: a.date,
+          coversOn: null,
           collectedAt: new Date().toISOString(),
           passbookNumber: stop.passbookNumber,
           contributorName: stop.contributorName,
@@ -155,17 +156,18 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
       setOutbox(next);
       saveOutbox(next);
       if (navigator.vibrate) navigator.vibrate(60);
-      const jours = events.length;
+      const lignes = events.length;
       toast({
         title: `${formatFCFA(total)} encaissés chez ${stop.contributorName}.`,
         description:
-          jours > 1
-            ? `${jours} journées couvertes (${online ? "synchronisation en cours" : "en attente d'envoi : enregistré sur ton téléphone"}).`
+          lignes > 1
+            ? `${lignes} lignes du livret couvertes (${online ? "synchronisation en cours" : "en attente d'envoi : enregistré sur ton téléphone"}).`
             : online
               ? undefined
               : "En attente d'envoi : enregistré sur ton téléphone.",
       });
-      // Mise à jour optimiste de la tournée locale (solde, jours, marquage des journées).
+      // Mise à jour optimiste de la tournée locale (solde, lignes couvertes, feuille).
+      const addedLines = Math.floor(total / stop.dailyAmount);
       setTour((t) =>
         t
           ? {
@@ -175,11 +177,20 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
                   ? {
                       ...s,
                       balance: s.balance + total,
-                      paidDays: s.paidDays + Math.floor(total / s.dailyAmount),
-                      days: s.days.map((d) => {
-                        const alloc = allocations.find((a) => a.date === d.date);
-                        return alloc ? { ...d, net: d.net + alloc.amount } : d;
-                      }),
+                      paidDays: s.paidDays + addedLines,
+                      dayIndex: s.dayIndex + addedLines,
+                      livret: {
+                        ...s.livret,
+                        balance: s.livret.balance + total,
+                        coveredLines: Math.min(372, s.livret.coveredLines + addedLines),
+                        lineDue: Math.min(373, s.livret.lineDue + addedLines),
+                        payable: s.livret.payable.map((p) => ({ ...p })),
+                        sheet: {
+                          ...s.livret.sheet,
+                          encaisse: s.livret.sheet.encaisse + total,
+                          reste: Math.max(0, s.livret.sheet.reste - total),
+                        },
+                      },
                       collectedToday: s.collectedToday
                         ? { count: s.collectedToday.count + events.length, amount: s.collectedToday.amount + total, method: "cash", at: new Date().toISOString() }
                         : { count: events.length, amount: total, method: "cash", at: new Date().toISOString() },
@@ -217,6 +228,33 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
     () => tour?.stops.find((s) => s.passbookId === activeStop?.passbookId) ?? activeStop,
     [tour, activeStop]
   );
+
+  // Ouvre l'écran d'encaissement sur un carnet précis, depuis l'onglet Clients
+  // (le client → ses carnets → « Encaisser sur ce carnet »).
+  const openCarnetForCollect = useCallback((client: AgentClientRow, carnet: AgentCarnetRow) => {
+    const stop: TourStop = {
+      contributorId: client.id,
+      contributorName: client.fullName,
+      phone: client.phone,
+      neighborhood: client.neighborhood ?? "",
+      passbookId: carnet.id,
+      passbookNumber: carnet.number,
+      passbookLabel: carnet.label,
+      dailyAmount: carnet.dailyAmount,
+      cycleDays: 372,
+      startsOn: carnet.livret.startsOn,
+      livret: carnet.livret,
+      dayIndex: carnet.livret.coveredLines,
+      paidDays: carnet.livret.coveredLines,
+      missedDays: carnet.livret.missedLines,
+      balance: carnet.balance,
+      status: carnet.status,
+      statusLabel: carnet.statusLabel,
+      collectedToday: null,
+    };
+    setActiveStop(stop);
+    setTab("collect");
+  }, []);
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "tour", label: "Tournée", icon: MapPin },
@@ -301,6 +339,7 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
           <ClientsScreen
             structureName={tour?.structure.name ?? "TontiHelm"}
             onCreated={() => setReloadKey((k) => k + 1)}
+            onOpenCarnet={openCarnetForCollect}
           />
         )}
         {tab === "account" && (
