@@ -30,11 +30,13 @@ EXPOSE 3001
 
 # ── Démarrage auto-réparant ──
 # 1. `prisma db push` crée/synchronise les tables dans PostgreSQL (idempotent :
-#    base vide → tables créées ; base à jour → rien ne bouge). Tolérant : s'il
-#    échoue (DATABASE_URL invalide…), l'API démarre quand même et /api/health
-#    signale le problème en clair.
+#    base vide → tables créées ; base à jour → rien ne bouge). --accept-data-loss
+#    évite l'invite interactive (ajout d'index uniques sur colonnes nouvelles →
+#    Prisma demande confirmation et le conteneur sans TTY resterait bloqué).
+#    Tolérant : s'il échoue (DATABASE_URL invalide…), l'API démarre quand même
+#    et /api/health signale le problème en clair.
 # 2. `bootstrap-admin` amorce le compte admin (ADMIN_PHONE/ADMIN_PIN) —
 #    idempotent également ; ignoré si les variables ne sont pas définies.
 # 3. L'API démarre enfin (exec : le process Express devient PID principal,
 #    les signaux Railway — arrêt/redéploiement — lui parviennent directement).
-CMD ["sh", "-c", "timeout 90 bunx prisma db push --skip-generate || echo '[startup] prisma db push a échoué (vérifie DATABASE_URL) — le service démarre quand même'; timeout 30 bun src/scripts/bootstrap-admin.ts || echo '[startup] admin non amorcé (ADMIN_PHONE / ADMIN_PIN absents ou invalides)'; exec bun src/index.ts"]
+CMD ["sh", "-c", "timeout 90 bunx prisma db push --skip-generate --accept-data-loss || echo '[startup] prisma db push a échoué (vérifie DATABASE_URL) — le service démarre quand même'; timeout 30 bun src/scripts/bootstrap-admin.ts || echo '[startup] admin non amorcé (ADMIN_PHONE / ADMIN_PIN absents ou invalides)'; exec bun src/index.ts"]
