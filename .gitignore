@@ -63,6 +63,9 @@ download/
 examples/
 mini-services/
 tests/
+# …sauf tests de non-régression TontiHelm (livrables du brief, phase 1+)
+!backend/tests/
+!packages/domain/tests/
 worklog.md
 Caddyfile
 agent-ctx/
