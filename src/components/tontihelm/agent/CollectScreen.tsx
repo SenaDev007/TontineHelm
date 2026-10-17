@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PassbookStatusBadge, SyncStatusPill } from "../StatusBadge";
 import { TourData, TourStop, formatFCFA } from "@/lib/types";
-import { Wallet, ChevronRight, Send, Check, CalendarClock, RotateCcw } from "lucide-react";
+import { Wallet, ChevronRight, Link2, Check, CalendarClock, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Allocation d'un encaissement : une écriture par journée couverte. */
@@ -473,10 +473,10 @@ export function CollectScreen({
       </Button>
 
       <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-subtle">
-        <Send className="h-3.5 w-3.5 tontihelm-icon" aria-hidden />
+        <Link2 className="h-3.5 w-3.5 tontihelm-icon" aria-hidden />
         {online
-          ? `Reçu SMS envoyé au cotisant après synchronisation${allocations.length > 1 ? " (un seul, récapitulatif)" : ""}.`
-          : "Reçu SMS envoyé au retour du réseau."}
+          ? `Carnet du cotisant mis à jour à la synchronisation — visible sur son lien.`
+          : "Enregistré sur ton téléphone : le carnet du cotisant se met à jour à l'envoi."}
       </p>
       <div className="mt-2 flex justify-center">
         <SyncStatusPill state={online ? (pendingCount > 0 ? "pending" : "synced") : "offline"} pendingCount={pendingCount} />

@@ -91,12 +91,12 @@ function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Pr
 function labelFor(path: string): string {
   if (path.startsWith("/api/manager/contributors")) return "Enregistrement d'un cotisant";
   if (path.startsWith("/api/manager/passbooks")) return "Création d'un carnet";
-  if (path.startsWith("/api/manager/agents")) return "Création d'un agent";
+  if (path.startsWith("/api/manager/agents")) return "Création d'un compte équipe";
   if (path.startsWith("/api/manager/collections")) return "Annulation d'un encaissement";
   if (path.startsWith("/api/manager/closings")) return "Validation d'une clôture";
+  if (path.startsWith("/api/agent/clients")) return "Enregistrement d'un client";
   if (path.startsWith("/api/agent/closing")) return "Déclaration de clôture";
   if (path.startsWith("/api/admin/structures")) return "Décision sur une structure";
-  if (path.startsWith("/api/demo/request")) return "Demande de démonstration";
   return "Opération enregistrée";
 }
 

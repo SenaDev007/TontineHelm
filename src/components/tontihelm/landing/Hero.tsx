@@ -8,7 +8,7 @@
 // Aucun mode gratuit : la découverte passe par une démonstration (#demonstration).
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, WifiOff, MessageSquareText, CheckCheck, Signal, Wifi, BatteryFull } from "lucide-react";
+import { ArrowRight, WifiOff, Link2, CheckCheck, Signal, Wifi, BatteryFull } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -243,7 +243,7 @@ export function Hero({ onDemoRequest }: { onDemoRequest: () => void }) {
             className="mt-6 max-w-xl text-base leading-relaxed text-[#C4D2E8] [text-shadow:0_1px_12px_rgba(10,20,40,0.5)] md:text-lg"
           >
             TontiHelm remplace le carnet papier par une application qui marche sans réseau. Tes agents
-            encaissent en 10 secondes, tes clients reçoivent leur reçu, ta caisse se clôture chaque soir.
+            encaissent en 10 secondes, tes clients suivent leur carnet en ligne, ta caisse se clôture chaque soir.
           </motion.p>
 
           <motion.div variants={item} className="mt-6 flex flex-wrap items-center gap-3">
@@ -252,7 +252,7 @@ export function Hero({ onDemoRequest }: { onDemoRequest: () => void }) {
               onClick={onDemoRequest}
               className="h-12 px-6 text-base"
             >
-              Demander une démonstration <ArrowRight className="h-5 w-5" aria-hidden />
+              Voir la démonstration en direct <ArrowRight className="h-5 w-5" aria-hidden />
             </Button>
             {/* Inscription : vraie route /inscription */}
             <Button
@@ -266,7 +266,7 @@ export function Hero({ onDemoRequest }: { onDemoRequest: () => void }) {
           </motion.div>
 
           <motion.p variants={item} className="mt-3 text-sm text-[#93A7C6]">
-            Démonstration avec un conseiller · Réponse sous 24 heures ouvrées
+            Démonstration en direct, sans inscription · Une question ? WhatsApp direct
           </motion.p>
 
           <motion.ul
@@ -276,7 +276,7 @@ export function Hero({ onDemoRequest }: { onDemoRequest: () => void }) {
             className="mt-6 flex flex-wrap gap-2 lg:mt-8"
           >
             <ProofChip icon={WifiOff}>Fonctionne sans réseau</ProofChip>
-            <ProofChip icon={MessageSquareText}>Reçu SMS immédiat</ProofChip>
+            <ProofChip icon={Link2}>Carnet client en ligne</ProofChip>
             <ProofChip icon={CheckCheck}>Caisse clôturée chaque soir</ProofChip>
           </motion.ul>
         </motion.div>

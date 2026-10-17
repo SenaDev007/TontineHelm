@@ -58,8 +58,8 @@ export default function ConfidentialitePage() {
         {
           heading: "Finalités et bases légales",
           list: [
-            "Exécution du contrat d'abonnement : fournir l'application, l'encaissement hors ligne, la synchronisation, les reçus SMS et la facturation.",
-            "Consentement du cotisant : envoi des reçus et rappels par SMS ou WhatsApp, à son numéro ; ce consentement est recueilli par la structure et peut être retiré à tout moment auprès d'elle.",
+            "Exécution du contrat d'abonnement : fournir l'application, l'encaissement hors ligne, la synchronisation, le carnet en ligne du cotisant (lien personnel) et la facturation.",
+            "Consentement du cotisant : envoi de son lien de carnet et des relances éventuelles par WhatsApp ou courriel ; ce consentement est recueilli par la structure et peut être retiré à tout moment auprès d'elle.",
             "Oblligations légales et comptables : tenue du journal d'audit inaltérable, conservation des écritures dans les délais réglementaires, réponses aux réquisitions des autorités judiciaires compétentes.",
             "Intérêt légitime : sécurité du service, prévention de la fraude, fiabilité de la synchronisation, amélioration continue dans le respect du secret des affaires.",
           ],
@@ -75,7 +75,7 @@ export default function ConfidentialitePage() {
           heading: "Destinataires et sous-traitants",
           paragraphs: [
             "Les données de la structure ne sont visibles que par elle-même et, pour la stricte exécution du service, par l'administration de YEHI OR Tech. Chaque structure est isolée des autres : aucun utilisateur d'une structure ne peut accéder aux données d'une autre, et l'administration n'accède aux données d'une structure que pour le support, la facturation ou la sécurité, chaque accès laissant une trace.",
-            "Interviennent comme sous-traitants techniques : l'hébergeur du site et de l'application, l'hébergeur de la base de données en Europe, la passerelle d'envoi de SMS au Bénin et, pour les paiements mobile money, le prestataire de paiement agréé. Chacun ne reçoit que les données strictement nécessaires à sa prestation (numéro et corps du message pour le SMS ; identifiant de facturation et montant pour le paiement).",
+            "Interviennent comme sous-traitants techniques : l'hébergeur du site et de l'application, l'hébergeur de la base de données en Europe et, pour les paiements (abonnement et mobile money), le prestataire de paiement agréé. Chacun ne reçoit que les données strictement nécessaires à sa prestation (identifiant de facturation et montant pour le paiement).",
           ],
         },
         {
@@ -107,7 +107,7 @@ export default function ConfidentialitePage() {
         {
           heading: "Évolution de la politique",
           paragraphs: [
-            "La présente politique peut être mise à jour pour suivre les évolutions du service ou de la réglementation. La version applicable est celle publiée en ligne, datée ; toute modification substantielle est signalée aux gérants par SMS ou courriel. L'absence de contradiction entre cette politique et les conditions générales d'utilisation est assurée par l'éditeur ; en cas de divergence, la politique la plus protectrice des personnes prévaut sur le point concerné.",
+            "La présente politique peut être mise à jour pour suivre les évolutions du service ou de la réglementation. La version applicable est celle publiée en ligne, datée ; toute modification substantielle est signalée aux dirigeants par WhatsApp ou courriel. L'absence de contradiction entre cette politique et les conditions générales d'utilisation est assurée par l'éditeur ; en cas de divergence, la politique la plus protectrice des personnes prévaut sur le point concerné.",
           ],
         },
       ]}

@@ -10,7 +10,7 @@ import { assertWritable, getSubscription } from "../lib/tenant";
 import { hashPin } from "../lib/auth";
 import { passbookBalance, paidDays, missedDays, elapsedDays, isLate, buildDayLedger } from "../lib/domain";
 import { planOf } from "../lib/plans";
-import { lateReminderSms } from "../lib/sms";
+import { ensureShareToken, carnetUrl, whatsappShareUrl, shareMessage } from "../lib/share";
 
 const router = Router();
 
@@ -139,7 +139,7 @@ router.get(
   })
 );
 
-// ── GET /api/manager/agents — agents de la structure (affectation des cotisants). ──
+// ── GET /api/manager/agents — équipe de la structure : agents collecteurs et gérants. ──
 router.get(
   "/agents",
   h(async (req, res) => {
@@ -147,19 +147,22 @@ router.get(
     requireRole(user, ["manager", "owner", "controller"]);
     const tenantId = requireTenant(user);
     const users = await db.user.findMany({
-      where: { tenantId, role: "agent", status: "active" },
-      select: { id: true, fullName: true, phone: true },
-      orderBy: { fullName: "asc" },
+      where: { tenantId, role: { in: ["agent", "manager"] }, status: "active" },
+      select: { id: true, fullName: true, phone: true, role: true, createdAt: true },
+      orderBy: [{ role: "asc" }, { fullName: "asc" }],
     });
     res.json({ users });
   })
 );
 
-// ── POST /api/manager/agents — création d'un compte agent (équipe de collecte). ──
+// ── POST /api/manager/agents — création d'un compte agent OU gérant (équipe de la structure). ──
+// L'administrateur principal (dirigeant) crée les comptes de ses gérants et de ses
+// agents collecteurs ; le gérant crée les comptes agents de son équipe.
 const createAgentSchema = z.object({
-  fullName: z.string().min(2, "Saisis le nom complet de l'agent."),
+  fullName: z.string().min(2, "Saisis le nom complet."),
   phone: z.string().regex(/^\+?\d{8,15}$/, "Numéro invalide. Saisis le numéro complet, sans espace."),
   pin: z.string().regex(/^\d{6}$/, "Code PIN à 6 chiffres."),
+  role: z.enum(["agent", "manager"]).optional().default("agent"),
 });
 
 router.post(
@@ -175,43 +178,61 @@ router.post(
       const issue = body.error.issues[0]?.message ?? "Formulaire incomplet.";
       throw new ApiError("invalid_input", issue);
     }
+    // Les comptes gérant (back-office) ne sont créés que par le dirigeant de la structure.
+    if (body.data.role === "manager" && user.role !== "owner") {
+      throw new ApiError(
+        "forbidden",
+        "Seul l'administrateur principal (dirigeant) crée les comptes gérant.",
+        403
+      );
+    }
     const phone = body.data.phone.replace(/\s+/g, "");
     const existing = await db.user.findUnique({ where: { phone } });
     if (existing) {
       throw new ApiError("phone_taken", "Ce numéro a déjà un compte.");
     }
 
-    // Quota d'agents du palier courant : interdiction de dépasser, invitation à monter de palier.
-    const sub = await getSubscription(tenantId);
-    const plan = planOf(sub?.plan);
-    const agentsCount = await db.user.count({ where: { tenantId, role: "agent" } });
-    if (agentsCount >= plan.agents) {
-      throw new ApiError(
-        "agent_quota_reached",
-        `Ton palier ${plan.label} inclut ${plan.agents} agent${plan.agents > 1 ? "s" : ""} de collecte. Passe au palier supérieur pour en ajouter d'autres.`,
-        403
-      );
+    // Quota d'agents du palier courant (les agents collecteurs seulement) :
+    // interdiction de dépasser, invitation à monter de palier.
+    if (body.data.role === "agent") {
+      const sub = await getSubscription(tenantId);
+      const plan = planOf(sub?.plan);
+      const agentsCount = await db.user.count({ where: { tenantId, role: "agent" } });
+      if (agentsCount >= plan.agents) {
+        throw new ApiError(
+          "agent_quota_reached",
+          `Ton palier ${plan.label} inclut ${plan.agents} agent${plan.agents > 1 ? "s" : ""} de collecte. Passe au palier supérieur pour en ajouter d'autres.`,
+          403
+        );
+      }
     }
 
-    const agent = await db.user.create({
+    const created = await db.user.create({
       data: {
         tenantId,
         phone,
         fullName: body.data.fullName,
-        role: "agent",
+        role: body.data.role,
         pinHash: hashPin(body.data.pin),
       },
     });
     await appendAudit({
       tenantId,
       actorId: user.id,
-      action: "agent_created",
+      action: "team_member_created",
       entity: "user",
-      entityId: agent.id,
-      payload: { fullName: agent.fullName, phone: agent.phone, role: "agent" },
+      entityId: created.id,
+      payload: { fullName: created.fullName, phone: created.phone, role: created.role },
     });
 
-    res.json({ agent: { id: agent.id, fullName: agent.fullName, phone: agent.phone } });
+    res.status(201).json({
+      member: {
+        id: created.id,
+        fullName: created.fullName,
+        phone: created.phone,
+        role: created.role,
+      },
+    });
   })
 );
 
@@ -240,11 +261,14 @@ router.get(
           id: c.id,
           fullName: c.fullName,
           phone: c.phone,
+          email: c.email,
           neighborhood: c.neighborhood,
           idNumber: c.idNumber,
           agent: c.agent?.fullName ?? "—",
           status: c.status,
           createdAt: c.createdAt,
+          shareToken: c.shareToken,
+          shareUrl: c.shareToken ? carnetUrl(c.shareToken) : null,
           passbook: pb
             ? {
                 id: pb.id,
@@ -267,6 +291,7 @@ router.get(
 const createContributorSchema = z.object({
   fullName: z.string().min(2, "Saisis le nom complet du cotisant."),
   phone: z.string().regex(/^\+?\d{8,15}$/, "Numéro invalide. Saisis le numéro complet, sans espace."),
+  email: z.string().email("Adresse e-mail invalide.").optional().or(z.literal("")),
   neighborhood: z.string().min(2, "Saisis le quartier."),
   idNumber: z.string().min(3, "Saisis le numéro de pièce d'identité."),
   agentId: z.string().min(1, "Choisis l'agent référent."),
@@ -307,6 +332,7 @@ router.post(
         tenantId,
         fullName: body.data.fullName,
         phone: body.data.phone,
+        email: body.data.email || null,
         neighborhood: body.data.neighborhood,
         idNumber: body.data.idNumber,
         agentId: agent.id,
@@ -321,7 +347,27 @@ router.post(
       payload: { fullName: contributor.fullName, neighborhood: contributor.neighborhood, agent: agent.fullName },
     });
 
-    res.json({ contributor: { id: contributor.id, fullName: contributor.fullName } });
+    // Lien personnel du carnet, prêt à partager par WhatsApp / e-mail.
+    const shareUrl = await ensureShareToken(contributor.id);
+
+    res.status(201).json({ contributor: { id: contributor.id, fullName: contributor.fullName }, shareUrl });
+  })
+);
+
+// ── POST /api/manager/contributors/:id/share — (re)génère le lien de carnet d'un cotisant. ──
+router.post(
+  "/contributors/:id/share",
+  h(async (req, res) => {
+    const user = await requireUser(req);
+    requireRole(user, ["manager", "owner"]);
+    const tenantId = requireTenant(user);
+
+    const contributor = await db.contributor.findUnique({ where: { id: req.params.id } });
+    if (!contributor || contributor.tenantId !== tenantId) {
+      throw new ApiError("not_found", "Cotisant introuvable.", 404);
+    }
+    const url = await ensureShareToken(contributor.id);
+    res.json({ url });
   })
 );
 
@@ -790,9 +836,10 @@ router.get(
   })
 );
 
-// ── POST /api/manager/passbooks/:id/remind — rappel SMS au cotisant en retard (paliers Pro et Institution). ──
-// Envoie au cotisant un SMS de rappel (jours manqués + lien de paiement mobile money
-// pour une mise) ; l'envoi est journalisé comme les autres notifications SMS.
+// ── POST /api/manager/passbooks/:id/remind — relance WhatsApp du cotisant en retard (paliers Pro et Institution). ──
+// Plus de SMS : la relance ouvre WhatsApp avec un message prêt à envoyer, contenant
+// le lien personnel du carnet (jours manqués visibles). L'envoi est journalisé
+// comme notification WhatsApp (coût nul).
 router.post(
   "/passbooks/:id/remind",
   h(async (req, res) => {
@@ -801,13 +848,10 @@ router.post(
     const tenantId = requireTenant(user);
     await assertWritable(tenantId);
 
-    const [structure, passbook] = await Promise.all([
-      db.structure.findUnique({ where: { id: tenantId } }),
-      db.passbook.findUnique({
-        where: { id: req.params.id },
-        include: { contributor: true, collections: true, agent: true },
-      }),
-    ]);
+    const passbook = await db.passbook.findUnique({
+      where: { id: req.params.id },
+      include: { contributor: true, collections: true, agent: true },
+    });
     if (!passbook || passbook.tenantId !== tenantId) {
       throw new ApiError("not_found", "Carnet introuvable.", 404);
     }
@@ -824,7 +868,7 @@ router.post(
     if (!plan.reminders) {
       throw new ApiError(
         "plan_required",
-        "Les rappels automatiques aux cotisants sont inclus dans les paliers Pro et Institution. Passe au palier supérieur pour les activer.",
+        "Les relances automatiques aux cotisants sont incluses dans les paliers Pro et Institution. Passe au palier supérieur pour les activer.",
         403
       );
     }
@@ -832,38 +876,26 @@ router.post(
     const balance = passbookBalance(passbook.collections);
     const missed = missedDays(passbook, balance);
     if (missed < 1) {
-      throw new ApiError("bad_state", "Ce carnet n'a aucun jour manqué : aucun rappel à envoyer.", 400);
+      throw new ApiError("bad_state", "Ce carnet n'a aucun jour manqué : aucune relance à envoyer.", 400);
     }
 
-    // Lien de paiement mobile money pour une mise journalière (comme l'agent le fait).
-    const payment = await db.payment.create({
-      data: {
-        tenantId,
-        passbookId: passbook.id,
-        contributorId: passbook.contributorId,
-        provider: "fedapay",
-        providerRef: `FP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`,
-        amount: passbook.dailyAmount,
-        status: "pending",
-        linkUrl: `https://pay.fedapay.com/tontihelm/${Math.random().toString(36).slice(2, 6)}`,
-      },
-    });
+    // Lien personnel du carnet : le cotisant y voit les jours manqués et verse.
+    const shareUrl = await ensureShareToken(passbook.contributorId);
+    const message =
+      `Bonjour ${passbook.contributor.fullName}, ton carnet ${passbook.number} indique ` +
+      `${missed} jour${missed > 1 ? "s" : ""} sans versement. Consulte ton carnet et régularise ` +
+      `avec ${passbook.agent?.fullName ?? "ton agent"} : ${shareUrl}`;
+    const whatsappUrl = whatsappShareUrl(passbook.contributor.phone, message);
 
     await db.notification.create({
       data: {
         tenantId,
-        channel: "sms",
+        channel: "whatsapp",
         template: "late_reminder",
         toPhone: passbook.contributor.phone,
-        content: lateReminderSms({
-          structure: structure?.name ?? "",
-          passbookNumber: passbook.number,
-          missedDays: missed,
-          agentName: passbook.agent?.fullName ?? "ton agent",
-          link: payment.linkUrl ?? "",
-        }),
+        content: message,
         status: "sent",
-        costFcfa: 25,
+        costFcfa: 0,
       },
     });
     await appendAudit({
@@ -872,12 +904,14 @@ router.post(
       action: "reminder_sent",
       entity: "passbook",
       entityId: passbook.id,
-      payload: { contributor: passbook.contributor.fullName, missedDays: missed, phone: passbook.contributor.phone },
+      payload: { contributor: passbook.contributor.fullName, missedDays: missed, channel: "whatsapp", shareUrl },
     });
 
     res.json({
       ok: true,
-      message: `Rappel envoyé à ${passbook.contributor.fullName} (${missed} jours manqués), avec un lien de paiement mobile money.`,
+      whatsappUrl,
+      shareUrl,
+      message: `Relance WhatsApp prête pour ${passbook.contributor.fullName} (${missed} jours manqués) : le message contient le lien de son carnet.`,
     });
   })
 );
@@ -890,23 +924,14 @@ router.get(
     requireRole(user, ["manager", "owner", "controller"]);
     const tenantId = requireTenant(user);
 
-    const [structure, subscription, invoices, smsCount, agentsCount, contributorsCount] =
+    const [structure, subscription, invoices, agentsCount, contributorsCount] =
       await Promise.all([
         db.structure.findUnique({ where: { id: tenantId } }),
         db.subscription.findUnique({ where: { tenantId } }),
         db.invoice.findMany({ where: { tenantId }, orderBy: { period: "desc" } }),
-        db.notification.count({ where: { tenantId, channel: "sms" } }),
         db.user.count({ where: { tenantId, role: "agent" } }),
         db.contributor.count({ where: { tenantId, status: "active" } }),
       ]);
-
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
-    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0, 23, 59, 59);
-    const monthSms = await db.notification.count({
-      where: { tenantId, channel: "sms", createdAt: { gte: monthStart, lte: monthEnd } },
-    });
 
     const planKey = subscription?.plan ?? "demarrage";
     const plan = planOf(planKey);
@@ -932,8 +957,6 @@ router.get(
         extraContributors: Math.max(0, contributorsCount - plan.contributors),
         extraAgents: Math.max(0, agentsCount - plan.agents),
         remindersIncluded: plan.reminders,
-        smsMonth: monthSms,
-        smsTotal: smsCount,
       },
       invoices: invoices.map((inv) => ({
         id: inv.id,

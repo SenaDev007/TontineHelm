@@ -1,13 +1,15 @@
 // TontiHelm — routes agent : tournée du jour, synchronisation des encaissements,
-// déclaration de caisse, carnet détaillé d'un arrêt de tournée.
+// déclaration de caisse, clients du portefeuille (création sur le terrain + lien
+// de carnet partagé par WhatsApp / e-mail), carnet détaillé d'un arrêt de tournée.
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../lib/db";
 import { requireUser, requireRole, requireTenant, errorResponse, ApiError, h } from "../lib/auth";
 import { appendAudit } from "../lib/audit";
-import { assertWritable } from "../lib/tenant";
+import { assertWritable, getSubscription } from "../lib/tenant";
+import { planOf } from "../lib/plans";
 import { passbookBalance, paidDays, missedDays, elapsedDays, isLate, closingGap, formatFCFA, buildDayLedger } from "../lib/domain";
-import { receiptSms } from "../lib/sms";
+import { ensureShareToken, carnetUrl } from "../lib/share";
 
 const router = Router();
 
@@ -159,9 +161,6 @@ router.post(
       throw new ApiError("invalid_input", issue);
     }
 
-    const structure = await db.structure.findUnique({ where: { id: tenantId } });
-    if (!structure) throw new ApiError("not_found", "Structure introuvable.", 404);
-
     // Une clôture validée verrouille les encaissements de la journée (règle métier 5).
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -177,11 +176,6 @@ router.post(
     }
 
     const acks: { id: string; status: "created" | "duplicate"; collectionId: string }[] = [];
-    // Reçus groupés par carnet : un encaissement multi-jours = un seul SMS récapitulatif.
-    const receipts = new Map<
-      string,
-      { number: string; phone: string | null; cycleDays: number; total: number; days: number[]; balance: number }
-    >();
 
     for (const ev of body.data.events) {
       const existing = await db.collection.findUnique({ where: { id: ev.id } });
@@ -272,53 +266,189 @@ router.post(
         at: new Date(),
       });
 
-      // Accumule le reçu groupé du carnet (journées couvertes, solde à jour).
-      if (ev.amount > 0) {
-        const r =
-          receipts.get(passbook.id) ??
-          {
-            number: passbook.number,
-            phone: passbook.contributor.phone,
-            cycleDays: passbook.cycleDays,
-            total: 0,
-            days: [],
-            balance: 0,
-          };
-        r.total += ev.amount;
-        r.days.push(dayIndex);
-        r.balance = newBalance;
-        receipts.set(passbook.id, r);
-      }
+      // Le carnet du cotisant est la source de vérité : chaque écriture y est
+      // visible immédiatement depuis son lien personnel (WhatsApp / e-mail).
 
       acks.push({ id: ev.id, status: "created", collectionId: ev.id });
     }
 
-    // Un SMS récapitulatif par carnet touché (§13.5, sans accents) : montant total,
-    // journées couvertes et solde cumulé — pas un SMS par journée.
-    for (const [, r] of receipts) {
-      if (!r.phone) continue;
-      await db.notification.create({
-        data: {
-          tenantId,
-          channel: "sms",
-          template: "receipt",
-          toPhone: r.phone,
-          content: receiptSms({
-            structure: structure.name,
-            amount: r.total,
-            date: new Date(),
-            passbookNumber: r.number,
-            days: r.days,
-            cycleDays: r.cycleDays,
-            balance: r.balance,
-          }),
-          status: "sent",
-          costFcfa: 25,
+    res.json({ acks });
+  })
+);
+
+// ── GET /api/agent/clients — portefeuille clients de l'agent (avec lien de carnet). ──
+router.get(
+  "/clients",
+  h(async (req, res) => {
+    const user = await requireUser(req);
+    requireRole(user, ["agent"]);
+    const tenantId = requireTenant(user);
+
+    const contributors = await db.contributor.findMany({
+      where: { agentId: user.id },
+      orderBy: { createdAt: "desc" },
+      include: {
+        passbooks: {
+          where: { status: { in: ["active", "late"] } },
+          include: { collections: true },
         },
-      });
+      },
+    });
+
+    const clients = contributors.map((c) => {
+      const pb = c.passbooks[0] ?? null;
+      const balance = pb ? passbookBalance(pb.collections) : 0;
+      return {
+        id: c.id,
+        fullName: c.fullName,
+        phone: c.phone,
+        email: c.email,
+        neighborhood: c.neighborhood,
+        shareToken: c.shareToken,
+        shareUrl: c.shareToken ? carnetUrl(c.shareToken) : null,
+        status: c.status,
+        passbook: pb
+          ? {
+              id: pb.id,
+              number: pb.number,
+              dailyAmount: pb.dailyAmount,
+              cycleDays: pb.cycleDays,
+              balance,
+              paidDays: paidDays(balance, pb.dailyAmount),
+            }
+          : null,
+      };
+    });
+
+    res.json({ clients });
+  })
+);
+
+// ── POST /api/agent/clients — nouveau client + premier carnet, en une fois (fluide). ──
+// Sur le terrain, l'agent enregistre le client et sa tontine ; le lien personnel
+// du carnet est généré immédiatement pour être partagé par WhatsApp ou e-mail.
+const createClientSchema = z.object({
+  fullName: z.string().min(2, "Saisis le nom complet du client."),
+  phone: z.string().regex(/^\+?\d{8,15}$/, "Numéro invalide. Saisis le numéro complet, sans espace."),
+  email: z.string().email("Adresse e-mail invalide.").optional().or(z.literal("")),
+  neighborhood: z.string().min(2, "Saisis le quartier."),
+  idNumber: z.string().min(3, "Saisis le numéro de pièce d'identité.").optional().or(z.literal("")),
+  dailyAmount: z.number().int().min(100, "La mise journalière minimum est de 100 FCFA."),
+  cycleDays: z.number().int().min(1, "Durée du cycle invalide.").max(366, "Durée du cycle invalide."),
+  startsOn: z.string().min(8, "Date de début invalide."),
+});
+
+router.post(
+  "/clients",
+  h(async (req, res) => {
+    const user = await requireUser(req);
+    requireRole(user, ["agent"]);
+    const tenantId = requireTenant(user);
+    await assertWritable(tenantId);
+
+    const body = createClientSchema.safeParse(req.body ?? {});
+    if (!body.success) {
+      const issue = body.error.issues[0]?.message ?? "Formulaire incomplet.";
+      throw new ApiError("invalid_input", issue);
     }
 
-    res.json({ acks });
+    // Quota de cotisants du palier courant.
+    const sub = await getSubscription(tenantId);
+    const plan = planOf(sub?.plan);
+    const contributorsCount = await db.contributor.count({ where: { tenantId, status: "active" } });
+    if (contributorsCount >= plan.contributors) {
+      throw new ApiError(
+        "contributor_quota_reached",
+        `Le palier ${plan.label} inclut ${plan.contributors} cotisants. Passe au palier supérieur pour enregistrer d'autres clients.`,
+        403
+      );
+    }
+
+    const startsOn = new Date(`${body.data.startsOn}T00:00:00.000Z`);
+    if (Number.isNaN(startsOn.getTime())) {
+      throw new ApiError("invalid_input", "Date de début invalide.");
+    }
+
+    // Numéro de carnet : séquence tenant, partagée avec le back-office.
+    const last = await db.passbook.findFirst({ where: { tenantId }, orderBy: { number: "desc" } });
+    const nextNumber = String((last ? parseInt(last.number, 10) : 100) + 1).padStart(4, "0");
+
+    const contributor = await db.contributor.create({
+      data: {
+        tenantId,
+        fullName: body.data.fullName,
+        phone: body.data.phone,
+        email: body.data.email || null,
+        neighborhood: body.data.neighborhood,
+        idNumber: body.data.idNumber || null,
+        agentId: user.id,
+        shareToken: null,
+      },
+    });
+    const passbook = await db.passbook.create({
+      data: {
+        tenantId,
+        contributorId: contributor.id,
+        agentId: user.id,
+        number: nextNumber,
+        dailyAmount: body.data.dailyAmount,
+        cycleDays: body.data.cycleDays,
+        startsOn,
+      },
+    });
+
+    await appendAudit({
+      tenantId,
+      actorId: user.id,
+      action: "contributor_created",
+      entity: "contributor",
+      entityId: contributor.id,
+      payload: {
+        fullName: contributor.fullName,
+        neighborhood: contributor.neighborhood,
+        agent: user.fullName,
+        source: "terrain",
+      },
+    });
+    await appendAudit({
+      tenantId,
+      actorId: user.id,
+      action: "passbook_created",
+      entity: "passbook",
+      entityId: passbook.id,
+      payload: {
+        number: nextNumber,
+        contributor: contributor.fullName,
+        dailyAmount: body.data.dailyAmount,
+        cycleDays: body.data.cycleDays,
+        startsOn: body.data.startsOn,
+        source: "terrain",
+      },
+    });
+
+    const url = await ensureShareToken(contributor.id);
+    res.status(201).json({
+      contributor: { id: contributor.id, fullName: contributor.fullName },
+      passbook: { id: passbook.id, number: nextNumber },
+      shareUrl: url,
+    });
+  })
+);
+
+// ── POST /api/agent/clients/:id/share — (re)génère le lien de carnet d'un client. ──
+router.post(
+  "/clients/:id/share",
+  h(async (req, res) => {
+    const user = await requireUser(req);
+    requireRole(user, ["agent"]);
+    const tenantId = requireTenant(user);
+
+    const contributor = await db.contributor.findUnique({ where: { id: req.params.id } });
+    if (!contributor || contributor.tenantId !== tenantId || contributor.agentId !== user.id) {
+      throw new ApiError("not_found", "Client introuvable dans ton portefeuille.", 404);
+    }
+    const url = await ensureShareToken(contributor.id);
+    res.json({ url });
   })
 );
 

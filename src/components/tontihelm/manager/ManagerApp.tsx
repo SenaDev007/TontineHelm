@@ -38,14 +38,16 @@ function ManagerNav({
   tab,
   onTab,
   onNavigate,
+  tabs,
 }: {
   tab: Tab;
   onTab: (t: Tab) => void;
   onNavigate?: () => void;
+  tabs: { id: Tab; label: string; icon: React.ElementType }[];
 }) {
   return (
     <nav className="flex flex-col gap-1" aria-label="Navigation du back-office">
-      {TABS.map((t) => (
+      {tabs.map((t) => (
         <button
           key={t.id}
           onClick={() => { onTab(t.id); onNavigate?.(); }}
@@ -77,6 +79,14 @@ export function ManagerApp({
   const [menuOpen, setMenuOpen] = useState(false);
   const readOnly = user.role === "controller" || subscription?.status === "read_only";
 
+  // Espaces distincts : le dirigeant (administrateur principal) pilote TOUT —
+  // équipe complète (gérants + agents), abonnement, facturation ; le gérant
+  // gère l'opérationnel (cotisants, carnets, encaissements, clôtures, audit)
+  // et l'équipe de collecte. L'onglet Abonnement est réservé au dirigeant.
+  const isOwner = user.role === "owner";
+  const visibleTabs = TABS.filter((t) => (t.id === "billing" ? isOwner : true));
+  const spaceLabel = isOwner ? "Espace dirigeant" : user.role === "manager" ? "Espace gérant" : user.role === "controller" ? "Espace contrôleur" : "Back-office";
+
   const readOnlyBanner =
     subscription?.status === "read_only"
       ? "Compte en lecture seule. Règle ton abonnement pour reprendre les encaissements."
@@ -92,7 +102,7 @@ export function ManagerApp({
           <span className="hidden lg:inline"><LogoWordmark size={30} /></span>
           <span className="lg:hidden"><LogoMark size={30} /></span>
         </div>
-        <ManagerNav tab={tab} onTab={setTab} />
+        <ManagerNav tab={tab} onTab={setTab} tabs={visibleTabs} />
         <div className="mt-auto space-y-2">
           {readOnly && (
             <Badge variant="outline" className="hidden w-full justify-center gap-1.5 rounded-md border-[#F5C6C0] bg-[#FDECEA] px-2 py-1 text-[11px] font-medium text-[#B3261E] lg:flex">
@@ -123,7 +133,7 @@ export function ManagerApp({
                 <div className="border-b border-line p-4">
                   <SheetTitle className="text-left"><LogoWordmark size={30} /></SheetTitle>
                 </div>
-                <div className="p-3"><ManagerNav tab={tab} onTab={setTab} onNavigate={() => setMenuOpen(false)} /></div>
+                <div className="p-3"><ManagerNav tab={tab} onTab={setTab} tabs={visibleTabs} onNavigate={() => setMenuOpen(false)} /></div>
                 <div className="mt-auto border-t border-line p-3">
                   <Button variant="outline" onClick={onLogout} className="w-full border-line text-danger hover:bg-[#FDECEA] hover:text-danger">
                     <LogOut className="h-4 w-4" aria-hidden /> Se déconnecter
@@ -132,8 +142,8 @@ export function ManagerApp({
               </SheetContent>
             </Sheet>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-ink">{TABS.find((t) => t.id === tab)?.label}</p>
-              <p className="truncate text-xs text-subtle">{user.structureName}</p>
+              <p className="truncate text-sm font-semibold text-ink">{visibleTabs.find((t) => t.id === tab)?.label}</p>
+              <p className="truncate text-xs text-subtle">{spaceLabel} · {user.structureName}</p>
             </div>
             <LogoMark size={30} />
           </div>
@@ -150,9 +160,9 @@ export function ManagerApp({
         <div className="hidden border-b border-line bg-white md:block">
           <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4 lg:px-8">
             <div>
-              <h1 className="font-display text-lg font-bold text-ink">{TABS.find((t) => t.id === tab)?.label}</h1>
+              <h1 className="font-display text-lg font-bold text-ink">{visibleTabs.find((t) => t.id === tab)?.label}</h1>
               <p className="text-sm text-subtle">
-                {user.structureName} · <span className="font-medium text-ink">{user.fullName}</span> ({user.role === "manager" ? "gérant" : user.role === "owner" ? "propriétaire" : user.role === "controller" ? "contrôleur" : user.role})
+                {spaceLabel} · {user.structureName} · <span className="font-medium text-ink">{user.fullName}</span>
               </p>
             </div>
             {subscription && (
@@ -168,13 +178,13 @@ export function ManagerApp({
 
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:px-6 lg:px-8">
           {tab === "dashboard" && <DashboardTab />}
-          {tab === "team" && <TeamTab readOnly={readOnly} />}
-          {tab === "contributors" && <ContributorsTab readOnly={readOnly} />}
+          {tab === "team" && <TeamTab readOnly={readOnly} isOwner={isOwner} />}
+          {tab === "contributors" && <ContributorsTab readOnly={readOnly} structureName={user.structureName ?? "Structure"} />}
           {tab === "passbooks" && <PassbooksTab readOnly={readOnly} />}
           {tab === "collections" && <CollectionsTab readOnly={readOnly} structureName={user.structureName ?? "Structure"} />}
           {tab === "closings" && <ClosingsTab readOnly={readOnly} />}
           {tab === "audit" && <AuditTab structureName={user.structureName ?? "Structure"} />}
-          {tab === "billing" && <BillingTab user={user} />}
+          {tab === "billing" && isOwner && <BillingTab user={user} />}
         </main>
       </div>
     </div>

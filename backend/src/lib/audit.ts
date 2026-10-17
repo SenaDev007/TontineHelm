@@ -56,7 +56,7 @@ export async function verifyAuditChain(tenantId: string): Promise<boolean> {
       payload: JSON.parse(log.payload),
       at: log.at.toISOString(),
     });
-    const expected = createHash("sha256").update((prev ?? "") + body).digest("hex");
+    const expected: string = createHash("sha256").update((prev ?? "") + body).digest("hex");
     if (log.prevHash !== prev || log.hash !== expected) return false;
     prev = log.hash;
   }

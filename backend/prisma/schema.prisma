@@ -78,9 +78,13 @@ model Contributor {
   tenantId     String
   fullName     String
   phone        String?
+  email        String? // pour l'envoi du lien du carnet par courriel
   neighborhood String?
   idNumber     String?
   agentId      String
+  // Lien personnel du cotisant : consultation de son carnet sans compte
+  // (partage WhatsApp / e-mail). Généré à la création ou à la première demande.
+  shareToken   String?  @unique
   status       String   @default("active") // active | inactive
   createdAt    DateTime @default(now())
 

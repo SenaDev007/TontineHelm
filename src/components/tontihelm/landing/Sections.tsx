@@ -4,7 +4,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  CloudRain, CalendarX2, UserX, EyeOff, WifiOff, MessageSquareText,
+  CloudRain, CalendarX2, UserX, EyeOff, WifiOff, Link2,
   Scale, LayoutDashboard, Smartphone, FileCheck2, ArrowRight,
 } from "lucide-react";
 
@@ -64,10 +64,10 @@ const FEATURES = [
     body: "L'application enregistre chaque encaissement sur le téléphone de l'agent et l'envoie dès le retour du réseau. Rien ne se perd, rien ne s'écrase.",
   },
   {
-    icon: MessageSquareText,
-    title: "Reçu immédiat",
-    hook: "Ton client garde une trace dans sa poche.",
-    body: "Chaque versement déclenche un SMS avec le montant, le jour du cycle et le solde cumulé. Le doute disparaît.",
+    icon: Link2,
+    title: "Carnet du client en ligne",
+    hook: "Ton client suit sa tontine, tout seul.",
+    body: "À la création de son compte, il reçoit un lien personnel par WhatsApp ou e-mail. Il y voit chaque versement, le solde et l'évolution du cycle — à tout moment, sur n'importe quel téléphone.",
   },
   {
     icon: Scale,

@@ -17,8 +17,8 @@ export default function ConditionsUtilisationPage() {
         {
           heading: "Objet et champ d'application",
           paragraphs: [
-            "TontiHelm est une application de gestion de tontines journalières destinée aux structures de collecte d'épargne opérant au Bénin : enregistrement des cotisants et des carnets, encaissement avec ou sans réseau, reçus par SMS, clôture quotidienne de caisse, journal d'audit inaltérable et tableaux de bord. Le service est fourni sous forme d'application web accessible depuis un navigateur et installable sur l'écran d'accueil du téléphone (progressive web app).",
-            "Les présentes conditions s'appliquent à tout utilisateur du service : le gérant de la structure (responsable du compte), les gestionnaires qu'il habilite, les agents de collecte qu'il crée, ainsi qu'aux demandeurs de démonstration. L'inscription à une démonstration n'entraîne aucune création de compte ni aucun engagement.",
+            "TontiHelm est une application de gestion de tontines journalières destinée aux structures de collecte d'épargne opérant au Bénin : enregistrement des cotisants et des carnets, encaissement avec ou sans réseau, carnet en ligne consultable par chaque cotisant depuis son lien personnel, clôture quotidienne de caisse, journal d'audit inaltérable et tableaux de bord. Le service est fourni sous forme d'application web accessible depuis un navigateur et installable sur l'écran d'accueil du téléphone (progressive web app).",
+            "Les présentes conditions s'appliquent à tout utilisateur du service : le dirigeant de la structure (administrateur principal du compte), les gérants qu'il habilite, les agents de collecte qu'il crée, ainsi qu'aux visiteurs consultant un carnet depuis un lien personnel. La consultation d'un carnet via lien n'entraîne aucune création de compte ni aucun engagement.",
           ],
         },
         {
@@ -38,8 +38,8 @@ export default function ConditionsUtilisationPage() {
         {
           heading: "Démonstration et abonnements",
           paragraphs: [
-            "Il n'existe pas de mode gratuit du service. La découverte de TontiHelm passe par une démonstration, sur demande, au cours de laquelle un conseiller de YEHI OR Tech présente l'application avec un carnet réel de la structure. La demande de démonstration est sans engagement et n'ouvre pas de compte.",
-            "L'usage du service repose sur un abonnement mensuel par paliers (Démarrage, Pro, Institution) dont les tarifs et contenus sont affichés sur la page des tarifs. Le paiement s'effectue par les moyens proposés sur la facture, y compris le paiement mobile money via le prestataire retenu. Les SMS envoyés aux cotisants sont facturés à l'usage, à un tarif affiché avant chaque envoi. Le non-paiement d'une facture entraîne le passage du compte en mode lecture seule : consultation et exports restent possibles, les encaissements sont bloqués, aucune donnée n'est supprimée.",
+            "Il n'existe pas de mode gratuit du service. La découverte de TontiHelm passe par une démonstration en direct, interactive, accessible depuis la page d'accueil sans création de compte, ainsi que par l'inscription en ligne au palier de son choix.",
+            "L'usage du service repose sur un abonnement mensuel ou annuel par paliers (Démarrage, Pro, Institution) dont les tarifs et contenus sont affichés sur la page des tarifs. Le paiement s'effectue en ligne au moment de l'inscription, notamment par le prestataire de paiement mobile money retenu, puis sur les factures périodiques. Le non-paiement d'une facture entraîne le passage du compte en mode lecture seule : consultation et exports restent possibles, les encaissements sont bloqués, aucune donnée n'est supprimée.",
           ],
         },
         {
@@ -55,7 +55,7 @@ export default function ConditionsUtilisationPage() {
             "Ne s'inscrire qu'avec des informations exactes, à jour, et justifier d'un agrément en cours de validité lorsque la réglementation l'exige pour l'activité exercée.",
             "Enregistrer les cotisants et les encaissements de manière fidèle et complète ; s'abstenir de toute saisie fictive destinée à masquer un écart de caisse.",
             "Ne pas utiliser le service à des fins contraires à l'ordre public béninois, aux lois en vigueur ou aux droits des cotisants.",
-            "Recueillir le consentement des cotisants à la réception de SMS de reçu et de rappel, et cesser l'envoi sur simple demande.",
+            "Recueillir le consentement des cotisants à la réception de leur lien de carnet (WhatsApp ou courriel) et des relances éventuelles, et cesser l'envoi sur simple demande.",
             "Respecter les quotas d'usage raisonnable et ne pas tenter d'entraver, de saturer ou de contourner les mécanismes de sécurité du service.",
           ],
         },
@@ -89,7 +89,7 @@ export default function ConditionsUtilisationPage() {
         {
           heading: "Modifications des conditions",
           paragraphs: [
-            "Les présentes conditions peuvent être modifiées pour évoluer avec le service ou avec la réglementation. La version applicable est celle affichée en ligne au moment de l'utilisation, datée et versionnée ; les modifications substantielles sont notifiées par SMS ou courriel au gérant au moins quinze jours avant leur entrée en vigueur.",
+            "Les présentes conditions peuvent être modifiées pour évoluer avec le service ou avec la réglementation. La version applicable est celle affichée en ligne au moment de l'utilisation, datée et versionnée ; les modifications substantielles sont notifiées par WhatsApp ou courriel au dirigeant au moins quinze jours avant leur entrée en vigueur.",
           ],
         },
         {

@@ -126,39 +126,7 @@ router.post(
   })
 );
 
-// ── GET /api/admin/demo-requests — demandes de démonstration reçues. ──
-router.get(
-  "/demo-requests",
-  h(async (req, res) => {
-    const user = await requireUser(req);
-    requireRole(user, ["admin"]);
-    const requests = await db.demoRequest.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 200,
-    });
-    res.json({ requests });
-  })
-);
-
-// ── POST /api/admin/demo-requests — suivi d'une demande (contactée, convertie, clôturée). ──
-const demoStatusSchema = z.object({
-  id: z.string().min(1),
-  status: z.enum(["new", "contacted", "converted", "closed"]),
-});
-
-router.post(
-  "/demo-requests",
-  h(async (req, res) => {
-    const user = await requireUser(req);
-    requireRole(user, ["admin"]);
-    const body = demoStatusSchema.safeParse(req.body ?? {});
-    if (!body.success) throw new ApiError("invalid_input", "Statut invalide.");
-    const { id, status } = body.data;
-    const existing = await db.demoRequest.findUnique({ where: { id } });
-    if (!existing) throw new ApiError("not_found", "Demande introuvable.", 404);
-    await db.demoRequest.update({ where: { id }, data: { status } });
-    res.json({ ok: true, message: "Statut de la demande mis à jour." });
-  })
-);
+// ── (Les demandes de démonstration ont été retirées : la vitrine propose
+//    désormais une démonstration en direct, interactive, sans formulaire.) ──
 
 export default router;

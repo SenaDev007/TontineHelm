@@ -10,20 +10,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PassbookStatusBadge } from "../StatusBadge";
+import { ShareLinkDialog } from "../ShareLinkSheet";
 import { ContributorRow, formatFCFA } from "@/lib/types";
 import { get, isOfflineQueued, post } from "@/lib/client";
 import { useSyncDone } from "@/lib/offline/hooks";
 import { usePlanQuota } from "./usePlanQuota";
-import { UserPlus, Search, Phone, MapPin, IdCard } from "lucide-react";
+import { UserPlus, Search, Phone, MapPin, IdCard, Link2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
-export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
+export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean; structureName: string }) {
   const [rows, setRows] = useState<ContributorRow[] | null>(null);
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [agents, setAgents] = useState<{ id: string; fullName: string }[]>([]);
-  const [form, setForm] = useState({ fullName: "", phone: "", neighborhood: "", idNumber: "", agentId: "" });
+  const [form, setForm] = useState({ fullName: "", phone: "", email: "", neighborhood: "", idNumber: "", agentId: "" });
   const [submitting, setSubmitting] = useState(false);
+  const [share, setShare] = useState<{
+    fullName: string;
+    phone: string | null;
+    email: string | null;
+    passbookNumber: string | null;
+    url: string;
+  } | null>(null);
   const quota = usePlanQuota();
   const contributorsQuotaReached =
     !readOnly && quota !== null && (rows?.length ?? 0) >= quota.usage.contributorsQuota;
@@ -37,8 +45,8 @@ export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
   useEffect(() => {
     load();
     // Agents de la structure pour le formulaire de création.
-    get<{ users: { id: string; fullName: string }[] }>("/api/manager/agents")
-      .then((d) => setAgents(d.users))
+    get<{ users: { id: string; fullName: string; role: string }[] }>("/api/manager/agents")
+      .then((d) => setAgents(d.users.filter((u) => u.role === "agent")))
       .catch(() => undefined);
   }, []);
 
@@ -51,10 +59,29 @@ export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
     return rows.filter((r) => r.fullName.toLowerCase().includes(q) || (r.neighborhood ?? "").toLowerCase().includes(q));
   }, [rows, search]);
 
+  async function openShare(row: ContributorRow) {
+    try {
+      let url = row.shareUrl;
+      if (!url) {
+        const res = await post<{ url: string }>(`/api/manager/contributors/${row.id}/share`, {});
+        url = res.url;
+      }
+      setShare({
+        fullName: row.fullName,
+        phone: row.phone,
+        email: row.email,
+        passbookNumber: row.passbook?.number ?? null,
+        url,
+      });
+    } catch (err) {
+      toast({ title: "Lien indisponible", description: err instanceof Error ? err.message : "Réessaie." });
+    }
+  }
+
   async function submit() {
     setSubmitting(true);
     try {
-      const res = await post("/api/manager/contributors", form);
+      const res = await post<{ contributor?: { fullName: string }; shareUrl?: string }>("/api/manager/contributors", { ...form, email: form.email.trim() || "" });
       if (isOfflineQueued(res)) {
         toast({
           title: "Enregistré hors ligne.",
@@ -62,10 +89,19 @@ export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
         });
       } else {
         toast({ title: "Cotisant enregistré.", description: `${form.fullName} est rattaché à l'agent choisi.` });
+        if (res?.shareUrl) {
+          setShare({
+            fullName: form.fullName,
+            phone: form.phone,
+            email: form.email || null,
+            passbookNumber: null,
+            url: res.shareUrl,
+          });
+        }
         load();
       }
       setOpen(false);
-      setForm({ fullName: "", phone: "", neighborhood: "", idNumber: "", agentId: "" });
+      setForm({ fullName: "", phone: "", email: "", neighborhood: "", idNumber: "", agentId: "" });
     } catch (err) {
       toast({ title: "Enregistrement impossible", description: err instanceof Error ? err.message : "Réessaie." });
     } finally {
@@ -119,16 +155,21 @@ export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
                   <Label htmlFor="c-name">Nom complet</Label>
                   <Input id="c-name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} className="h-11 border-line" placeholder="Adjovi Marie" />
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="c-phone">Téléphone</Label>
-                    <Input id="c-phone" inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="h-11 border-line" placeholder="+229 96 15 01 01" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="c-area">Quartier</Label>
-                    <Input id="c-area" value={form.neighborhood} onChange={(e) => setForm({ ...form, neighborhood: e.target.value })} className="h-11 border-line" placeholder="Albarika" />
-                  </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="c-phone">Téléphone (WhatsApp)</Label>
+                  <Input id="c-phone" inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="h-11 border-line" placeholder="+229 96 15 01 01" />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="c-email">E-mail (facultatif)</Label>
+                  <Input id="c-email" type="email" inputMode="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="h-11 border-line" placeholder="client@exemple.bj" />
+                  <p className="text-xs text-subtle">Le lien du carnet part par WhatsApp ; l&apos;e-mail permet aussi le courriel.</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="c-area">Quartier</Label>
+                <Input id="c-area" value={form.neighborhood} onChange={(e) => setForm({ ...form, neighborhood: e.target.value })} className="h-11 border-line" placeholder="Albarika" />
+              </div>
                 <div className="space-y-2">
                   <Label htmlFor="c-id">Numéro de pièce d'identité</Label>
                   <Input id="c-id" value={form.idNumber} onChange={(e) => setForm({ ...form, idNumber: e.target.value })} className="h-11 border-line" placeholder="CI-1187452" />
@@ -173,6 +214,7 @@ export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
                 <TableHead>Carnet</TableHead>
                 <TableHead className="text-right">Solde</TableHead>
                 <TableHead>Statut</TableHead>
+                <TableHead className="text-right">Lien du carnet</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -201,6 +243,18 @@ export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
                   </TableCell>
                   <TableCell>
                     {r.passbook ? <PassbookStatusBadge status={r.passbook.status} /> : <span className="text-xs text-subtle">—</span>}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-[#9ED9D3] bg-[#F0FBFA] text-primary hover:bg-[#DFF6F4] hover:text-primary"
+                      onClick={() => openShare(r)}
+                      aria-label={`Lien du carnet de ${r.fullName}`}
+                      title="Partager le lien du carnet (WhatsApp / e-mail)"
+                    >
+                      <Link2 className="h-4 w-4" aria-hidden /> <span className="hidden xl:inline">Partager</span>
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -232,10 +286,30 @@ export function ContributorsTab({ readOnly }: { readOnly: boolean }) {
                   <span className="amount text-sm font-semibold text-ink">{formatFCFA(r.passbook.balance)}</span>
                 </div>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 w-full border-[#9ED9D3] bg-[#F0FBFA] text-primary hover:bg-[#DFF6F4] hover:text-primary"
+                onClick={() => openShare(r)}
+              >
+                <Link2 className="h-4 w-4" aria-hidden /> Lien du carnet (WhatsApp / e-mail)
+              </Button>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* Partage du lien de carnet */}
+      <ShareLinkDialog
+        open={share !== null}
+        onOpenChange={(v) => !v && setShare(null)}
+        url={share?.url ?? ""}
+        contributorName={share?.fullName ?? ""}
+        structureName={structureName}
+        phone={share?.phone ?? null}
+        email={share?.email ?? null}
+        passbookNumber={share?.passbookNumber ?? null}
+      />
     </div>
   );
 }

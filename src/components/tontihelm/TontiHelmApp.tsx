@@ -10,7 +10,7 @@ import { Stats } from "@/components/tontihelm/landing/Stats";
 import { Problem, Features, Method, Trust } from "@/components/tontihelm/landing/Sections";
 import { Pricing } from "@/components/tontihelm/landing/Pricing";
 import { Faq, FinalCta } from "@/components/tontihelm/landing/Faq";
-import { DemoSection } from "@/components/tontihelm/landing/DemoSection";
+import { LiveDemoSection } from "@/components/tontihelm/landing/LiveDemo";
 import { Footer } from "@/components/tontihelm/landing/Footer";
 import { PendingScreen } from "@/components/tontihelm/auth/PendingScreen";
 import { AgentApp } from "@/components/tontihelm/agent/AgentApp";
@@ -21,7 +21,7 @@ import { OfflineLayer } from "@/components/offline/OfflineLayer";
 import { clearOfflineData, get, post, setToken } from "@/lib/client";
 import { SessionUser, SubscriptionInfo } from "@/lib/types";
 
-/** Défilement doux vers la section Démonstration (pas de mode gratuit : démo accompagnée). */
+/** Défilement doux vers la démonstration en direct (interactive, sans compte). */
 function scrollToDemo() {
   document.getElementById("demonstration")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -106,7 +106,7 @@ export default function TontiHelmApp() {
           <Method />
           <Trust />
           <Pricing onDemoRequest={scrollToDemo} />
-          <DemoSection />
+          <LiveDemoSection />
           <Faq />
           <FinalCta onDemoRequest={scrollToDemo} />
         </main>

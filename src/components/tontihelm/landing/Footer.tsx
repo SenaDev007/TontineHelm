@@ -45,7 +45,7 @@ const SOCIALS = [
 const PRODUCT_LINKS = [
   { label: "Fonctionnalités", href: "#fonctionnalites" },
   { label: "Tarifs", href: "#tarifs" },
-  { label: "Demander une démonstration", href: "#demonstration" },
+  { label: "Démonstration en direct", href: "#demonstration" },
   { label: "Questions fréquentes", href: "#questions" },
   { label: "Inscrire ma structure", href: "/inscription" },
   { label: "Se connecter", href: "/connexion" },

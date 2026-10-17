@@ -8,7 +8,6 @@ import { requireUser, requireRole, requireTenant, errorResponse, ApiError, h } f
 import { appendAudit } from "../lib/audit";
 import { assertWritable } from "../lib/tenant";
 import { passbookBalance, paidDays } from "../lib/domain";
-import { receiptSms } from "../lib/sms";
 
 const router = Router();
 
@@ -120,30 +119,9 @@ router.post(
       payload: { contributor: passbook.contributor.fullName, amount: payment.amount, providerRef: payment.providerRef, reconciled: true },
     });
 
-    const structure = await db.structure.findUnique({ where: { id: tenantId } });
-    if (passbook.contributor.phone) {
-      await db.notification.create({
-        data: {
-          tenantId,
-          channel: "sms",
-          template: "receipt",
-          toPhone: passbook.contributor.phone,
-          content: receiptSms({
-            structure: structure?.name ?? "",
-            amount: payment.amount,
-            date: new Date(),
-            passbookNumber: passbook.number,
-            days: [dayIndex],
-            cycleDays: passbook.cycleDays,
-            balance: balance + payment.amount,
-          }),
-          status: "sent",
-          costFcfa: 25,
-        },
-      });
-    }
-
-    res.json({ message: "Paiement approuvé et rapproché. Reçu envoyé au cotisant." });
+    // Pas de reçu SMS : l'écriture est visible immédiatement sur le carnet en ligne
+    // du cotisant, via son lien personnel (WhatsApp / e-mail).
+    res.json({ message: "Paiement approuvé et rapproché. Le carnet du cotisant est à jour sur son lien." });
   })
 );
 

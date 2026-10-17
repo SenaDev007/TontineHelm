@@ -100,7 +100,7 @@ export function Navbar({ onDemoRequest }: { onDemoRequest: () => void }) {
                   }}
                   className="mt-1 rounded-md px-3 py-3 text-base font-medium text-primary transition-colors hover:bg-muted"
                 >
-                  Demander une démonstration
+                  Voir la démonstration en direct
                 </a>
               </nav>
             </SheetContent>

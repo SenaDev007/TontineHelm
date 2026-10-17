@@ -9,7 +9,7 @@ import { ArrowRight, LogIn } from "lucide-react";
 const FAQ = [
   {
     q: "Puis-je voir l'application avant de m'inscrire ?",
-    a: "Oui. Demande une démonstration : un conseiller installe l'application avec toi et configure un carnet réel de ta structure, agent par agent. Aucune inscription n'est nécessaire à cette étape.",
+    a: "Oui. Essaie la démonstration en direct sur cette page : quatre gestes, deux minutes, sans compte. Un conseiller reste disponible sur WhatsApp pour aller plus loin.",
   },
   {
     q: "TontiHelm garde-t-il l'argent ?",
@@ -29,7 +29,7 @@ const FAQ = [
   },
   {
     q: "Mes clients ont-ils besoin d'un smartphone ?",
-    a: "Non. Ils reçoivent leur reçu par SMS sur n'importe quel téléphone.",
+    a: "Non. Chaque client reçoit un lien personnel par WhatsApp ou e-mail : il ouvre son carnet dans le navigateur de n'importe quel téléphone, sans compte ni code.",
   },
   {
     q: "Mes données restent-elles à moi si j'arrête ?",
@@ -73,12 +73,12 @@ export function FinalCta({ onDemoRequest }: { onDemoRequest: () => void }) {
           Ferme ton carnet papier ce mois-ci.
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-[#AFC2DE] md:text-lg">
-          Demande une démonstration : un conseiller installe l&apos;application chez un de tes agents et
-          configure tes carnets avec toi.
+          Essaie la démonstration en direct plus haut : quatre gestes, deux minutes, sans compte.
+          Quand tu es prêt, l&apos;inscription prend trois étapes et le paiement est immédiat.
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button size="lg" onClick={onDemoRequest} className="bg-primary text-primary-foreground hover:bg-primary-hover h-12 px-6 text-base">
-            Demander une démonstration <ArrowRight className="h-5 w-5" aria-hidden />
+            Voir la démonstration en direct <ArrowRight className="h-5 w-5" aria-hidden />
           </Button>
           {/* Accès direct pour les structures déjà inscrites */}
           <Button

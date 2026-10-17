@@ -11,7 +11,7 @@ import adminRoutes from "./routes/admin";
 import agentRoutes from "./routes/agent";
 import managerRoutes from "./routes/manager";
 import paymentsRoutes from "./routes/payments";
-import demoRoutes from "./routes/demo";
+import publicRoutes from "./routes/public";
 import { apiErrorHandler, getCurrentUser } from "./lib/auth";
 import { db } from "./lib/db";
 
@@ -82,7 +82,9 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/agent", agentRoutes);
 app.use("/api/manager", managerRoutes);
 app.use("/api/payments", paymentsRoutes);
-app.use("/api/demo", demoRoutes);
+// Carnets publics des cotisants : lien personnel partagé par WhatsApp / e-mail,
+// consultation sans compte — accessible même si les autres routes changent.
+app.use("/api/public", publicRoutes);
 
 // 404 JSON uniforme pour toute route inconnue.
 app.use((_req, res) => {

@@ -84,15 +84,56 @@ export interface ContributorRow {
   id: string;
   fullName: string;
   phone: string | null;
+  email: string | null;
   neighborhood: string | null;
   idNumber: string | null;
   agent: string;
   status: string;
   createdAt: string;
+  shareToken: string | null;
+  /** Lien personnel du carnet (partagé par WhatsApp / e-mail). */
+  shareUrl: string | null;
   passbook: {
     id: string; number: string; dailyAmount: number; cycleDays: number;
     balance: number; paidDays: number; missedDays: number; status: string;
   } | null;
+}
+
+/** Client du portefeuille d'un agent (écran Clients de l'application agent). */
+export interface AgentClientRow {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  email: string | null;
+  neighborhood: string | null;
+  shareToken: string | null;
+  shareUrl: string | null;
+  status: string;
+  passbook: {
+    id: string; number: string; dailyAmount: number; cycleDays: number;
+    balance: number; paidDays: number;
+  } | null;
+}
+
+/** Carnet public d'un cotisant, consulté depuis son lien personnel. */
+export interface PublicCarnetData {
+  structure: { name: string };
+  contributor: { fullName: string; neighborhood: string | null };
+  passbooks: {
+    number: string;
+    dailyAmount: number;
+    cycleDays: number;
+    startsOn: string;
+    status: string;
+    statusLabel: string;
+    balance: number;
+    paidDays: number;
+    missedDays: number;
+    elapsedDays: number;
+    cycleTotal: number;
+    days: { date: string; net: number }[];
+  }[];
+  generatedAt: string;
 }
 
 export interface PassbookRow {
@@ -196,7 +237,6 @@ export interface BillingData {
   usage: {
     agents: number; agentsQuota: number; contributors: number; contributorsQuota: number;
     extraContributors: number; extraAgents: number; remindersIncluded: boolean;
-    smsMonth: number; smsTotal: number;
   };
   invoices: {
     id: string; period: string; baseAmount: number; total: number; status: string;
@@ -217,19 +257,6 @@ export interface AdminStructure {
   owner: { fullName: string; phone: string } | null;
   plan: string | null;
   counts: { contributors: number; users: number; collections: number };
-}
-
-export interface DemoRequestRow {
-  id: string;
-  fullName: string;
-  phone: string;
-  structure: string;
-  city: string | null;
-  contributors: number | null;
-  agents: number | null;
-  message: string | null;
-  status: "new" | "contacted" | "converted" | "closed";
-  createdAt: string;
 }
 
 export interface OutboxEvent {

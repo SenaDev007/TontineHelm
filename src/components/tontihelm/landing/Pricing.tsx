@@ -15,7 +15,7 @@ const PLANS = [
     features: [
       "1 agent et 50 cotisants inclus",
       "Application agent hors ligne",
-      "Reçus SMS facturés à l'usage",
+      "Lien de carnet pour chaque cotisant",
       "Paiement mobile money",
       "Clôture de caisse et audit",
       "Export Excel et PDF",
@@ -104,13 +104,13 @@ export function Pricing({ onDemoRequest }: { onDemoRequest: () => void }) {
         </div>
 
         <p className="mt-6 text-center text-sm text-subtle">
-          Paiement annuel : 2 mois inclus. Les SMS sont facturés à l'usage, tarif affiché avant envoi.
+          Paiement annuel : 2 mois inclus. Chaque cotisant suit sa tontine depuis son lien personnel — sans coût par message.
         </p>
         <div className="mt-8 text-center">
           <Button size="lg" onClick={onDemoRequest} className="bg-primary text-primary-foreground hover:bg-primary-hover h-12 px-6 text-base">
-            Demander une démonstration <ArrowRight className="h-5 w-5" aria-hidden />
+            Voir la démonstration en direct <ArrowRight className="h-5 w-5" aria-hidden />
           </Button>
-          <p className="mt-3 text-sm text-subtle">Un conseiller t'accompagne dans le choix de ton palier.</p>
+          <p className="mt-3 text-sm text-subtle">L&apos;application se découvre en 2 minutes, directement dans ton navigateur.</p>
         </div>
       </div>
     </section>

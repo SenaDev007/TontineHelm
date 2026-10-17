@@ -52,18 +52,22 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
 
   const [reminding, setReminding] = useState<string | null>(null);
 
-  /* Rappel SMS au cotisant en retard (paliers Pro et Institution). */
+  /* Relance WhatsApp du cotisant en retard (paliers Pro et Institution) :
+     le message est pré-rempli avec le lien de son carnet. */
   async function remind(r: PassbookRow) {
     setReminding(r.id);
     try {
-      const res = await post<{ message: string }>(`/api/manager/passbooks/${r.id}/remind`, {});
+      const res = await post<{ message: string; whatsappUrl?: string }>(`/api/manager/passbooks/${r.id}/remind`, {});
       if (isOfflineQueued(res)) {
-        toast({ title: "Enregistré hors ligne.", description: "Le rappel partira au serveur dès le retour du réseau." });
+        toast({ title: "Enregistré hors ligne.", description: "La relance partira au serveur dès le retour du réseau." });
+      } else if (res.whatsappUrl) {
+        window.open(res.whatsappUrl, "_blank", "noopener,noreferrer");
+        toast({ title: "Relance WhatsApp prête.", description: "Vérifie le message pré-rempli et envoie-le au cotisant." });
       } else {
-        toast({ title: "Rappel envoyé.", description: res.message });
+        toast({ title: "Relance prête.", description: res.message });
       }
     } catch (err) {
-      toast({ title: "Rappel impossible", description: err instanceof Error ? err.message : "Réessaie." });
+      toast({ title: "Relance impossible", description: err instanceof Error ? err.message : "Réessaie." });
     } finally {
       setReminding(null);
     }
@@ -206,13 +210,13 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="border-[#F5C6C0] text-[#B3261E] hover:bg-[#FDECEA] hover:text-[#B3261E]"
+                          className="border-[#25D366]/60 bg-[#E9F9EF] text-[#128C4A] hover:bg-[#D2F2DE] hover:text-[#128C4A]"
                           disabled={reminding === r.id}
                           onClick={() => remind(r)}
-                          aria-label={`Envoyer un rappel à ${r.contributor}`}
-                          title={`Rappel SMS : ${r.missedDays} jours manqués`}
+                          aria-label={`Relancer ${r.contributor} par WhatsApp`}
+                          title={`Relance WhatsApp : ${r.missedDays} jours manqués`}
                         >
-                          <BellRing className="h-4 w-4" aria-hidden /> <span className="hidden xl:inline">Rappel</span>
+                          <BellRing className="h-4 w-4" aria-hidden /> <span className="hidden xl:inline">Relancer</span>
                         </Button>
                       )}
                       <Button
@@ -259,11 +263,11 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="mt-3 w-full border-[#F5C6C0] text-[#B3261E] hover:bg-[#FDECEA] hover:text-[#B3261E]"
+                  className="mt-3 w-full border-[#25D366]/60 bg-[#E9F9EF] text-[#128C4A] hover:bg-[#D2F2DE] hover:text-[#128C4A]"
                   disabled={reminding === r.id}
                   onClick={() => remind(r)}
                 >
-                  <BellRing className="h-4 w-4" aria-hidden /> Rappel : {r.missedDays} jours manqués
+                  <BellRing className="h-4 w-4" aria-hidden /> Relancer par WhatsApp : {r.missedDays} jours manqués
                 </Button>
               )}
               <Button

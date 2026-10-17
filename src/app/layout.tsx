@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   title: "TontiHelm : application de gestion de tontine au Bénin",
   description:
-    "Remplace le carnet papier par une application qui marche sans réseau. Encaissement en 10 secondes, caisse clôturée chaque soir. Demande une démonstration.",
+    "Remplace le carnet papier par une application qui marche sans réseau. Encaissement en 10 secondes, carnet client en ligne, caisse clôturée chaque soir. Essaie la démonstration en direct.",
   keywords: [
     "application gestion tontine",
     "application tontine Bénin",
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "TontiHelm : application de gestion de tontine au Bénin",
     description:
-      "Remplace le carnet papier par une application qui marche sans réseau. Encaissement en 10 secondes, caisse clôturée chaque soir. Demande une démonstration.",
+      "Remplace le carnet papier par une application qui marche sans réseau. Encaissement en 10 secondes, carnet client en ligne, caisse clôturée chaque soir. Essaie la démonstration en direct.",
     type: "website",
     locale: "fr_BJ",
   },

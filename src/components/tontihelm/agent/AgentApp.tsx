@@ -14,14 +14,15 @@ import { TourScreen } from "./TourScreen";
 import { CollectScreen, CollectAllocation } from "./CollectScreen";
 import { ClosingScreen } from "./ClosingScreen";
 import { AccountScreen } from "./AccountScreen";
-import { MapPin, Wallet, Scale, User, ArrowLeft, RefreshCw } from "lucide-react";
+import { ClientsScreen } from "./ClientsScreen";
+import { MapPin, Wallet, Scale, User, Users, ArrowLeft, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
 const OUTBOX_KEY = "tontihelm_outbox";
 const SIMOFFLINE_KEY = "tontihelm_offline_sim";
 
-type Tab = "tour" | "collect" | "closing" | "account";
+type Tab = "tour" | "collect" | "clients" | "closing" | "account";
 
 function loadOutbox(): OutboxEvent[] {
   if (typeof window === "undefined") return [];
@@ -220,6 +221,7 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "tour", label: "Tournée", icon: MapPin },
     { id: "collect", label: "Encaisser", icon: Wallet },
+    { id: "clients", label: "Clients", icon: Users },
     { id: "closing", label: "Clôture", icon: Scale },
     { id: "account", label: "Compte", icon: User },
   ];
@@ -295,6 +297,12 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
             onDeclared={() => setReloadKey((k) => k + 1)}
           />
         )}
+        {tab === "clients" && (
+          <ClientsScreen
+            structureName={tour?.structure.name ?? "TontiHelm"}
+            onCreated={() => setReloadKey((k) => k + 1)}
+          />
+        )}
         {tab === "account" && (
           <AccountScreen
             user={user}
@@ -308,13 +316,13 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
         )}
       </main>
 
-      {/* Barre du bas à 4 entrées (§15.8) — cibles 48 px minimum */}
+      {/* Barre du bas à 5 entrées (§15.8) — cibles 48 px minimum */}
       <nav
         className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white"
         aria-label="Navigation de l'application agent"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="mx-auto grid max-w-2xl grid-cols-4">
+        <div className="mx-auto grid max-w-2xl grid-cols-5">
           {tabs.map((t) => (
             <button
               key={t.id}

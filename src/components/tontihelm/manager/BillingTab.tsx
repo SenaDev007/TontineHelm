@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { SubscriptionStatusBadge } from "../StatusBadge";
 import { BillingData, SessionUser, SUB_STATUS, formatFCFA } from "@/lib/types";
 import { get } from "@/lib/client";
-import { CreditCard, Smartphone, Users, CheckCircle2, Clock, BellRing } from "lucide-react";
+import { CreditCard, Smartphone, Users, CheckCircle2, Clock, BellRing, Link2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 export function BillingTab({ user }: { user: SessionUser }) {
@@ -128,20 +128,22 @@ export function BillingTab({ user }: { user: SessionUser }) {
       <Card className="border-line">
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
-            <p className="text-sm font-medium text-ink">SMS envoyés ce mois</p>
-            <p className="text-xs text-subtle">Facturés à l'usage, tarif affiché avant envoi (25 FCFA chacun).</p>
+            <p className="text-sm font-medium text-ink">Liens de carnet et relances</p>
+            <p className="text-xs text-subtle">
+              Chaque cotisant suit sa tontine depuis son lien personnel (WhatsApp / e-mail) — sans coût par message.
+            </p>
           </div>
           <div className="flex items-center gap-4">
             {usage.remindersIncluded ? (
               <Badge variant="outline" className="gap-1.5 rounded-md border-[#B5E8E5] bg-[#DFF6F4] px-2 py-1 text-xs font-medium text-[#00806B]">
-                <BellRing className="h-3.5 w-3.5" aria-hidden /> Rappels inclus
+                <BellRing className="h-3.5 w-3.5" aria-hidden /> Relances incluses
               </Badge>
             ) : (
               <Badge variant="outline" className="gap-1.5 rounded-md border-[#F0D48A] bg-[#FFF4D6] px-2 py-1 text-xs font-medium text-[#A66A00]">
-                <BellRing className="h-3.5 w-3.5" aria-hidden /> Rappels dès le palier Pro
+                <BellRing className="h-3.5 w-3.5" aria-hidden /> Relances dès le palier Pro
               </Badge>
             )}
-            <p className="amount font-display text-xl font-bold text-ink">{usage.smsMonth}</p>
+            <Link2 className="h-5 w-5 text-primary" aria-hidden />
           </div>
         </CardContent>
       </Card>
@@ -169,7 +171,6 @@ export function BillingTab({ user }: { user: SessionUser }) {
                   </TableCell>
                   <TableCell className="text-xs text-subtle">
                     Palier {formatFCFA(inv.baseAmount)}
-                    {typeof inv.extras?.smsAmount === "number" && ` + SMS ${formatFCFA(inv.extras.smsAmount)}`}
                     {typeof inv.extras?.vatRate === "number" && ` + TVA ${Math.round(inv.extras.vatRate * 100)} %`}
                   </TableCell>
                   <TableCell className="amount text-sm font-semibold text-ink">{formatFCFA(inv.total)}</TableCell>

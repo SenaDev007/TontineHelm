@@ -38,6 +38,9 @@
   ],
   "exclude": [
     "node_modules",
-    "academia-Helm"
+    "academia-Helm",
+    "repo-acadiahelm",
+    "backend",
+    "skills"
   ]
 }
