@@ -3,7 +3,7 @@
 // Academia Helm) : identité de la structure, puis dirigeant et code PIN, puis
 // ÉTAPE 3 = choix du plan d'abonnement et PAIEMENT FedaPay. Le compte est créé
 // et ACTIF dès la confirmation du paiement — plus de « demande d'ouverture ».
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,8 +15,8 @@ import { LogoMark } from "../Logo";
 import { post, setToken, ApiClientError } from "@/lib/client";
 import { FedaPayCheckout, type FedaPayCheckoutData } from "./FedaPayCheckout";
 import {
-  ArrowLeft, ArrowRight, Check, CheckCircle2, CreditCard, Loader2, PartyPopper,
-  ShieldCheck, Smartphone, Sparkles,
+  ArrowLeft, ArrowRight, Check, CheckCircle2, Clock, CreditCard, ExternalLink,
+  Loader2, PartyPopper, ShieldCheck, Smartphone, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +51,10 @@ type PlanKey = (typeof PLANS)[number]["key"];
 
 const fcfa = (n: number) => `${n.toLocaleString("fr-FR").replace(/\u202f/g, " ")} FCFA`;
 
+/** Libellé du plan par clé (l'accusé d'activation ne porte que la clé). */
+const planName = (key?: string | null) =>
+  PLANS.find((p) => p.key === key)?.name ?? "souscrit";
+
 interface RegisterResponse {
   ok: boolean; paymentId: string; amount: number;
   plan: PlanKey; billingPeriod: "monthly" | "yearly"; mode: "fedapay" | "test" | "unconfigured";
@@ -58,13 +62,17 @@ interface RegisterResponse {
 
 interface PaymentSession {
   ok: boolean; mode: "fedapay" | "test"; paymentId: string; amount: number;
-  checkout?: FedaPayCheckoutData; paymentUrl?: string | null;
+  transactionId?: string | null; paymentUrl?: string | null;
+  checkout?: FedaPayCheckoutData;
 }
 
 interface VerifyResponse {
   status: "approved" | "declined" | "pending";
   activated: boolean;
   token?: string | null;
+  structureName?: string;
+  ownerPhone?: string;
+  plan?: string;
   message?: string;
 }
 
@@ -80,7 +88,11 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
   const [session, setSession] = useState<PaymentSession | null>(null);
   const [checkoutData, setCheckoutData] = useState<FedaPayCheckoutData | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [verifyStalled, setVerifyStalled] = useState(false); // vérification lente : bouton manuel
+  const [redirecting, setRedirecting] = useState(false); // vers la page hébergée FedaPay
+  const [activation, setActivation] = useState<VerifyResponse | null>(null); // accusé (structureName… après redirection)
   const [finished, setFinished] = useState(false);
+  const verifyAttemptsRef = useRef(0); // bornage anti-boucle (bug historique « vérification en boucle »)
 
   const [form, setForm] = useState({
     structureName: "", kind: "", licenseRef: "",
@@ -114,6 +126,9 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
   }
 
   // ── Lancement du paiement : draft → session FedaPay / mode test ────────────
+  // Patron Academia Helm : PRIMAIRE = redirection pleine page vers la page de
+  // paiement HÉBERGÉE FedaPay (liée à la transaction créée côté serveur avec la
+  // clé secrète). Le widget intégré n'est qu'un repli sans cette URL.
   async function startPayment() {
     if (!plan || !chosenPlan) {
       setError("Choisis ton plan d'abonnement pour payer.");
@@ -134,11 +149,21 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
         plan,
         billingPeriod: period,
       });
-      // 2. Session de paiement : transaction FedaPay ou mode test.
+      // 2. Session de paiement : transaction FedaPay + lien hébergé, ou mode test.
       const pay = await post<PaymentSession>("/api/structures/register/payment", {
         paymentId: reg.paymentId,
       });
+      verifyAttemptsRef.current = 0;
+      setVerifyStalled(false);
       setSession(pay);
+      if (pay.mode === "fedapay" && pay.paymentUrl) {
+        // PRIMAIRE (Academia Helm) : page pleine page FedaPay. Au retour, FedaPay
+        // ramène sur /inscription?paymentId=…&status=return → vérification serveur.
+        setRedirecting(true);
+        window.location.href = pay.paymentUrl;
+        return;
+      }
+      // Repli : widget intégré (amount + description, sans identifiant).
       if (pay.mode === "fedapay" && pay.checkout) setCheckoutData(pay.checkout);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Impossible de préparer le paiement. Réessaie.");
@@ -148,49 +173,109 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
   }
 
   // ── Vérification du statut réel (backend ↔ FedaPay) puis activation ───────
-  const verify = useCallback(async (outcome?: "approved" | "declined") => {
-    if (!session) return;
-    setVerifying(true);
-    setError(null);
-    try {
-      const res = await post<VerifyResponse>("/api/structures/register/verify", {
-        paymentId: session.paymentId,
-        ...(outcome ? { outcome } : {}),
-      });
-      if (res.activated) {
-        if (res.token) setToken(res.token);
-        setFinished(true);
-      } else if (res.status === "pending") {
-        // Paiement encore en cours côté FedaPay : nouvelle tentative brève.
-        setTimeout(() => void verify(), 3000);
-      } else {
+  // ⚠ Bug historique corrigé : la vérification est BORNÉE (10 tentatives, ~35 s)
+  // — plus jamais de boucle infinie « Vérification… » qui réaffiche le modal.
+  // `fedapayTransactionId` : identifiant DE TRANSACTION rapporté par le widget
+  // intégré (repli) — simple clé de recherche, le statut vient toujours de l'API.
+  const MAX_VERIFY_ATTEMPTS = 10;
+  const verify = useCallback(
+    async (outcome?: "approved" | "declined", fedapayTransactionId?: string) => {
+      if (!session) return;
+      setVerifying(true);
+      setVerifyStalled(false);
+      setError(null);
+      const attempt = ++verifyAttemptsRef.current;
+      try {
+        const res = await post<VerifyResponse>("/api/structures/register/verify", {
+          paymentId: session.paymentId,
+          ...(outcome ? { outcome } : {}),
+          ...(fedapayTransactionId ? { fedapayTransactionId } : {}),
+        });
+        if (res.activated) {
+          if (res.token) setToken(res.token);
+          setActivation(res);
+          setFinished(true);
+          setVerifying(false);
+          return;
+        }
+        if (res.status === "pending") {
+          if (attempt >= MAX_VERIFY_ATTEMPTS) {
+            // Toujours en attente : on rend la main à l'utilisateur avec un
+            // bouton de relance manuelle (plus de boucle invisible).
+            setVerifyStalled(true);
+            setVerifying(false);
+            return;
+          }
+          setTimeout(
+            () => void verify(undefined, fedapayTransactionId),
+            attempt < 3 ? 2500 : 4000,
+          );
+          return; // « verifying » reste true : pas de flash du modal entre deux sondes
+        }
+        // Refusé/annulé : verdict définitif.
         setError(res.message ?? "Le paiement n'a pas été confirmé. Réessaie.");
         setSession(null);
         setCheckoutData(null);
+        setVerifying(false);
+      } catch (err) {
+        if (err instanceof ApiClientError && err.code === "payment_check_retry") {
+          if (attempt >= MAX_VERIFY_ATTEMPTS) {
+            setVerifyStalled(true);
+            setVerifying(false);
+            return;
+          }
+          setTimeout(() => void verify(undefined, fedapayTransactionId), 4000);
+          return;
+        }
+        // transaction_not_found / définitif : erreur claire + reprise possible.
+        setError(err instanceof Error ? err.message : "Vérification du paiement impossible.");
+        setSession(null);
+        setCheckoutData(null);
+        setVerifying(false);
       }
-    } catch (err) {
-      if (err instanceof ApiClientError && err.code === "payment_check_retry") {
-        setTimeout(() => void verify(), 4000);
-        return;
-      }
-      setError(err instanceof Error ? err.message : "Vérification du paiement impossible.");
-    } finally {
-      setVerifying(false);
-    }
-  }, [session]);
+    },
+    [session],
+  );
+
+  /** Relance manuelle après blocage : remet le compteur à zéro. */
+  const recheck = useCallback(() => {
+    verifyAttemptsRef.current = 0;
+    void verify();
+  }, [verify]);
 
   // Retour pleine page FedaPay : /inscription?paymentId=…&status=return → vérifier.
+  // On saute à l'étape 3 (zone de paiement) : le formulaire est vide après le
+  // rechargement, c'est l'accusé d'activation qui portera les libellés de succès.
+  const [returnedFromFedapay, setReturnedFromFedapay] = useState(false);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const paymentId = params.get("paymentId");
-    if (paymentId && params.get("status") === "return" && !session) {
-      setSession({ ok: true, mode: "fedapay", paymentId, amount: 0 });
-      void verify();
+    if (paymentId && params.get("status") === "return") {
+      setStep(3);
+      setSession((s) => s ?? { ok: true, mode: "fedapay", paymentId, amount: 0 });
+      setReturnedFromFedapay(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleCheckoutComplete = useCallback(() => void verify(), [verify]);
+  // Le sondage démarre UNIQUEMENT au retour de la page hébergée (le repli widget
+  // lance sa propre vérification sur onComplete — inutile de sonder avant qu'il
+  // ait payé).
+  useEffect(() => {
+    if (returnedFromFedapay && session) void verify();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [returnedFromFedapay, session?.paymentId]);
+
+  // Achèvement du widget intégré (repli) : le message porte la transaction que
+  // l'iframe a créée — on n'en garde que l'IDENTIFIANT (jamais le statut annoncé).
+  const handleCheckoutComplete = useCallback(
+    (payload: unknown) => {
+      const tx = (payload as { transaction?: { id?: string | number } } | null)?.transaction;
+      const txId = tx?.id !== undefined && tx?.id !== null ? String(tx.id) : undefined;
+      void verify(undefined, txId);
+    },
+    [verify],
+  );
   const handleCheckoutError = useCallback(() => {
     setError("Le paiement n'a pas abouti. Choisis un autre moyen ou réessaie.");
   }, []);
@@ -217,9 +302,9 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
               </span>
               <h1 className="font-display mt-5 text-2xl font-bold text-ink">Compte créé avec succès</h1>
               <p className="mt-3 text-base leading-relaxed text-subtle">
-                Paiement confirmé. <strong className="text-ink">{form.structureName}</strong> est active,
-                ton abonnement {chosenPlan?.name} court dès aujourd&apos;hui. Ton numéro
-                <strong className="text-ink"> {form.ownerPhone}</strong> est ton identifiant de connexion.
+                Paiement confirmé. <strong className="text-ink">{activation?.structureName || form.structureName}</strong> est active,
+                ton abonnement {planName(activation?.plan ?? plan)} court dès aujourd&apos;hui. Ton numéro
+                <strong className="text-ink"> {activation?.ownerPhone || form.ownerPhone}</strong> est ton identifiant de connexion.
               </p>
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
                 <Button
@@ -472,9 +557,51 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
                     <div className="flex flex-col items-center rounded-lg border border-line bg-white p-8" role="status">
                       <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden />
                       <p className="mt-3 text-sm font-medium text-ink">Vérification du paiement…</p>
-                      <p className="mt-1 text-xs text-subtle">Quelques secondes, ne ferme pas cette page.</p>
+                      <p className="mt-1 text-xs text-subtle">Confirmation auprès de FedaPay, ne ferme pas cette page.</p>
+                    </div>
+                  ) : verifyStalled ? (
+                    /* Vérification bornée écoulée SANS verdict : la main est
+                        rendue à l'utilisateur — plus de boucle invisible. */
+                    <div className="rounded-lg border border-line bg-white p-6 text-center" role="status">
+                      <Clock className="h-8 w-8 text-accent mx-auto" aria-hidden />
+                      <p className="mt-2 text-sm font-semibold text-ink">Confirmation encore en cours</p>
+                      <p className="mt-1 text-xs leading-relaxed text-subtle">
+                        Le paiement peut mettre une à deux minutes à être confirmé par FedaPay (Mobile Money).
+                        Si tu viens de payer, relance la vérification dans un instant.
+                      </p>
+                      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
+                        <Button
+                          onClick={recheck}
+                          className="h-11 bg-primary px-5 text-primary-foreground hover:bg-primary-hover"
+                        >
+                          <Loader2 className="h-4 w-4" aria-hidden /> Revérifier maintenant
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => { setSession(null); setCheckoutData(null); setVerifyStalled(false); setError(null); }}
+                          className="h-11 border-line px-5"
+                        >
+                          Reprendre l&apos;inscription
+                        </Button>
+                      </div>
+                    </div>
+                  ) : redirecting || session.paymentUrl ? (
+                    /* PRIMAIRE (patron Academia Helm) : redirection vers la page
+                        de paiement hébergée FedaPay — pleine page. */
+                    <div className="flex flex-col items-center rounded-lg border border-line bg-white p-6 text-center">
+                      <ExternalLink className="h-8 w-8 text-primary" aria-hidden />
+                      <p className="mt-2 text-sm font-medium text-ink">Page de paiement sécurisée FedaPay</p>
+                      <p className="mt-1 text-xs text-subtle">
+                        La redirection s&apos;ouvre… Après ton paiement, tu reviens ici et ton espace s&apos;active seul.
+                      </p>
+                      {session.paymentUrl && (
+                        <Button asChild className="mt-3 h-11 bg-primary px-5 text-primary-foreground hover:bg-primary-hover">
+                          <a href={session.paymentUrl}>Ouvrir la page de paiement</a>
+                        </Button>
+                      )}
                     </div>
                   ) : checkoutData ? (
+                    /* REPLI : widget intégré (amount + description, sans id). */
                     <FedaPayCheckout
                       checkout={checkoutData}
                       onComplete={handleCheckoutComplete}
@@ -511,24 +638,19 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
                   ) : (
                     <div className="flex flex-col items-center rounded-lg border border-line bg-white p-6 text-center">
                       <CreditCard className="h-8 w-8 text-primary" aria-hidden />
-                      <p className="mt-2 text-sm text-subtle">
-                        {session.paymentUrl ? "La page de paiement sécurisée s'ouvre…" : "Préparation du paiement…"}
-                      </p>
-                      {session.paymentUrl && (
-                        <Button asChild className="mt-3 h-11 bg-primary px-5 text-primary-foreground hover:bg-primary-hover">
-                          <a href={session.paymentUrl}>Ouvrir la page de paiement sécurisée</a>
-                        </Button>
-                      )}
+                      <p className="mt-2 text-sm text-subtle">Préparation du paiement…</p>
                     </div>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={() => { setSession(null); setCheckoutData(null); setError(null); }}
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-subtle transition-colors hover:text-ink"
-                  >
-                    <ArrowLeft className="h-4 w-4" aria-hidden /> Changer de plan
-                  </button>
+                  {!verifyStalled && (
+                    <button
+                      type="button"
+                      onClick={() => { setSession(null); setCheckoutData(null); setRedirecting(false); setError(null); }}
+                      className="inline-flex items-center gap-1.5 text-sm font-medium text-subtle transition-colors hover:text-ink"
+                    >
+                      <ArrowLeft className="h-4 w-4" aria-hidden /> Changer de plan
+                    </button>
+                  )}
                 </div>
               )}
 

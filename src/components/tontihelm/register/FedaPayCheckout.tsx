@@ -1,10 +1,11 @@
 "use client";
-// TontiHelm — checkout FedaPay intégré (patron Academia Helm, FedaPayCheckout.tsx).
-// Widget officiel checkout.js : le paiement se déroule dans une iframe sur la
-// page même (Mobile Money MTN MoMo / Moov / carte), sans redirection.
+// TontiHelm — repli checkout FedaPay intégré (patron Academia Helm, FedaPayCheckout.tsx).
+// ⚠ PRIMAIRE : la page de paiement HÉBERGÉE FedaPay (paiementUrl renvoyé par le
+// backend) — redirection pleine page. Ce widget n'est qu'un REPLI quand cette
+// URL est indisponible : il reçoit amount + description (+ client) SANS
+// identifiant de transaction — l'iframe crée alors sa propre transaction et
+// rapporte son id via onComplete ; le statut est toujours revérifié côté serveur.
 // Doc : https://docs-v1.fedapay.com/payments/checkout
-// ⚠ Le callback onComplete n'est PAS cru : c'est le backend qui relit le statut
-// réel de la transaction auprès de FedaPay avant d'activer le compte.
 import { useEffect, useRef, useState } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 
@@ -13,10 +14,11 @@ declare global {
     FedaPay?: {
       init: (config: {
         public_key: string;
-        transaction: { id?: string; amount: number; description: string };
+        environment?: "live" | "sandbox";
+        transaction: { amount: number; description: string };
         customer: { email?: string; lastname?: string; firstname?: string; phone_number?: string };
         container: string;
-        onComplete?: (transaction: unknown) => void;
+        onComplete?: (payload: unknown) => void;
         onError?: (error: unknown) => void;
       }) => void;
     };
@@ -25,13 +27,18 @@ declare global {
 
 export interface FedaPayCheckoutData {
   public_key: string;
-  transaction: { id?: string; amount: number; description: string };
+  /** Force l'environnement du widget (doit suivre celui des clés) — sinon le
+   * widget le déduit du préfixe de la clé publique. */
+  environment?: "live" | "sandbox";
+  transaction: { amount: number; description: string };
   customer?: { email?: string; lastname?: string; firstname?: string; phone_number?: string };
 }
 
 interface FedaPayCheckoutProps {
   checkout: FedaPayCheckoutData;
-  onComplete: (transaction: unknown) => void;
+  /** Reçoit le message du widget ({ reason, transaction }) — seule la
+   * transaction (et son id) est exploitée, jamais le statut annoncé. */
+  onComplete: (payload: unknown) => void;
   onError: (error: unknown) => void;
 }
 
@@ -72,10 +79,11 @@ export function FedaPayCheckout({ checkout, onComplete, onError }: FedaPayChecko
     try {
       window.FedaPay.init({
         public_key: checkout.public_key,
+        ...(checkout.environment ? { environment: checkout.environment } : {}),
         transaction: checkout.transaction,
         customer: checkout.customer ?? { lastname: "" },
         container: "#fedapay-checkout-container",
-        onComplete: (transaction: unknown) => onComplete(transaction),
+        onComplete: (payload: unknown) => onComplete(payload),
         onError: (err: unknown) => {
           const message =
             (err as { message?: string } | null)?.message ?? "Erreur lors du paiement. Réessaie.";

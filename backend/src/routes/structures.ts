@@ -22,6 +22,10 @@ import {
   fedapayTestMode,
   fedapayCreateTransaction,
   fedapayGetTransaction,
+  fedapayPaymentPageUrl,
+  fedapayEnvironment,
+  fedapayKeysCoherent,
+  FedaPayApiError,
 } from "../lib/fedapay";
 
 const router = Router();
@@ -101,6 +105,13 @@ router.post(
 );
 
 // ── 2. Session de paiement : transaction FedaPay ou mode test ────────────────
+// Patron Academia Helm : le backend crée la transaction côté serveur (clé
+// secrète) et renvoie le LIEN DE PAIEMENT HÉBERGÉ (page pleine page FedaPay,
+// obtenue par POST /v1/transactions/:id/token). Le front redirige vers ce
+// lien ; le widget intégré ne sert que de repli — dans ce repli il ne reçoit
+// QUE amount + description (+ client), JAMAIS d'identifiant : l'iframe crée
+// alors sa propre transaction et le navigateur en rapporte l'identifiant au
+// moment de la vérification (jamais cru : le statut vient toujours de l'API).
 router.post(
   "/register/payment",
   h(async (req, res) => {
@@ -129,66 +140,85 @@ router.post(
       return;
     }
 
-    // Une transaction FedaPay existe déjà ? On la réutilise (retour en arrière,
-    // double-clic) au lieu d'en empiler une nouvelle.
-    if (payment.providerRef) {
-      res.json({
-        ok: true,
-        mode: "fedapay",
-        paymentId: payment.id,
-        amount: payment.amount,
-        checkout: {
-          public_key: process.env.FEDAPAY_PUBLIC_KEY,
-          transaction: { id: payment.providerRef, amount: payment.amount, description: `Abonnement TontiHelm — ${payment.plan}` },
-          customer: { lastname: draftOf(payment).ownerName ?? "", phone_number: draftOf(payment).ownerPhone ?? "" },
-        },
-        paymentUrl: null,
-      });
-      return;
+    // Clés publiques et secrètes d'environnements différents (pk_live + sk_sandbox
+    // ou l'inverse) : la transaction serait créée dans un environnement invisible
+    // du widget (« Transaction non trouvée »). On refuse clairement l'amorçage.
+    if (!fedapayKeysCoherent()) {
+      throw new ApiError(
+        "payment_env_mismatch",
+        "Les clés FedaPay publiques et secrètes ne sont pas du même environnement (live/sandbox). Vérifie la configuration FEDAPAY_PUBLIC_KEY et FEDAPAY_SECRET_KEY.",
+        503,
+      );
     }
 
     const draft = draftOf(payment);
-    const callbackUrl = `${frontendBaseUrl()}/inscription?paymentId=${payment.id}&status=return`;
-    try {
-      const tx = await fedapayCreateTransaction({
-        amount: payment.amount,
-        description: `Abonnement TontiHelm ${PLANS[payment.plan].label} — ${draft.structureName}`,
-        callbackUrl,
-        metadata: {
-          type: "signup",
-          paymentId: payment.id,
-          plan: payment.plan,
-          billingPeriod: payment.billingPeriod,
-          structureName: draft.structureName,
-          ownerPhone: draft.ownerPhone,
-        },
-        customer: { lastname: draft.ownerName, phone_number: draft.ownerPhone },
-      });
-      await db.signupPayment.update({
-        where: { id: payment.id },
-        data: { providerRef: tx.transactionId },
-      });
-      res.json({
-        ok: true,
-        mode: "fedapay",
-        paymentId: payment.id,
-        amount: payment.amount,
-        checkout: {
-          public_key: process.env.FEDAPAY_PUBLIC_KEY,
-          transaction: { id: tx.transactionId, amount: payment.amount, description: `Abonnement TontiHelm — ${payment.plan}` },
-          customer: { lastname: draft.ownerName ?? "", phone_number: draft.ownerPhone ?? "" },
-        },
-        paymentUrl: tx.paymentUrl,
-      });
-    } catch (err) {
-      // FedaPay injoignable ou configuration refusée : on ne bloque pas le
-      // formulaire, on renvoie l'erreur réelle pour affichage.
-      throw new ApiError(
-        "payment_provider_error",
-        err instanceof Error ? err.message : "FedaPay est momentanément injoignable. Réessaie dans un instant.",
-        502,
-      );
+    const description = `Abonnement TontiHelm ${PLANS[payment.plan].label} — ${draft.structureName}`;
+
+    // Une transaction FedaPay existe-t-elle déjà ? (retour en arrière, double-clic)
+    // ⚠ Les enregistrements créés avant le correctif de l'enveloppe v1 peuvent
+    // porter un providerRef « undefined » : on le considère comme absent.
+    const usableRef = payment.providerRef && payment.providerRef !== "undefined" ? payment.providerRef : null;
+    let transactionId = usableRef;
+    let paymentUrl: string | null = null;
+
+    if (!transactionId) {
+      const callbackUrl = `${frontendBaseUrl()}/inscription?paymentId=${payment.id}&status=return`;
+      try {
+        const tx = await fedapayCreateTransaction({
+          amount: payment.amount,
+          description,
+          callbackUrl,
+          metadata: {
+            type: "signup",
+            paymentId: payment.id,
+            plan: payment.plan,
+            billingPeriod: payment.billingPeriod,
+            structureName: draft.structureName,
+            ownerPhone: draft.ownerPhone,
+          },
+          customer: { lastname: draft.ownerName, phone_number: draft.ownerPhone },
+        });
+        transactionId = tx.transactionId;
+        paymentUrl = tx.paymentUrl;
+      } catch (err) {
+        // FedaPay injoignable ou configuration refusée : on ne bloque pas le
+        // formulaire, on renvoie l'erreur réelle pour affichage.
+        throw new ApiError(
+          "payment_provider_error",
+          err instanceof Error ? err.message : "FedaPay est momentanément injoignable. Réessaie dans un instant.",
+          502,
+        );
+      }
     }
+
+    // Lien hébergé toujours régénéré (jeton frais, valable même pour une
+    // transaction réutilisée) — patron Academia Helm « page pleine page ».
+    if (transactionId) {
+      paymentUrl = paymentUrl ?? (await fedapayPaymentPageUrl(transactionId));
+      if (usableRef !== transactionId) {
+        await db.signupPayment.update({
+          where: { id: payment.id },
+          data: { providerRef: transactionId },
+        });
+      }
+    }
+
+    res.json({
+      ok: true,
+      mode: "fedapay",
+      paymentId: payment.id,
+      amount: payment.amount,
+      transactionId,
+      paymentUrl,
+      // Repli widget intégré (uniquement si paymentUrl indisponible) :
+      // amount + description SANS id — l'iframe crée sa propre transaction.
+      checkout: {
+        public_key: process.env.FEDAPAY_PUBLIC_KEY,
+        environment: fedapayEnvironment(),
+        transaction: { amount: payment.amount, description },
+        customer: { lastname: draft.ownerName ?? "", phone_number: draft.ownerPhone ?? "" },
+      },
+    });
   })
 );
 
@@ -199,17 +229,22 @@ router.post(
     const schema = z.object({
       paymentId: z.string().min(1),
       outcome: z.enum(["approved", "declined"]).optional(), // mode test uniquement
+      // Identifiant DE TRANSACTION rapporté par le widget intégré (repli sans
+      // page hébergée) : l'iframe crée lui-même la transaction, le navigateur
+      // en rapporte l'id. ⚠ On ne croit JAMAIS le statut annoncé : on ne garde
+      // que l'id comme clé de recherche, le statut vient toujours de l'API.
+      fedapayTransactionId: z.string().min(1).optional(),
     });
     const body = schema.safeParse(req.body ?? {});
     if (!body.success) throw new ApiError("invalid_input", "Requête de vérification invalide.");
-    const { paymentId, outcome } = body.data;
+    const { paymentId, outcome, fedapayTransactionId } = body.data;
 
     let payment = await db.signupPayment.findUnique({ where: { id: paymentId } });
     if (!payment) throw new ApiError("not_found", "Paiement introuvable.", 404);
 
     // Déjà activé : renvoyer le même accusé (idempotence totale).
     if (payment.status === "approved" && payment.structureId) {
-      res.json(activationPayload(payment.id, payment.structureId, null));
+      res.json(activationPayload(payment, null));
       return;
     }
     if (payment.status === "declined") {
@@ -220,21 +255,58 @@ router.post(
     // Statut réel : FedaPay si configuré, sinon décision explicite du mode test.
     let approved = false;
     let failure: string | null = null;
-    if (fedapayConfigured() && payment.providerRef) {
+    let verifiedAmount: number | null = null;
+    // ⚠ providerRef « undefined » = enregistrement antérieur au correctif de
+    // l'enveloppe v1 : on le considère comme absent et on retombe (le cas
+    // échéant) sur l'identifiant rapporté par le widget.
+    const providerRef =
+      payment.providerRef && payment.providerRef !== "undefined" ? payment.providerRef : null;
+    const lookupId = providerRef ?? fedapayTransactionId ?? null;
+
+    if (fedapayConfigured() && lookupId) {
       try {
-        const tx = await fedapayGetTransaction(payment.providerRef);
+        const tx = await fedapayGetTransaction(lookupId);
+        verifiedAmount = tx.amount;
         approved = tx.status === "approved";
-        if (!approved && (tx.status === "declined" || tx.status === "canceled")) {
+        if (approved && verifiedAmount !== null && verifiedAmount !== payment.amount) {
+          // Le montant payé doit être exactement celui fixé côté serveur :
+          // on refuse une transaction approuvée d'un autre montant.
+          approved = false;
+          failure = `Le montant payé (${verifiedAmount} FCFA) ne correspond pas à l'abonnement (${payment.amount} FCFA). Reprends l'inscription.`;
+        }
+        if (!approved && !failure && (tx.status === "declined" || tx.status === "canceled")) {
           failure = "Paiement refusé ou annulé sur la page FedaPay.";
         }
+        // Le widget intégré a payé SA transaction : on la mémorise comme
+        // référence du paiement pour les vérifications suivantes.
+        if (!providerRef && fedapayTransactionId && lookupId === fedapayTransactionId) {
+          await db.signupPayment.update({
+            where: { id: payment.id },
+            data: { providerRef: fedapayTransactionId },
+          });
+        }
       } catch (err) {
-        // API injoignable : on reste « pending », le front réessaie.
+        // 404 FedaPay = transaction définitivement introuvable (identifiant
+        // invalide) : on NE BOUCLE PLUS (bug historique « vérification en
+        // boucle »). Seules les pannes réseau/5xx restent réessayables.
+        if (err instanceof FedaPayApiError && err.httpStatus === 404) {
+          throw new ApiError(
+            "transaction_not_found",
+            "La transaction FedaPay est introuvable. Le paiement n'a pas pu être rattaché — reprends l'inscription et paie à nouveau.",
+            422,
+          );
+        }
         throw new ApiError(
           "payment_check_retry",
           "Vérification impossible pour l'instant. Nouvelle tentative dans quelques secondes…",
           503,
         );
       }
+    } else if (fedapayConfigured() && !lookupId) {
+      // Le paiement n'a pas encore été amorcé côté FedaPay (retour prématuré
+      // sur la page d'inscription, par exemple) : reste « pending », borné côté front.
+      res.json({ status: "pending", activated: false, message: "Paiement pas encore amorcé." });
+      return;
     } else {
       if (!fedapayTestMode()) {
         throw new ApiError("payment_unconfigured", "Paiement en ligne non configuré.", 503);
@@ -322,7 +394,7 @@ router.post(
     // Session ouverte immédiatement : « Ouvrir mon espace » sans ressaisir le PIN.
     const token = await createSession(owner.id);
     setSessionCookie(res, token);
-    res.json(activationPayload(payment.id, structure.id, token));
+    res.json(activationPayload(payment, token));
   })
 );
 
@@ -344,15 +416,34 @@ function draftOf(payment: { draft: string }): SignupDraft {
   }
 }
 
-function activationPayload(paymentId: string, structureId: string, token: string | null) {
+function activationPayload(
+  payment: { id: string; structureId: string | null; plan: string; amount: number; billingPeriod: string; draft: string },
+  token: string | null,
+) {
+  // structureName/ownerPhone resservent l'écran de succès APRÈS le retour de
+  // la page hébergée FedaPay (rechargement complet → formulaire vide).
+  const draft = safeDraftOf(payment);
   return {
     status: "approved",
     activated: true,
-    paymentId,
-    structureId,
+    paymentId: payment.id,
+    structureId: payment.structureId,
     token,
+    structureName: draft?.structureName ?? "Ta structure",
+    ownerPhone: draft?.ownerPhone ?? "",
+    plan: payment.plan,
+    billingPeriod: payment.billingPeriod,
+    amount: payment.amount,
     message: "Paiement confirmé. Ton espace est créé et actif.",
   };
+}
+
+function safeDraftOf(payment: { draft: string }): SignupDraft | null {
+  try {
+    return JSON.parse(payment.draft) as SignupDraft;
+  } catch {
+    return null;
+  }
 }
 
 // Nettoyage : les intentions de paiement abandonnées depuis plus de 24 h expirent
