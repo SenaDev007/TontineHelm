@@ -1,12 +1,13 @@
 "use client";
 // TontiHelm — back-office gérant (M6, §15.8) : sidebar étendue au bureau, réduite en icônes
 // sur tablette, menu tiroir sur mobile. Contrôleur : lecture seule (pas d'actions d'écriture).
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LogoWordmark, LogoMark } from "../Logo";
 import { SessionUser, SubscriptionInfo } from "@/lib/types";
+import { useRealtime } from "@/lib/realtime";
 import { DashboardTab } from "./DashboardTab";
 import { ContributorsTab } from "./ContributorsTab";
 import { PassbooksTab } from "./PassbooksTab";
@@ -81,6 +82,20 @@ export function ManagerApp({
   const [tab, setTab] = useState<Tab>("dashboard");
   const [menuOpen, setMenuOpen] = useState(false);
   const readOnly = user.role === "controller" || subscription?.status === "read_only";
+
+  // ── Temps réel web ↔ mobile (2026-10-18) : le TABLEAU DE BORD se recharge
+  // seul à chaque écriture publiée (encaissement web OU mobile, clôture validée)
+  // — remontage par clé, les autres onglets gardent leur comportement.
+  // Anti-tempête de 2 secondes pendant les envois de lots.
+  const [liveKey, setLiveKey] = useState(0);
+  const liveAtRef = useRef(0);
+  useRealtime((ev) => {
+    if (ev.type !== "collection" && ev.type !== "closing") return;
+    const now = Date.now();
+    if (now - liveAtRef.current < 2000) return;
+    liveAtRef.current = now;
+    setLiveKey((k) => k + 1);
+  });
 
   // Espaces distincts : le dirigeant (administrateur principal) pilote TOUT —
   // équipe complète (gérants + agents), abonnement, facturation ; le gérant
@@ -186,15 +201,19 @@ export function ManagerApp({
         </div>
 
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:px-6 lg:px-8">
-          {tab === "dashboard" && <DashboardTab />}
-          {tab === "team" && <TeamTab readOnly={readOnly} isOwner={isOwner} />}
-          {tab === "contributors" && <ContributorsTab readOnly={readOnly} structureName={user.structureName ?? "Structure"} />}
-          {tab === "passbooks" && <PassbooksTab readOnly={readOnly} />}
-          {tab === "collections" && <CollectionsTab readOnly={readOnly} structureName={user.structureName ?? "Structure"} />}
-          {tab === "closings" && <ClosingsTab readOnly={readOnly} />}
-          {tab === "archive" && <ArchiveTab />}
-          {tab === "audit" && <AuditTab structureName={user.structureName ?? "Structure"} />}
-          {tab === "billing" && isOwner && <BillingTab user={user} />}
+          {/* liveKey remonte le composant actif → son chargement au montage se
+              rejoue : le tableau de bord suit les écritures des DEUX canaux. */}
+          <div key={tab === "dashboard" ? `live-${liveKey}` : "static"}>
+            {tab === "dashboard" && <DashboardTab />}
+            {tab === "team" && <TeamTab readOnly={readOnly} isOwner={isOwner} />}
+            {tab === "contributors" && <ContributorsTab readOnly={readOnly} structureName={user.structureName ?? "Structure"} />}
+            {tab === "passbooks" && <PassbooksTab readOnly={readOnly} />}
+            {tab === "collections" && <CollectionsTab readOnly={readOnly} structureName={user.structureName ?? "Structure"} />}
+            {tab === "closings" && <ClosingsTab readOnly={readOnly} />}
+            {tab === "archive" && <ArchiveTab />}
+            {tab === "audit" && <AuditTab structureName={user.structureName ?? "Structure"} />}
+            {tab === "billing" && isOwner && <BillingTab user={user} />}
+          </div>
         </main>
       </div>
     </div>

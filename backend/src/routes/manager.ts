@@ -16,6 +16,7 @@ import {
 } from "../lib/livret";
 import { autoScale, recentPlanEvents, markPlanEventsRead } from "../lib/autoscale";
 import { parseDayParam } from "../lib/report";
+import { publishTenantEvent } from "../lib/events";
 
 const router = Router();
 
@@ -1015,6 +1016,15 @@ router.post(
         entityId: closing.id,
         payload: { day: closing.day.toISOString().slice(0, 10), gap: closing.gap, decision: "validated" },
       });
+      // Temps réel web ↔ mobile : la journée passe sous verrou — les agents
+      // (web ET mobile) apprennent la clôture sans attendre un rafraîchissement.
+      publishTenantEvent({
+        type: "closing",
+        tenantId,
+        at: new Date().toISOString(),
+        agentId: closing.agentId,
+        source: "manager",
+      });
       res.json({ message: "Clôture validée. Les encaissements du jour sont verrouillés." });
       return;
     }
@@ -1030,6 +1040,14 @@ router.post(
       entity: "closing",
       entityId: closing.id,
       payload: { day: closing.day.toISOString().slice(0, 10), gap: closing.gap, decision: "disputed", note: body.data.note ?? null },
+    });
+    // Temps réel web ↔ mobile : contestation notifiée aux agents connectés.
+    publishTenantEvent({
+      type: "closing",
+      tenantId,
+      at: new Date().toISOString(),
+      agentId: closing.agentId,
+      source: "manager",
     });
     res.json({ message: "Clôture contestée. L'agent est notifié pour vérification." });
   })

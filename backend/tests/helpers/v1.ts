@@ -5,9 +5,11 @@ import express from "express";
 import type { Server } from "http";
 import authRoutes from "../../src/routes/auth";
 import agentRoutes from "../../src/routes/agent";
+import eventRoutes from "../../src/routes/events";
 import v1AuthRoutes from "../../src/routes/v1/auth";
 import v1DeviceRoutes from "../../src/routes/v1/devices";
 import v1SyncRoutes from "../../src/routes/v1/sync";
+import v1EventRoutes from "../../src/routes/v1/events";
 import { apiErrorHandler, hashPin } from "../../src/lib/auth";
 import { db } from "../../src/lib/db";
 import { monthStart, LIVRET_DAYS } from "../../src/lib/livret";
@@ -17,9 +19,11 @@ export function buildApp() {
   app.use(express.json({ limit: "1mb" }));
   app.use("/api/auth", authRoutes);
   app.use("/api/agent", agentRoutes);
+  app.use("/api/events", eventRoutes);
   app.use("/v1/auth", v1AuthRoutes);
   app.use("/v1/devices", v1DeviceRoutes);
   app.use("/v1/sync", v1SyncRoutes);
+  app.use("/v1/events", v1EventRoutes);
   app.use(apiErrorHandler);
   return app;
 }

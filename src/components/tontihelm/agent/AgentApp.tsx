@@ -9,6 +9,7 @@ import { SyncStatusPill } from "../StatusBadge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { get, post } from "@/lib/client";
 import { useSyncDone } from "@/lib/offline/hooks";
+import { useRealtime } from "@/lib/realtime";
 import { OutboxEvent, SessionUser, TourData, TourStop, formatFCFA } from "@/lib/types";
 import { TourScreen } from "./TourScreen";
 import { CollectScreen, CollectAllocation } from "./CollectScreen";
@@ -88,6 +89,19 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
   // (les données du serveur ont pu évoluer).
   useSyncDone(() => { if (navigator.onLine) setReloadKey((k) => k + 1); });
 
+  // ── Temps réel web ↔ mobile (2026-10-18) : tout changement publié sur le flux
+  // SSE — écriture du canal web OU de l'app mobile, clôture validée — rafraîchit
+  // la tournée sans action de l'agent. Anti-tempête d'une seconde (lots).
+  const realtimeAtRef = useRef(0);
+  useRealtime((ev) => {
+    if (!navigator.onLine || simOffline) return;
+    if (ev.type !== "collection" && ev.type !== "closing") return;
+    const now = Date.now();
+    if (now - realtimeAtRef.current < 1000) return;
+    realtimeAtRef.current = now;
+    setReloadKey((k) => k + 1);
+  });
+
   // ── Synchronisation : envoi de l'outbox par lots de 50, idempotent ──
   // Chaque événement porte la journée réelle qu'il couvre (coversOn) :
   // le serveur pose une écriture par journée, le carnet marque chaque jour exact.
@@ -159,11 +173,18 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
       saveOutbox(next);
       if (navigator.vibrate) navigator.vibrate(60);
       if (advanceAllocation) {
-        // Notification exigée : le système calcule et notifie ce qu'il reste à prendre.
+        // Notification exigée : le système calcule et notifie ce qu'il reste à
+        // prendre — feuille ENTIÈRE (« fin nov. 2026 ») ou avance PARTIELLE
+        // (« ligne 12 de nov. 2026 »), décision du dirigeant du 2026-10-18.
+        const cover = advanceAllocation.coversThrough
+          ? `jusqu'à fin ${advanceAllocation.coversThrough}`
+          : advanceAllocation.coversLineLabel
+            ? `jusqu'à la ${advanceAllocation.coversLineLabel}`
+            : null;
         toast({
           title: `Avance de ${formatFCFA(total)} encaissée chez ${stop.contributorName}.`,
-          description: advanceAllocation.coversThrough
-            ? `Ses versements couvrent jusqu'à fin ${advanceAllocation.coversThrough}. Il reste ${formatFCFA(advanceAllocation.resteAfter ?? 0)} à prendre sur le livret.`
+          description: cover
+            ? `Ses versements couvrent ${cover}. Il reste ${formatFCFA(advanceAllocation.resteAfter ?? 0)} à prendre sur le livret.`
             : "Versement par anticipation enregistré.",
         });
       } else {

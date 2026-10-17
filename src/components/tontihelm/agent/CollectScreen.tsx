@@ -7,17 +7,21 @@
 // reste dynamiquement). La 31e ligne d'une feuille est la mise de l'ENTREPRISE :
 // marquée, jamais inscrite.
 //
-// Mode « Avance mensuelle » (2026-10-17) : le cotisant décide de payer d'avance
-// — on renseigne jusqu'où couvre l'avance (le mois en cours seul, rattrapage
-// inclus, ou plusieurs mois au-delà) et le système calcule automatiquement le
-// montant et ce qu'il restera à prendre.
+// Mode « Avance » (correction du dirigeant, 2026-10-18) : l'avance n'est PAS
+// obligatoirement le montant total du mois couvert — le cotisant peut verser
+// juste une PARTIE. L'agent renseigne le montant que le cotisant désire payer
+// (pavé numérique) ; les puces de feuille restent des raccourcis qui
+// préremplissent le montant total. Le système calcule jusqu'où l'avance
+// couvre (rattrapage inclus) et ce qu'il restera à prendre — advancePreview()
+// est la MÊME fonction pure que le mobile (packages/domain, source de vérité).
 import { useMemo, useState } from "react";
+import { advancePreview } from "@domain/livret";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PassbookStatusBadge, SyncStatusPill } from "../StatusBadge";
-import { AdvanceOption, PayableLine, TourData, TourStop, formatFCFA } from "@/lib/types";
+import { PayableLine, TourData, TourStop, formatFCFA } from "@/lib/types";
 import { Building2, Wallet, ChevronRight, Link2, Check, RotateCcw, TrendingUp, CalendarClock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,10 +29,12 @@ import { cn } from "@/lib/utils";
 export interface CollectAllocation {
   line: number; // ligne absolue du livret (1..372)
   amount: number;
-  /** Avance mensuelle : une seule écriture couvrant plusieurs lignes d'avance. */
+  /** Avance : une seule écriture — totale (feuille entière) ou PARTIELLE. */
   advance?: boolean;
-  /** Libellé de la feuille jusqu'où l'avance couvre (toast de confirmation). */
+  /** Avance couvrant une feuille ENTIÈRE : libellé « nov. 2026 » (toast). */
   coversThrough?: string;
+  /** Avance partielle : « ligne 12 de nov. 2026 » (toast). */
+  coversLineLabel?: string;
   /** Ce qu'il restera à prendre après cette avance (notification). */
   resteAfter?: number;
 }
@@ -136,7 +142,9 @@ export function CollectScreen({
   const [amountInput, setAmountInput] = useState<string | null>(null);
   const [selected, setSelected] = useState<number[] | null>(null); // null = sélection par défaut (ligne due)
   const [mode, setMode] = useState<"lines" | "advance">("lines");
-  const [advanceSheet, setAdvanceSheet] = useState<number | null>(null); // feuille ciblée par l'avance
+  // Montant d'avance saisi par l'agent (null = preset par défaut : fin du mois
+  // en cours, rattrapage inclus). PARTIEL autorisé — décision du dirigeant.
+  const [advanceAmount, setAdvanceAmount] = useState<string | null>(null);
 
   const view = useMemo(() => {
     if (!stop) return null;
@@ -175,20 +183,45 @@ export function CollectScreen({
     return out;
   }, [amount, effectiveSelected, view, stop, mode]);
 
-  // ── Avance mensuelle : options calculées par le système (montant + reste) ──
+  // ── Avance (totale ou PARTIELLE) : le système calcule la couverture ──
+  // Presets = raccourcis « couvrir jusqu'à fin de feuille » ; le montant saisi
+  // au pavé peut être une partie seulement de la feuille visée.
   const advanceOptions = stop?.livret?.advanceOptions ?? [];
-  const advanceChoice: AdvanceOption | null = useMemo(() => {
-    if (advanceOptions.length === 0) return null;
-    return advanceOptions.find((o) => o.sheet === advanceSheet) ?? advanceOptions[0];
-  }, [advanceOptions, advanceSheet]);
+  const advanceDefault = advanceOptions[0] ?? null; // fin du mois en cours
+  const advanceValue =
+    mode === "advance"
+      ? advanceAmount === null
+        ? (advanceDefault?.amount ?? 0)
+        : parseInt(advanceAmount || "0", 10) || 0
+      : 0;
+  const activePreset = advanceOptions.find((o) => o.amount === advanceValue) ?? null;
+
+  // Aperçu partagé web ↔ mobile (packages/domain) : jusqu'où l'avance couvre,
+  // ligne entamée, reste à prendre après l'écriture.
+  const preview = useMemo(() => {
+    if (!stop || mode !== "advance") return null;
+    return advancePreview(
+      {
+        dailyAmount: stop.dailyAmount,
+        balance: stop.livret.balance,
+        coveredLines: stop.livret.coveredLines,
+        payableLines: stop.livret.payableLines,
+        lineDue: stop.livret.lineDue,
+        attendu: stop.livret.recap.attendu,
+        sheets: stop.livret.sheets,
+      },
+      advanceValue
+    );
+  }, [stop, mode, advanceValue]);
 
   const cycleTotal = stop?.livret?.recap.attendu ?? 0;
   const overMax = mode === "lines" && stop !== null && amount > cycleTotal - stop.balance;
   const unallocated = mode === "lines" && amount > suggestedTotal; // trop de montant pour les lignes choisies
+  const advanceExceeds = mode === "advance" && (preview?.exceedsReste ?? false);
   const canSubmit =
     stop !== null &&
     (mode === "advance"
-      ? advanceChoice !== null
+      ? preview !== null && preview.valid && !preview.exceedsReste
       : allocations.length > 0 && amount > 0 && !overMax && !unallocated);
 
   if (loading && !tour) {
@@ -257,28 +290,43 @@ export function CollectScreen({
   const reset = () => {
     setAmountInput(null);
     setSelected(null);
-    setAdvanceSheet(null);
+    setAdvanceAmount(null);
   };
 
   const submit = () => {
-    if (mode === "advance" && advanceChoice) {
+    if (mode === "advance" && preview && preview.valid && !preview.exceedsReste) {
+      const lineInSheet =
+        preview.coversThroughLine > 0
+          ? ((preview.coversThroughLine - 1) % 31) + 1
+          : null;
       onCollect(stop, [{
         line: stop.livret.lineDue,
-        amount: advanceChoice.amount,
+        amount: preview.amount,
         advance: true,
-        coversThrough: advanceChoice.label,
-        resteAfter: advanceChoice.resteAfter,
+        ...(preview.coversFullSheet && preview.coversThroughLabel
+          ? { coversThrough: preview.coversThroughLabel }
+          : {}),
+        ...(!preview.coversFullSheet && preview.coversThroughLabel && lineInSheet
+          ? { coversLineLabel: `ligne ${lineInSheet} de ${preview.coversThroughLabel}` }
+          : {}),
+        resteAfter: preview.resteAfter,
       }]);
     } else {
       onCollect(stop, allocations);
     }
     setAmountInput(null);
     setSelected(null);
-    setAdvanceSheet(null);
+    setAdvanceAmount(null);
   };
 
   const sheet = stop.livret.sheet;
-  const advanceMonths = advanceChoice ? advanceChoice.sheet - stop.livret.currentSheet : 0;
+  const previewLineInSheet =
+    preview && preview.coversThroughLine > 0
+      ? ((preview.coversThroughLine - 1) % 31) + 1
+      : null;
+  const advanceMonths = preview?.coversFullSheet
+    ? (preview.coversThroughSheet ?? 0) - stop.livret.currentSheet
+    : 0;
 
   return (
     <div>
@@ -354,18 +402,20 @@ export function CollectScreen({
             mode === "advance" ? "bg-white text-ink shadow-sm" : "text-subtle hover:text-ink"
           )}
         >
-          <TrendingUp className="h-4 w-4" aria-hidden /> Avance mensuelle
+          <TrendingUp className="h-4 w-4" aria-hidden /> Avance
         </button>
       </div>
 
       {mode === "advance" ? (
-        /* ── Avance mensuelle : le cotisant paie d'avance, le système calcule ──
-           Une seule ligne de puces « Ce mois / +1 mois / +2 mois… » (pas de liste
-           à faire défiler), puis le montant et la notification restent visibles. */
+        /* ── Avance totale ou PARTIELLE : le cotisant paie d'avance ──
+           Les puces « Ce mois / +1 mois… » préremplissent le montant TOTAL de
+           la feuille ; l'agent saisit ensuite le montant que le cotisant veut
+           VRAIMENT verser — une partie suffit (décision du dirigeant). */
         <div className="mt-4">
           <p className="mb-1.5 text-xs leading-relaxed text-subtle">
-            {stop.contributorName} décide de payer d&apos;avance ? Renseigne le nombre de mois que son avance
-            couvre — le système calcule le montant et ce qu&apos;il restera à prendre.
+            {stop.contributorName} décide de payer d&apos;avance ? Saisis le montant qu&apos;il désire verser —
+            le total d&apos;une feuille (raccourci ci-dessous) ou juste une partie. Le système calcule
+            jusqu&apos;où l&apos;avance couvre et ce qu&apos;il restera à prendre.
           </p>
 
           {advanceOptions.length === 0 ? (
@@ -376,16 +426,16 @@ export function CollectScreen({
               </CardContent>
             </Card>
           ) : (
-            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1.5" role="tablist" aria-label="Mois couverts par l'avance">
+            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1.5" role="tablist" aria-label="Raccourcis d'avance (fin de feuille)">
               {advanceOptions.map((o) => {
                 const months = o.sheet - stop.livret.currentSheet;
-                const isActive = advanceChoice?.sheet === o.sheet;
+                const isActive = activePreset?.sheet === o.sheet;
                 return (
                   <button
                     key={o.sheet}
                     role="tab"
                     aria-selected={isActive}
-                    onClick={() => setAdvanceSheet(o.sheet)}
+                    onClick={() => setAdvanceAmount(String(o.amount))}
                     className={cn(
                       "flex h-[52px] w-[92px] shrink-0 flex-col items-center justify-center rounded-lg border transition-colors",
                       isActive
@@ -403,25 +453,63 @@ export function CollectScreen({
             </div>
           )}
 
-          {/* Montant de l'avance et notification du reste à prendre */}
-          {advanceChoice && (
-            <div className="mt-3">
-              <div
-                className="amount font-display flex h-16 items-center justify-center rounded-lg border-2 border-[#F0D48A] bg-[#FFF4D6] text-[40px] font-bold leading-none text-[#A66A00]"
-                role="status"
-                aria-live="polite"
-              >
-                {formatFCFA(advanceChoice.amount)}
-              </div>
-              <p className="mt-2 rounded-lg border border-[#F0D48A]/60 bg-[#FFFCF2] px-3 py-2.5 text-xs leading-relaxed text-[#7A5400]">
-                L&apos;avance règle tout ce qui est dû et couvre jusqu&apos;à <b>fin {advanceChoice.label}</b>
-                {advanceMonths > 0 ? ` (${advanceMonths} mois d'avance)` : ""}.
-                Après cet encaissement, il restera{" "}
-                <b className="amount">{formatFCFA(advanceChoice.resteAfter)}</b> à prendre sur le livret
-                {advanceChoice.resteAfter === 0 ? " : il sera entièrement réglé." : "."}
-              </p>
+          {/* Montant de l'avance : saisi par l'agent (une PARTIE suffit) */}
+          <div className="mt-3">
+            <Label htmlFor="advance-montant" className="text-xs font-medium uppercase tracking-wide text-subtle">
+              Montant que le cotisant veut payer
+            </Label>
+            <div
+              id="advance-montant"
+              className={cn(
+                "amount font-display mt-1 flex h-16 items-center justify-center rounded-lg border-2 text-[40px] font-bold leading-none",
+                advanceExceeds
+                  ? "border-danger bg-[#FDECEA] text-danger"
+                  : "border-[#F0D48A] bg-[#FFF4D6] text-[#A66A00]"
+              )}
+              role="status"
+              aria-live="polite"
+            >
+              {formatFCFA(advanceValue)}
             </div>
+          </div>
+
+          {/* Aperçu : jusqu'où l'avance couvre et reste à prendre */}
+          {preview && preview.valid && !preview.exceedsReste && (
+            <p className="mt-2 rounded-lg border border-[#F0D48A]/60 bg-[#FFFCF2] px-3 py-2.5 text-xs leading-relaxed text-[#7A5400]">
+              {preview.coversFullSheet ? (
+                <>
+                  L&apos;avance règle tout ce qui est dû et couvre jusqu&apos;à <b>fin {preview.coversThroughLabel}</b>
+                  {advanceMonths > 0 ? ` (${advanceMonths} mois d'avance)` : ""}.
+                </>
+              ) : (
+                <>
+                  Cette avance partielle règle le rattrapage et couvre jusqu&apos;à la{" "}
+                  <b>ligne {previewLineInSheet} de {preview.coversThroughLabel}</b>
+                  {preview.partialAfter > 0
+                    ? `, dont ${formatFCFA(preview.partialAfter)} posés sur la ligne entamée`
+                    : ""}
+                  .
+                </>
+              )}{" "}
+              Après cet encaissement, il restera{" "}
+              <b className="amount">{formatFCFA(preview.resteAfter)}</b> à prendre sur le livret
+              {preview.resteAfter === 0 ? " : il sera entièrement réglé." : "."}
+            </p>
           )}
+          {advanceExceeds && (
+            <p className="mt-2 text-xs font-medium text-danger" role="alert">
+              Montant supérieur au restant du livret ({formatFCFA(preview?.resteBefore ?? 0)}).
+            </p>
+          )}
+
+          {/* Pavé numérique : montant d'avance libre */}
+          <div className="mt-4">
+            <AmountKeypad
+              value={advanceAmount ?? ""}
+              onChange={(v) => setAdvanceAmount(v)}
+              disabled={false}
+            />
+          </div>
         </div>
       ) : (
         /* ── Mode ligne à ligne : due / rattrapage / avance ── */
@@ -590,13 +678,15 @@ export function CollectScreen({
       >
         <span className="amount inline-flex items-center gap-2">
           <Wallet className="h-5 w-5" aria-hidden />
-          {mode === "advance" && advanceChoice
-            ? `Encaisser l'avance ${formatFCFA(advanceChoice.amount)}`
+          {mode === "advance" && preview && preview.valid && !preview.exceedsReste
+            ? `Encaisser l'avance ${formatFCFA(preview.amount)}`
             : `Encaisser ${formatFCFA(amount)}`}
         </span>
-        {mode === "advance" && advanceChoice ? (
+        {mode === "advance" && preview && preview.valid && !preview.exceedsReste ? (
           <span className="text-[11px] font-medium text-white/80">
-            couvre jusqu&apos;à fin {advanceChoice.label}
+            {preview.coversFullSheet
+              ? `couvre jusqu'à fin ${preview.coversThroughLabel}`
+              : `couvre la ligne ${previewLineInSheet} de ${preview.coversThroughLabel}`}
           </span>
         ) : allocations.length > 1 ? (
           <span className="text-[11px] font-medium text-primary-foreground/80">

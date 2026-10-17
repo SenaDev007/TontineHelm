@@ -342,6 +342,67 @@ export function livretTotal(dailyAmount: number): number {
   return dailyAmount * LIVRET_DAYS;
 }
 
+// ── Avance PARTIELLE (décision du dirigeant, 2026-10-18) ──────────────────────
+// L'avance n'est PAS obligatoirement le montant total du mois couvert : le
+// cotisant peut verser juste une PARTIE. L'agent renseigne le montant que le
+// cotisant désire payer — le système calcule jusqu'où cette avance couvre
+// (rattrapage inclus), ce qu'elle laisse sur la ligne en cours, et ce qu'il
+// restera à prendre. Fonction PURE consommée par le web ET le mobile, sur la
+// vue sérialisée du livret (mêmes champs que les réponses /api et /v1).
+
+/** Entrée de l'aperçu d'avance : champs du livret sérialisé (vue d'arrêt / pull). */
+export interface AdvancePreviewInput {
+  dailyAmount: number;
+  balance: number; // solde cumulé (annulations incluses, peut être négatif)
+  coveredLines: number; // lignes encaissables couvertes (décompte)
+  payableLines: number; // lignes encaissables du livret (372 − excusées)
+  lineDue: number; // prochaine ligne à encaisser, ABSOLUE (1..373)
+  attendu: number; // total attendu du livret (recap.attendu)
+  sheets: { shortLabel: string }[]; // 12 libellés courts « oct. 2026 »
+}
+
+/** Aperçu d'une avance (totale ou partielle) avant encaissement. */
+export interface AdvancePreviewResult {
+  amount: number; // montant retenu (entier, plancher)
+  valid: boolean; // montant > 0
+  exceedsReste: boolean; // montant > reste à encaisser du livret
+  resteBefore: number; // reste à encaisser AVANT l'écriture
+  linesCoveredAfter: number; // lignes entièrement couvertes après l'écriture
+  coversThroughLine: number; // dernière ligne ABSOLUE couverte (0 si aucune)
+  coversThroughSheet: number | null; // feuille (1..12) de cette ligne
+  coversThroughLabel: string | null; // « nov. 2026 »
+  coversFullSheet: boolean; // l'avance atteint la FIN de la feuille couverte
+  partialAfter: number; // montant posé sur la ligne entamée (0..mise−1)
+  resteAfter: number; // ce qu'il restera à prendre après cette avance
+}
+
+export function advancePreview(v: AdvancePreviewInput, amount: number): AdvancePreviewResult {
+  const mise = Math.max(1, v.dailyAmount);
+  const positiveBalance = Math.max(0, v.balance);
+  const firstLine = Math.max(1, Math.min(v.lineDue - v.coveredLines, LIVRET_DAYS));
+  const resteBefore = Math.max(0, v.attendu - positiveBalance);
+  const raw = Number.isFinite(amount) ? Math.floor(amount) : 0;
+  const safe = Math.max(0, raw);
+  const exceedsReste = safe > resteBefore;
+  const coveredAfter = Math.min(v.payableLines, Math.floor((positiveBalance + safe) / mise));
+  const lastCoveredAbs = coveredAfter > 0 ? firstLine + coveredAfter - 1 : 0;
+  const sheet = lastCoveredAbs > 0 ? Math.min(LIVRET_MONTHS, Math.ceil(lastCoveredAbs / SHEET_DAYS)) : null;
+  const label = sheet !== null ? v.sheets[sheet - 1]?.shortLabel ?? null : null;
+  return {
+    amount: raw,
+    valid: raw > 0,
+    exceedsReste,
+    resteBefore,
+    linesCoveredAfter: coveredAfter,
+    coversThroughLine: lastCoveredAbs,
+    coversThroughSheet: sheet,
+    coversThroughLabel: label,
+    coversFullSheet: sheet !== null && lastCoveredAbs === sheet * SHEET_DAYS,
+    partialAfter: Math.max(0, positiveBalance + Math.min(safe, resteBefore) - coveredAfter * mise),
+    resteAfter: Math.max(0, resteBefore - safe),
+  };
+}
+
 /** Résumé monétaire d'un livret en une ligne, pour les messages d'alerte. */
 export function livretSummary(livret: LivretView): string {
   return `${formatFCFA(livret.recap.encaisse)} versés sur ${formatFCFA(livret.recap.attendu)}`;

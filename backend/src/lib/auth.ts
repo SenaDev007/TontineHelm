@@ -38,7 +38,9 @@ export interface AuthUser {
   structureStatus?: string | null;
 }
 
-/** Extrait le jeton de session : en-tête Bearer d'abord, cookie ensuite. */
+/** Extrait le jeton de session : en-tête Bearer d'abord, cookie ensuite, puis
+ * paramètre d'URL ?token= (EventSource ne peut PAS poser d'en-tête — le flux
+ * temps réel /api/events s'y appuie ; jeton de session ordinaire, même base). */
 export function getToken(req: Request): string | null {
   const header = req.headers.authorization;
   if (header && header.startsWith("Bearer ")) {
@@ -46,7 +48,10 @@ export function getToken(req: Request): string | null {
     if (token) return token;
   }
   const cookie = (req as Request & { cookies?: Record<string, string> }).cookies?.[SESSION_COOKIE];
-  return cookie || null;
+  if (cookie) return cookie;
+  const queryToken = (req.query as Record<string, unknown> | undefined)?.token;
+  if (typeof queryToken === "string" && queryToken) return queryToken;
+  return null;
 }
 
 export async function createSession(userId: string): Promise<string> {

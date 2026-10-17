@@ -10,6 +10,7 @@
 import { db } from "./db";
 import { ApiError } from "./auth";
 import { appendAudit } from "./audit";
+import { publishTenantEvent } from "./events";
 import { passbookBalance, paidDays } from "./domain";
 import { LIVRET_DAYS, LIVRET_MONTHS, buildLivret, firstPayableLine, monthStart } from "./livret";
 
@@ -146,6 +147,21 @@ export async function applyCollectionEvent(opts: {
 
   // Le carnet du cotisant est la source de vérité : chaque écriture y est
   // visible immédiatement depuis son lien personnel (WhatsApp / e-mail).
+
+  // Temps réel web ↔ mobile (décision du dirigeant, 2026-10-18) : l'écriture
+  // est publiée aux flux SSE de la structure — même point d'émission pour les
+  // DEUX canaux (web /api/agent/sync et mobile /v1/sync/push), donc tout ce
+  // qui est fait d'un côté est vu de l'autre dès la milliseconde.
+  publishTenantEvent({
+    type: "collection",
+    tenantId,
+    at: new Date().toISOString(),
+    passbookId: passbook.id,
+    contributorId: passbook.contributorId,
+    agentId,
+    amount: ev.amount,
+    source,
+  });
 
   return { id: ev.id, status: "created", collectionId: ev.id };
 }

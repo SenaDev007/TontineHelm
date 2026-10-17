@@ -26,6 +26,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@domain/*": [
+        "./packages/domain/src/*"
       ]
     }
   },
@@ -41,6 +44,9 @@
     "academia-Helm",
     "repo-acadiahelm",
     "backend",
-    "skills"
+    "apps",
+    "skills",
+    "packages/domain/tests",
+    "packages/schemas/tests"
   ]
 }

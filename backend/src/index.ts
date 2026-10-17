@@ -16,6 +16,8 @@ import exportRoutes from "./routes/export";
 import v1AuthRoutes from "./routes/v1/auth";
 import v1DeviceRoutes from "./routes/v1/devices";
 import v1SyncRoutes from "./routes/v1/sync";
+import v1EventRoutes from "./routes/v1/events";
+import eventRoutes from "./routes/events";
 import { apiErrorHandler, getCurrentUser } from "./lib/auth";
 import { db } from "./lib/db";
 
@@ -88,6 +90,10 @@ app.use("/api/agent", agentRoutes);
 // sur période) — montés AVANT le routeur manager pour capter /api/manager/export/*.
 app.use("/api/manager/export", exportRoutes);
 app.use("/api/manager", managerRoutes);
+// Flux temps réel web ↔ mobile (décision du dirigeant, 2026-10-18) : les
+// écritures des DEUX canaux sont publiées ici — les navigateurs connectés
+// rafraîchissent leurs données sans action de l'utilisateur.
+app.use("/api/events", eventRoutes);
 app.use("/api/payments", paymentsRoutes);
 // Carnets publics des cotisants : lien personnel partagé par WhatsApp / e-mail,
 // consultation sans compte — accessible même si les autres routes changent.
@@ -100,6 +106,7 @@ app.use("/api/public", publicRoutes);
 app.use("/v1/auth", v1AuthRoutes);
 app.use("/v1/devices", v1DeviceRoutes);
 app.use("/v1/sync", v1SyncRoutes);
+app.use("/v1/events", v1EventRoutes);
 
 // 404 JSON uniforme pour toute route inconnue.
 app.use((_req, res) => {

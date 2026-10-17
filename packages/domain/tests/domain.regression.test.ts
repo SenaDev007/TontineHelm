@@ -40,6 +40,7 @@ import {
   lineLabel,
   livretTotal,
   serializeLivret,
+  advancePreview,
 } from "../src/livret";
 import { PLANS, planOf } from "../src/plans";
 
@@ -308,6 +309,134 @@ describe("livret — lignes et sérialisation", () => {
     expect(Object.keys(s.recap)).toContain("partEntreprise");
     // JSONisable sans perte
     expect(() => JSON.stringify(s)).not.toThrow();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// livret.ts — advancePreview : l'avance TOTALE ou PARTIELLE (décision du
+// dirigeant, 2026-10-18). L'agent renseigne le montant que le cotisant désire
+// verser — pas obligatoirement le total du mois. Fonction PURE partagée par le
+// web et le mobile ; l'entrée se construit depuis la vue SÉRIALISÉE du livret
+// (mêmes champs que les réponses /api et /v1).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Entrée de l'aperçu telle que le web ET le mobile la construisent : depuis
+ *  la vue sérialisée du livret (livretStop / serializeLivret). */
+function previewOf(pb: { dailyAmount: number; startsOn: Date; createdAt?: Date }, balance: number, today: Date) {
+  const s = serializeLivret(buildLivret(pb, balance, today));
+  return (amount: number) =>
+    advancePreview(
+      {
+        dailyAmount: s.dailyAmount,
+        balance: s.balance,
+        coveredLines: s.coveredLines,
+        payableLines: s.payableLines,
+        lineDue: s.lineDue,
+        attendu: s.recap.attendu,
+        sheets: s.sheets,
+      },
+      amount
+    );
+}
+
+describe("livret — advancePreview : avance totale ou PARTIELLE", () => {
+  const pb = { dailyAmount: 500, startsOn: day("2026-10-01T00:00:00Z"), createdAt: day("2026-10-01T00:00:00Z") };
+  const today = day("2026-10-18T00:00:00Z");
+
+  it("montant du preset « fin du mois courant » : couvre la feuille ENTIÈRE", () => {
+    const preview = previewOf(pb, 0, today);
+    const livret = buildLivret(pb, 0, today);
+    const preset = livret.advanceOptions[0];
+    expect(preset.sheet).toBe(1);
+    expect(preset.amount).toBe(15500); // 31 lignes × 500, rattrapage inclus
+    const p = preview(preset.amount);
+    expect(p.valid).toBe(true);
+    expect(p.exceedsReste).toBe(false);
+    expect(p.coversFullSheet).toBe(true);
+    expect(p.coversThroughSheet).toBe(1);
+    expect(p.coversThroughLabel).toBe("oct. 2026");
+    expect(p.coversThroughLine).toBe(31);
+    expect(p.linesCoveredAfter).toBe(31);
+    expect(p.partialAfter).toBe(0);
+    expect(p.resteAfter).toBe(186000 - 15500);
+  });
+
+  it("AVANCE PARTIELLE (correction du dirigeant) : une partie du mois seulement", () => {
+    const preview = previewOf(pb, 0, today);
+    // Le cotisant ne veut verser que 5 000 (10 lignes) au lieu des 15 500 du mois.
+    const p = preview(5000);
+    expect(p.valid).toBe(true);
+    expect(p.coversFullSheet).toBe(false);
+    expect(p.coversThroughSheet).toBe(1);
+    expect(p.coversThroughLabel).toBe("oct. 2026");
+    expect(p.coversThroughLine).toBe(10);
+    expect(p.linesCoveredAfter).toBe(10);
+    expect(p.partialAfter).toBe(0);
+    expect(p.resteAfter).toBe(186000 - 5000);
+  });
+
+  it("avance partielle qui ENTAME une ligne : montant posé sur la ligne en cours", () => {
+    const preview = previewOf(pb, 0, today);
+    const p = preview(5250); // 10 lignes pleines + 250 sur la 11e
+    expect(p.linesCoveredAfter).toBe(10);
+    expect(p.coversThroughLine).toBe(10);
+    expect(p.partialAfter).toBe(250);
+    expect(p.resteAfter).toBe(186000 - 5250);
+  });
+
+  it("rattrapage inclus : l'avance part de la ligne due, pas de la ligne 1", () => {
+    // 17 lignes déjà réglées (8 500) : l'avance couvre À PARTIR de la ligne 18.
+    const preview = previewOf(pb, 8500, today);
+    const p = preview(5000); // 10 lignes de plus → jusqu'à la ligne 27
+    expect(p.linesCoveredAfter).toBe(27);
+    expect(p.coversThroughLine).toBe(27);
+    expect(p.coversFullSheet).toBe(false);
+    expect(p.resteAfter).toBe(186000 - 13500);
+  });
+
+  it("lignes excusées (arrivée le 17) : la numérotation démarre au jour d'arrivée", () => {
+    const latePb = { dailyAmount: 500, startsOn: day("2026-10-01T00:00:00Z"), createdAt: day("2026-10-17T00:00:00Z") };
+    const preview = previewOf(latePb, 0, today);
+    const p = preview(1000); // 2 lignes depuis la ligne 17 (première encaissable)
+    expect(p.linesCoveredAfter).toBe(2);
+    expect(p.coversThroughLine).toBe(18); // 17 + 2 − 1
+    expect(p.resteAfter).toBe(178000 - 1000); // 356 lignes encaissables × 500
+  });
+
+  it("équivalence EXACTE avec les presets advanceOptions du livret", () => {
+    const preview = previewOf(pb, 8500, today);
+    const livret = buildLivret(pb, 8500, today);
+    expect(livret.advanceOptions.length).toBeGreaterThan(0);
+    for (const o of livret.advanceOptions) {
+      const p = preview(o.amount);
+      expect(p.coversFullSheet).toBe(true);
+      expect(p.coversThroughSheet).toBe(o.sheet);
+      expect(p.resteAfter).toBe(o.resteAfter);
+      expect(p.exceedsReste).toBe(false);
+    }
+  });
+
+  it("gardes : montant nul ou négatif invalide ; au-delà du restant refusé", () => {
+    const preview = previewOf(pb, 0, today);
+    expect(preview(0).valid).toBe(false);
+    expect(preview(-500).valid).toBe(false);
+    expect(preview(186001).exceedsReste).toBe(true);
+    expect(preview(186001).resteAfter).toBe(0);
+    // Livret entièrement réglé : tout montant dépasse le restant (nul).
+    const done = previewOf(pb, 186000, today);
+    expect(done(500).exceedsReste).toBe(true);
+    expect(done(500).resteBefore).toBe(0);
+  });
+
+  it("avance partielle multi-feuilles : franchit la frontière des 31 lignes", () => {
+    const preview = previewOf(pb, 0, today);
+    const p = preview(17000); // 34 lignes → 31 (oct.) + 3 (nov.)
+    expect(p.linesCoveredAfter).toBe(34);
+    expect(p.coversThroughSheet).toBe(2);
+    expect(p.coversThroughLabel).toBe("nov. 2026");
+    expect(p.coversThroughLine).toBe(34); // 3e ligne de la feuille 2
+    expect(p.coversFullSheet).toBe(false);
+    expect(p.resteAfter).toBe(186000 - 17000);
   });
 });
 

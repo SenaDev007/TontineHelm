@@ -316,6 +316,8 @@ Principe vérifié : le web continue de fonctionner sans changement ; les routes
 14. **Cycles courts paramétrables (décision n° 5, interprétation à confirmer en revue de phase 1)** : `Passbook.cycleDays` paramétrable à la création, bornes 1..372, défaut 372 (livret annuel inchangé) ; généralisation du moteur `livret.ts` (feuilles de 31 lignes, dernière ligne de chaque feuille = mise entreprise, dernière feuille éventuellement partielle) ; champ optionnel « durée du cycle » à la création d'un carnet (agent et gérant). Implémenté web d'abord, tests de bornes (1 jour, mois d'arrivée proratisé, 372).
 15. **Export du journal d'audit (décision n° 10)** : `GET /api/manager/export/audit?format=pdf|xlsx` — mêmes générateurs serveur (marque TontiHelm), filtres action/période, journalisation `report_exported`. Bouton dans l'onglet Audit du web ; export + partage natif sur mobile.
 16. **Inscription sur mobile (décision n° 12)** : réutilisation des routes `/api/structures/register*` sans modification ; paiement FedaPay en navigateur intégré avec retour applicatif ; le statut est TOUJOURS revérifié serveur (activation idempotente). Vigilance distribution : documenter l'exemption Google Play Billing (services B2B) dans DISTRIBUTION.md (phase 6).
+17. **Avance PARTIELLE (directive du dirigeant, 2026-10-18 — LIVRÉE)** : l'avance n'est PAS obligatoirement le montant total du mois couvert — le cotisant peut verser une partie. L'agent renseigne le **montant que le cotisant désire payer** (pavé numérique, web ET mobile) ; les puces « Ce mois / +1 mois… » deviennent des raccourcis qui préremplissent le total. Fonction pure partagée `advancePreview()` dans `packages/domain/src/livret.ts` (consommée par les deux écrans, sur la vue sérialisée du livret) : jusqu'où l'avance couvre (rattrapage inclus), montant posé sur la ligne entamée, reste à prendre après l'écriture. Le moteur d'application acceptait déjà tout montant avec `advance: true` — aucune règle serveur changée, tests de non-régression au vert.
+18. **Temps réel web ↔ mobile (directive du dirigeant, 2026-10-18 — LIVRÉE)** : tout ce qui est fait côté web doit être vu en temps réel sur l'app mobile, et inversement. Pub/sub en mémoire cloisonné par structure (`backend/src/lib/events.ts`), émis par le moteur d'encaissement COMMUN aux deux canaux (web `/api/agent/sync` comme mobile `/v1/sync/push`) et par la validation/contestation de clôture. Deux flux SSE : `GET /api/events` (session web, jeton accepté en `?token=` car EventSource ne peut pas poser d'en-tête) et `GET /v1/events` (jeton mobile). Côté web : `useRealtime` rafraîchit la tournée agent (anti-tempête 1 s) et remonte le tableau de bord gérant (2 s). Côté mobile : XHR incrémental sur `/v1/events` (React Native n'expose pas EventSource) + filet de sécurité pull delta 30 s + retour au premier plan. Champs d'application mono-process (Railway), identique au compteur de débit /v1.
 
 Chaque ajout recevra ses tests d'intégration (idempotence, isolation cotisant entre cotisants et entre structures, non-régression webhook dupliqué, verrous de clôture, réassignation d'agent, bornes des cycles courts).
 
@@ -355,6 +357,13 @@ d'agent et durée de cycle paramétrable (livret annuel par défaut) » — vali
 du même coup l'interprétation de l'écart n° 5 (§7.5). Ces fonctions restent à
 implémenter web d'abord.
 
+Directives complémentaires (18 octobre 2026, même jour, verbalisées par écrit) :
+
+| Sujet | Directive | Statut |
+|---|---|---|
+| Notion d'avance à la collecte | « Ce n'est pas obligatoirement tout le montant — le cotisant peut prendre juste une partie. L'agent renseigne le montant que le cotisant désire prendre, pas la totalité de l'argent du mois. Corriger cela, au mobile comme au site et à l'application web. » | **Corrigé le jour même** (§8.17) : avance partielle web + mobile, `advancePreview()` partagée, 8 tests dédiés. |
+| Visibilité croisée des canaux | « Tout ce qui est fait côté web doit être vu en temps réel sur l'app mobile aussi, et vice versa. » | **Livré le jour même** (§8.18) : flux SSE des deux canaux émis par le moteur commun, abonnements web + mobile, 4 tests de flux. |
+
 ---
 
 ## 11. Suivi d'exécution — phase 1 (18 octobre 2026)
@@ -375,6 +384,8 @@ web `/api/*` est inchangé (non-régression testée) ; tout ce qui suit est addi
 | `DELETE /v1/devices/:id` | session mobile | Livré | v1-auth : coupure immédiate + audit `device_revoked` |
 | `POST /v1/sync/push` | agent | Livré | v1-sync : accusés par événement, idempotence ×3, rejets web exacts |
 | `GET /v1/sync/pull` | agent | Livré | v1-pull : full + delta + curseur + appareil révoqué |
+| `GET /v1/events` | session mobile | Livré (18/10 soir) | v1-advance : hello + change, 401 sans jeton, écrit mobile publiée |
+| `GET /api/events` | session web | Livré (18/10 soir) | v1-advance : jeton en `?token=`, écrit web publiée, abonné web voit l'écrit mobile |
 
 ### 11.2 Choix d'implémentation notables (fidèles aux décisions, transparents)
 
@@ -424,3 +435,39 @@ nullable. Aucune table web existante n'est lue ou modifiée par les routes
   (phase 3).
 - Phase 2 : SQLite chiffrée + outbox + écrans agent ; branchement d'une
   passerelle SMS avant la mise en production du canal mobile.
+
+### 11.5 Livraisons du soir du 18 octobre 2026 (directives « avance partielle » et « temps réel »)
+
+- **Avance partielle (§8.17)** : `advancePreview()` ajoutée à
+  `packages/domain/src/livret.ts` (source de vérité, diff nul avec le backend,
+  8 tests de régression nouveaux, suite domaine 33/33 verte des deux côtés).
+  Écran web `CollectScreen` : pavé numérique en mode Avance + raccourcis de
+  feuille ; aperçu dynamique (« couvre jusqu'à la ligne N de {mois}, dont X sur
+  la ligne entamée ; il restera Y à prendre ») ; toast adapté à l'avance
+  partielle. Écran mobile `collect.tsx` : mêmes modes, même fonction pure,
+  accusés par événement affichés. Aucune règle serveur modifiée — le moteur
+  acceptait déjà tout montant avec `advance: true` (vérifié par test).
+- **Temps réel web ↔ mobile (§8.18)** : `lib/events.ts` (pub/sub par tenant),
+  émission depuis `applyCollectionEvent` (moteur commun) et la
+  validation/contestation de clôture gérant ; `GET /api/events` +
+  `GET /v1/events` (SSE, cœur 25 s, `retry: 5000`) ; `getToken` accepte le
+  jeton en `?token=` (EventSource sans en-tête). Web : `useRealtime`
+  (`src/lib/realtime.ts`) branché dans `AgentApp` (tournée, anti-tempête 1 s)
+  et `ManagerApp` (tableau de bord remonté, 2 s). Mobile : `lib/events.ts`
+  (XHR incrémental, reconnexion 5 s, jeton relu à chaque reconnexion), moteur
+  `lib/tour-engine.tsx` (flux + filet 30 s + premier plan), magasin
+  `lib/tour-store.ts` (pull delta, upsert idempotent), écran Encaisser en
+  ligne. Tests : 8 (v1-advance) dont l'abonné web qui voit l'écriture mobile —
+  le « vice versa » est prouvé par test.
+- **Vérifications du soir** : suite backend complète 78 tests verts (0 échec) ;
+  `tsc --noEmit` backend 0 erreur ; sync domain diff nul ; `tsc` racine 0
+  erreur (web + packages, exclusions apps/tests-bun alignées sur eslint) ;
+  `tsc` apps/mobile 0 erreur (dépendances installées, chemins `file:` du
+  package.json corrigés — bug latent du socle, `nativewind/types` ajouté) ;
+  `next build` de production vert (l'alias `@domain/*` compile dans le bundle
+  web) ; serveurs de préproduction relancés et verts.
+- **Transparence** : le flux SSE traverse la passerelle de prévisualisation
+  seulement si celle-ci relaie le streaming (en production Vercel→Railway il
+  est direct) ; le filet mobile de 30 s garantit de toute façon la fraîcheur
+  des données. L'écran Encaisser mobile est en ligne immédiat — la file hors
+  ligne (outbox) reste planifiée en phase 2, conformément au PARITE.
