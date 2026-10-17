@@ -186,6 +186,50 @@ export const post = <T>(path: string, body: unknown) =>
 
 export const get = <T>(path: string) => api<T>(path);
 
+/**
+ * Télécharge un fichier généré par l'API (PDF / Excel) avec l'authentification
+ * courante : fetch → blob → lien de téléchargement. Contourne volontairement la
+ * couche offline (un export doit refléter le serveur) et respecte le nom de
+ * fichier transmis par Content-Disposition.
+ */
+export async function downloadFile(path: string, fallbackName: string): Promise<string> {
+  const token = getToken();
+  const res = await fetchWithTimeout(
+    apiUrl(path),
+    { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    60_000
+  );
+  if (!res.ok) {
+    let message = "Téléchargement impossible. Réessaie.";
+    let code = "error";
+    try {
+      const data = (await res.json()) as { error?: { code?: string; message?: string } } | null;
+      message = data?.error?.message ?? message;
+      code = data?.error?.code ?? code;
+    } catch {
+      /* corps non JSON */
+    }
+    throw new ApiClientError(message, code);
+  }
+  const blob = await res.blob();
+  // Nom de fichier : filename*=UTF-8 d'abord (accents préservés), sinon filename.
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+  const plain = /filename="?([^";]+)"?/i.exec(cd);
+  let name = fallbackName;
+  if (star) name = decodeURIComponent(star[1]);
+  else if (plain) name = plain[1];
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  return name;
+}
+
 /** Purge les données locales (cache + file) — à la déconnexion. */
 export async function clearOfflineData(): Promise<void> {
   if (typeof window === "undefined") return;

@@ -12,6 +12,7 @@ import agentRoutes from "./routes/agent";
 import managerRoutes from "./routes/manager";
 import paymentsRoutes from "./routes/payments";
 import publicRoutes from "./routes/public";
+import exportRoutes from "./routes/export";
 import { apiErrorHandler, getCurrentUser } from "./lib/auth";
 import { db } from "./lib/db";
 
@@ -80,6 +81,9 @@ app.use("/api/auth", authRoutes);
 app.use("/api/structures", structuresRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/agent", agentRoutes);
+// Exports PDF / Excel générés côté serveur (cotisants par quartier, encaissements
+// sur période) — montés AVANT le routeur manager pour capter /api/manager/export/*.
+app.use("/api/manager/export", exportRoutes);
 app.use("/api/manager", managerRoutes);
 app.use("/api/payments", paymentsRoutes);
 // Carnets publics des cotisants : lien personnel partagé par WhatsApp / e-mail,

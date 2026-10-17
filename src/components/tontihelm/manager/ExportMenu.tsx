@@ -1,6 +1,7 @@
 "use client";
-// TontiHelm — menu d'export du back-office : Excel (CSV compatible, BOM + « ; »)
-// ou rapport PDF via la boîte d'impression du navigateur.
+// TontiHelm — menu d'export du back-office (2026-10) : Excel (.xlsx) et PDF
+// générés par le BACKEND (design de marque : en-têtes, tableaux stylés, totaux,
+// pieds de page paginés). Le composant déclenche le téléchargement authentifié.
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,15 +12,19 @@ import {
 import { Download, FileSpreadsheet, FileText } from "lucide-react";
 
 export function ExportMenu({
-  onCsv,
+  onExcel,
   onPdf,
   label = "Exporter",
   busy = false,
+  excelLabel = "Excel (.xlsx)",
+  pdfLabel = "PDF",
 }: {
-  onCsv: () => void;
+  onExcel: () => void;
   onPdf: () => void;
   label?: string;
   busy?: boolean;
+  excelLabel?: string;
+  pdfLabel?: string;
 }) {
   return (
     <DropdownMenu>
@@ -30,11 +35,11 @@ export function ExportMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={onCsv} aria-label="Exporter en Excel (CSV)">
-          <FileSpreadsheet className="h-4 w-4" aria-hidden /> Excel (CSV)
+        <DropdownMenuItem onClick={onExcel} aria-label={`Exporter en ${excelLabel}`}>
+          <FileSpreadsheet className="h-4 w-4" aria-hidden /> {excelLabel}
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={onPdf} aria-label="Exporter en rapport PDF">
-          <FileText className="h-4 w-4" aria-hidden /> Rapport PDF
+        <DropdownMenuItem onClick={onPdf} aria-label={`Exporter en ${pdfLabel}`}>
+          <FileText className="h-4 w-4" aria-hidden /> {pdfLabel}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

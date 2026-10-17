@@ -147,7 +147,7 @@ export function AuditTab({ structureName }: { structureName: string }) {
               </p>
             </div>
           </div>
-          <ExportMenu onCsv={exportCsv} onPdf={exportPdf} label="Exporter le journal" busy={exporting} />
+          <ExportMenu onExcel={exportCsv} onPdf={exportPdf} label="Exporter le journal" busy={exporting} excelLabel="Excel (CSV)" pdfLabel="PDF (impression)" />
         </CardContent>
       </Card>
 

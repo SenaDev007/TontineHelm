@@ -11,8 +11,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PassbookStatusBadge } from "../StatusBadge";
 import { ShareLinkDialog } from "../ShareLinkSheet";
+import { ExportMenu } from "./ExportMenu";
 import { ContributorRow, formatFCFA } from "@/lib/types";
-import { get, isOfflineQueued, post } from "@/lib/client";
+import { downloadFile, get, isOfflineQueued, post } from "@/lib/client";
 import { useSyncDone } from "@/lib/offline/hooks";
 import { usePlanQuota } from "./usePlanQuota";
 import { UserPlus, Search, Phone, MapPin, IdCard, Link2 } from "lucide-react";
@@ -35,6 +36,33 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
   const quota = usePlanQuota();
   const contributorsQuotaReached =
     !readOnly && quota !== null && (rows?.length ?? 0) >= quota.usage.contributorsQuota;
+
+  // ── Export de la liste complète : PDF / Excel générés par le backend ──
+  // (sections par quartier, carnets sous chaque cotisant, dates de création).
+  const [exporting, setExporting] = useState(false);
+
+  async function exportList(format: "pdf" | "xlsx") {
+    setExporting(true);
+    try {
+      const stamp = new Date().toISOString().slice(0, 10);
+      await downloadFile(
+        `/api/manager/export/contributors?format=${format}`,
+        `cotisants-${stamp}.${format}`
+      );
+      // Confirmation différée : le démarrage d'un téléchargement détourne le focus.
+      setTimeout(() => {
+        toast({
+          title: format === "pdf" ? "Liste PDF prête." : "Liste Excel prête.",
+          description:
+            "Tous les cotisants, groupés par quartier — un cotisant multi-carnets porte ses carnets sous son nom.",
+        });
+      }, 600);
+    } catch (err) {
+      toast({ title: "Export impossible", description: err instanceof Error ? err.message : "Réessaie." });
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const load = () => {
     get<{ contributors: ContributorRow[] }>("/api/manager/contributors")
@@ -126,6 +154,12 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
             aria-label="Rechercher un cotisant"
           />
         </div>
+        <ExportMenu
+          onExcel={() => exportList("xlsx")}
+          onPdf={() => exportList("pdf")}
+          busy={exporting}
+          label="Exporter la liste"
+        />
         {!readOnly && (
           <div className="flex flex-col items-start gap-2 sm:items-end">
             {quota && (

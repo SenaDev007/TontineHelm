@@ -15,6 +15,7 @@ import {
   LIVRET_DAYS, LIVRET_MONTHS, buildLivret, monthStart as livretMonthStart, serializeLivret,
 } from "../lib/livret";
 import { autoScale, recentPlanEvents, markPlanEventsRead } from "../lib/autoscale";
+import { parseDayParam } from "../lib/report";
 
 const router = Router();
 
@@ -802,9 +803,22 @@ router.get(
     const pageSize = 25;
     const method = req.query.method as string | undefined;
     const search = ((req.query.search as string) ?? "").toLowerCase();
+    // Filtre période : bornes incluses (AAAA-MM-JJ). Absentes → tout l'historique.
+    const fromParam = parseDayParam(req.query.from);
+    const toParam = parseDayParam(req.query.to);
+    const periodWhere =
+      fromParam || toParam
+        ? {
+            collectedAt: {
+              ...(fromParam ? { gte: fromParam } : {}),
+              ...(toParam ? { lt: new Date(toParam.getTime() + 24 * 60 * 60 * 1000) } : {}),
+            },
+          }
+        : {};
 
     const where = {
       tenantId,
+      ...periodWhere,
       ...(method === "cash" || method === "mobile_money" ? { method } : {}),
     };
     const [total, collections] = await Promise.all([
