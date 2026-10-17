@@ -1,17 +1,23 @@
 "use client";
-// TontiHelm — inscription de la structure (M1, écran 10).
-// Stepper maison : identité de la structure, puis dirigeant et code PIN.
-// L'agrément et les pièces justificatives sont FACULTATIFS à cette étape :
-// la vérification réglementaire se fait avec le conseiller avant l'activation.
-import { useState } from "react";
+// TontiHelm — inscription de la structure avec souscription payante (patron
+// Academia Helm) : identité de la structure, puis dirigeant et code PIN, puis
+// ÉTAPE 3 = choix du plan d'abonnement et PAIEMENT FedaPay. Le compte est créé
+// et ACTIF dès la confirmation du paiement — plus de « demande d'ouverture ».
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LogoMark } from "../Logo";
-import { post } from "@/lib/client";
-import { ArrowLeft, ArrowRight, CheckCircle2, PartyPopper } from "lucide-react";
+import { post, setToken, ApiClientError } from "@/lib/client";
+import { FedaPayCheckout, type FedaPayCheckoutData } from "./FedaPayCheckout";
+import {
+  ArrowLeft, ArrowRight, Check, CheckCircle2, CreditCard, Loader2, PartyPopper,
+  ShieldCheck, Smartphone, Sparkles,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const KINDS = [
@@ -20,10 +26,60 @@ const KINDS = [
   { value: "pme", label: "PME collectrice (registre de commerce)" },
 ];
 
+const PLANS = [
+  {
+    key: "demarrage", name: "Démarrage", monthly: 15000,
+    range: "1 agent · 50 cotisants",
+    features: ["Application agent hors ligne", "Clôture de caisse et audit", "Export Excel et PDF"],
+    highlight: false,
+  },
+  {
+    key: "pro", name: "Pro", monthly: 35000,
+    range: "2 à 10 agents · 51 à 300 cotisants",
+    features: ["Rappels automatiques en retard", "Support WhatsApp sous 24 h", "Tout le palier Démarrage"],
+    highlight: true,
+  },
+  {
+    key: "institution", name: "Institution", monthly: 75000,
+    range: "11 à 40 agents · 301 à 3 000 cotisants",
+    features: ["Rapports réglementaires", "Multi-agences", "Support dédié sous 4 h"],
+    highlight: false,
+  },
+] as const;
+
+type PlanKey = (typeof PLANS)[number]["key"];
+
+const fcfa = (n: number) => `${n.toLocaleString("fr-FR").replace(/\u202f/g, " ")} FCFA`;
+
+interface RegisterResponse {
+  ok: boolean; paymentId: string; amount: number;
+  plan: PlanKey; billingPeriod: "monthly" | "yearly"; mode: "fedapay" | "test" | "unconfigured";
+}
+
+interface PaymentSession {
+  ok: boolean; mode: "fedapay" | "test"; paymentId: string; amount: number;
+  checkout?: FedaPayCheckoutData; paymentUrl?: string | null;
+}
+
+interface VerifyResponse {
+  status: "approved" | "declined" | "pending";
+  activated: boolean;
+  token?: string | null;
+  message?: string;
+}
+
 export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone: () => void }) {
+  const router = useRouter();
   const [step, setStep] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Étape 3 — abonnement et paiement.
+  const [plan, setPlan] = useState<PlanKey | "">("");
+  const [period, setPeriod] = useState<"monthly" | "yearly">("monthly");
+  const [session, setSession] = useState<PaymentSession | null>(null);
+  const [checkoutData, setCheckoutData] = useState<FedaPayCheckoutData | null>(null);
+  const [verifying, setVerifying] = useState(false);
   const [finished, setFinished] = useState(false);
 
   const [form, setForm] = useState({
@@ -31,6 +87,12 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
     city: "", ownerName: "", ownerPhone: "", pin: "", pinConfirm: "",
   });
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const chosenPlan = PLANS.find((p) => p.key === plan);
+  const amount = useMemo(() => {
+    if (!chosenPlan) return 0;
+    return period === "yearly" ? chosenPlan.monthly * 10 : chosenPlan.monthly;
+  }, [chosenPlan, period]);
 
   function next() {
     setError(null);
@@ -45,14 +107,23 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
       if (!/^\d{6}$/.test(form.pin)) return setError("Le code PIN doit contenir 6 chiffres.");
       if (form.pin !== form.pinConfirm) return setError("Les deux codes PIN ne correspondent pas.");
     }
+    if (step === 3 && !plan) {
+      return setError("Choisis ton plan d'abonnement pour continuer.");
+    }
     setStep((s) => Math.min(3, s + 1));
   }
 
-  async function submit() {
+  // ── Lancement du paiement : draft → session FedaPay / mode test ────────────
+  async function startPayment() {
+    if (!plan || !chosenPlan) {
+      setError("Choisis ton plan d'abonnement pour payer.");
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
-      await post<{ message: string }>("/api/structures/register", {
+      // 1. Enregistrement du formulaire + intention de paiement (montant fixé serveur).
+      const reg = await post<RegisterResponse>("/api/structures/register", {
         structureName: form.structureName.trim(),
         kind: form.kind,
         licenseRef: form.licenseRef.trim() || undefined,
@@ -60,14 +131,71 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
         ownerName: form.ownerName.trim(),
         ownerPhone: form.ownerPhone.replace(/\s+/g, ""),
         pin: form.pin,
+        plan,
+        billingPeriod: period,
       });
-      setFinished(true);
+      // 2. Session de paiement : transaction FedaPay ou mode test.
+      const pay = await post<PaymentSession>("/api/structures/register/payment", {
+        paymentId: reg.paymentId,
+      });
+      setSession(pay);
+      if (pay.mode === "fedapay" && pay.checkout) setCheckoutData(pay.checkout);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Inscription impossible. Réessaie.");
+      setError(err instanceof Error ? err.message : "Impossible de préparer le paiement. Réessaie.");
     } finally {
       setLoading(false);
     }
   }
+
+  // ── Vérification du statut réel (backend ↔ FedaPay) puis activation ───────
+  const verify = useCallback(async (outcome?: "approved" | "declined") => {
+    if (!session) return;
+    setVerifying(true);
+    setError(null);
+    try {
+      const res = await post<VerifyResponse>("/api/structures/register/verify", {
+        paymentId: session.paymentId,
+        ...(outcome ? { outcome } : {}),
+      });
+      if (res.activated) {
+        if (res.token) setToken(res.token);
+        setFinished(true);
+      } else if (res.status === "pending") {
+        // Paiement encore en cours côté FedaPay : nouvelle tentative brève.
+        setTimeout(() => void verify(), 3000);
+      } else {
+        setError(res.message ?? "Le paiement n'a pas été confirmé. Réessaie.");
+        setSession(null);
+        setCheckoutData(null);
+      }
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === "payment_check_retry") {
+        setTimeout(() => void verify(), 4000);
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Vérification du paiement impossible.");
+    } finally {
+      setVerifying(false);
+    }
+  }, [session]);
+
+  // Retour pleine page FedaPay : /inscription?paymentId=…&status=return → vérifier.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentId = params.get("paymentId");
+    if (paymentId && params.get("status") === "return" && !session) {
+      setSession({ ok: true, mode: "fedapay", paymentId, amount: 0 });
+      void verify();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleCheckoutComplete = useCallback(() => void verify(), [verify]);
+  const handleCheckoutError = useCallback(() => {
+    setError("Le paiement n'a pas abouti. Choisis un autre moyen ou réessaie.");
+  }, []);
+
+  const stepLabels = ["Ma structure", "Mon compte", "Abonnement"];
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
@@ -80,26 +208,34 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
         </div>
       </div>
 
-      <div className="mx-auto flex w-full max-w-[1200px] flex-1 items-center justify-center px-4 py-10 md:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-[1200px] flex-1 items-start justify-center px-4 py-10 md:px-6 lg:py-14 lg:px-8">
         {finished ? (
           <Card className="w-full max-w-lg border-line text-center">
             <CardContent className="p-8">
               <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#DFF6F4] text-success">
                 <PartyPopper className="h-7 w-7 tontihelm-icon" aria-hidden />
               </span>
-              <h1 className="font-display mt-5 text-2xl font-bold text-ink">Inscription envoyée</h1>
+              <h1 className="font-display mt-5 text-2xl font-bold text-ink">Compte créé avec succès</h1>
               <p className="mt-3 text-base leading-relaxed text-subtle">
-                Demande reçue. Nous vérifions les informations de ta structure et nous te répondons sous
-                24 heures ouvrées.
+                Paiement confirmé. <strong className="text-ink">{form.structureName}</strong> est active,
+                ton abonnement {chosenPlan?.name} court dès aujourd&apos;hui. Ton numéro
+                <strong className="text-ink"> {form.ownerPhone}</strong> est ton identifiant de connexion.
               </p>
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
-                <Button onClick={onDone} className="h-12 bg-primary px-6 text-primary-foreground hover:bg-primary-hover">
-                  Retour à l&apos;accueil
+                <Button
+                  onClick={() => router.push("/")}
+                  className="h-12 bg-primary px-6 text-primary-foreground hover:bg-primary-hover"
+                >
+                  Ouvrir mon espace
                 </Button>
                 <Button variant="outline" asChild className="h-12 border-line px-6">
-                  <a href="/connexion">Se connecter</a>
+                  <a href="/">Retour au site</a>
                 </Button>
               </div>
+              <p className="mt-5 text-xs text-subtle">
+                Le reçu du paiement et le détail de l&apos;abonnement sont disponibles dans l&apos;onglet
+                Facturation de ton espace.
+              </p>
             </CardContent>
           </Card>
         ) : (
@@ -108,10 +244,10 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
               <div className="mb-1 flex justify-center">
                 <LogoMark size={64} priority />
               </div>
-              <CardTitle className="font-display text-xl font-bold">Inscrire ma structure</CardTitle>
+              <CardTitle className="font-display text-xl font-bold">Créer mon compte</CardTitle>
               <p className="text-sm text-subtle">
-                Aucune pièce à joindre pour démarrer : ton espace est activé après vérification de ta
-                structure, sous 24 heures ouvrées. Un conseiller peut d&apos;abord te faire une démonstration.
+                Trois étapes, puis ton espace est actif immédiatement après le paiement.
+                Aucune pièce à joindre : l&apos;agrément se vérifie avec un conseiller après le démarrage.
               </p>
               {/* Stepper */}
               <div className="mt-4 flex items-center gap-2" aria-hidden>
@@ -122,6 +258,9 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
                       s <= step ? "bg-primary text-primary-foreground" : "bg-[#EDF2F7] text-subtle"
                     )}>
                       {s < step ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : s}
+                    </span>
+                    <span className={cn("hidden text-xs font-medium sm:block", s <= step ? "text-ink" : "text-subtle")}>
+                      {stepLabels[s - 1]}
                     </span>
                     {s < 3 && <span className={cn("h-px flex-1", s < step ? "bg-primary" : "bg-line")} />}
                   </div>
@@ -162,7 +301,7 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
                     />
                     <p className="text-xs text-subtle">
                       La loi exige l&apos;agrément pour collecter l&apos;épargne : nous le vérifions avec toi
-                      avant l&apos;activation, aucune pièce à joindre maintenant.
+                      après l&apos;activation, aucune pièce à joindre maintenant.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -181,6 +320,7 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
                   <div className="space-y-2">
                     <Label htmlFor="ophone">Numéro de téléphone du dirigeant</Label>
                     <Input id="ophone" inputMode="tel" value={form.ownerPhone} onChange={(e) => set("ownerPhone", e.target.value)} className="h-12 border-line text-base" placeholder="+229 97 00 00 00" />
+                    <p className="text-xs text-subtle">Ce numéro est ton identifiant de connexion à l&apos;espace dirigeant.</p>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
@@ -195,48 +335,236 @@ export function RegisterScreen({ onBack, onDone }: { onBack: () => void; onDone:
                 </>
               )}
 
-              {step === 3 && (
-                <div className="space-y-4">
-                  <dl className="divide-y divide-line rounded-lg border border-line">
+              {step === 3 && !session && (
+                <div className="space-y-5">
+                  {/* Période de facturation */}
+                  <div>
+                    <Label>Période de facturation</Label>
+                    <div className="mt-2 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Période de facturation">
+                      {([
+                        { key: "monthly", label: "Mensuel", hint: "sans engagement" },
+                        { key: "yearly", label: "Annuel", hint: "2 mois inclus" },
+                      ] as const).map((opt) => (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          role="radio"
+                          aria-checked={period === opt.key}
+                          onClick={() => setPeriod(opt.key)}
+                          className={cn(
+                            "rounded-lg border-2 p-3 text-left transition-colors",
+                            period === opt.key ? "border-primary bg-white" : "border-line bg-white hover:border-primary/40",
+                          )}
+                        >
+                          <span className="block text-sm font-semibold text-ink">{opt.label}</span>
+                          <span className="mt-0.5 flex items-center gap-1 text-xs text-subtle">
+                            {opt.key === "yearly" && <Sparkles className="h-3 w-3 text-accent" aria-hidden />}
+                            {opt.hint}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Cartes de plans */}
+                  <div>
+                    <Label>Choisis ton plan d&apos;abonnement</Label>
+                    <div className="mt-2 grid gap-3">
+                      {PLANS.map((p) => {
+                        const selected = plan === p.key;
+                        const price = period === "yearly" ? p.monthly * 10 : p.monthly;
+                        return (
+                          <button
+                            key={p.key}
+                            type="button"
+                            onClick={() => { setPlan(p.key); setError(null); }}
+                            aria-pressed={selected}
+                            className={cn(
+                              "relative rounded-xl border-2 p-4 text-left transition-all",
+                              selected ? "border-primary bg-white shadow-md" : "border-line bg-white hover:border-primary/40",
+                            )}
+                          >
+                            {p.highlight && (
+                              <Badge className="absolute -top-2.5 right-4 bg-primary text-primary-foreground">
+                                Le plus choisi
+                              </Badge>
+                            )}
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-display text-base font-bold text-ink">{p.name}</span>
+                                  {selected && (
+                                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary">
+                                      <Check className="h-3 w-3 text-primary-foreground" aria-hidden />
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="mt-0.5 text-xs font-medium text-primary">{p.range}</p>
+                                <ul className="mt-2 space-y-1">
+                                  {p.features.map((f) => (
+                                    <li key={f} className="flex items-start gap-1.5 text-xs text-subtle">
+                                      <Check className="mt-0.5 h-3 w-3 shrink-0 text-primary" aria-hidden />
+                                      {f}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <p className="amount text-lg font-bold text-ink">{fcfa(price)}</p>
+                                <p className="text-xs text-subtle">{period === "yearly" ? "par an" : "par mois"}</p>
+                                {period === "yearly" && (
+                                  <p className="mt-0.5 text-[11px] font-medium text-success">
+                                    soit {fcfa(Math.round(p.monthly * 10 / 12))}/mois
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Récapitulatif et total */}
+                  <dl className="divide-y divide-line rounded-lg border border-line bg-white">
                     {[
-                      ["Structure", form.structureName],
+                      ["Structure", `${form.structureName} · ${form.city}`],
                       ["Type", KINDS.find((k) => k.value === form.kind)?.label ?? ""],
-                      ...(form.licenseRef.trim() ? [["Agrément", form.licenseRef] as [string, string]] : []),
-                      ["Ville", form.city],
                       ["Dirigeant", `${form.ownerName} · ${form.ownerPhone}`],
                     ].map(([k, v]) => (
-                      <div key={k} className="flex items-start justify-between gap-4 px-4 py-3">
+                      <div key={k} className="flex items-start justify-between gap-4 px-4 py-2.5">
                         <dt className="text-sm text-subtle">{k}</dt>
-                        <dd className="text-right text-sm font-medium text-ink">{v}</dd>
+                        <dd className="max-w-[60%] truncate text-right text-sm font-medium text-ink">{v}</dd>
                       </div>
                     ))}
+                    <div className="flex items-center justify-between gap-4 bg-[#F7FAFC] px-4 py-3">
+                      <dt className="text-sm font-semibold text-ink">
+                        Total à payer {period === "yearly" ? "pour l'année" : "pour le premier mois"}
+                      </dt>
+                      <dd className="amount text-lg font-bold text-primary">{fcfa(amount)}</dd>
+                    </div>
                   </dl>
-                  <p className="text-sm leading-relaxed text-subtle">
-                    En envoyant cette demande, tu déclares exercer une activité de collecte déclarée et
-                    rester responsable des fonds collectés. TontiHelm ne détient ni ne redistribue aucun
-                    fonds.
+
+                  <p className="text-xs leading-relaxed text-subtle">
+                    En créant ton compte, tu déclares exercer une activité de collecte déclarée et rester
+                    responsable des fonds collectés. TontiHelm ne détient ni ne redistribue aucun fonds.
                   </p>
+                </div>
+              )}
+
+              {/* ── Zone de paiement (après choix du plan) ── */}
+              {step === 3 && session && !finished && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between rounded-lg border border-line bg-white px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-5 w-5 text-primary" aria-hidden />
+                      <div>
+                        <p className="text-sm font-semibold text-ink">
+                          {chosenPlan?.name} · {period === "yearly" ? "Annuel" : "Mensuel"}
+                        </p>
+                        <p className="text-xs text-subtle">Activation immédiate après confirmation</p>
+                      </div>
+                    </div>
+                    <p className="amount text-base font-bold text-primary">{fcfa(session.amount || amount)}</p>
+                  </div>
+
+                  {verifying ? (
+                    <div className="flex flex-col items-center rounded-lg border border-line bg-white p-8" role="status">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden />
+                      <p className="mt-3 text-sm font-medium text-ink">Vérification du paiement…</p>
+                      <p className="mt-1 text-xs text-subtle">Quelques secondes, ne ferme pas cette page.</p>
+                    </div>
+                  ) : checkoutData ? (
+                    <FedaPayCheckout
+                      checkout={checkoutData}
+                      onComplete={handleCheckoutComplete}
+                      onError={handleCheckoutError}
+                    />
+                  ) : session.mode === "test" ? (
+                    /* Mode test (préproduction) : simulation du verdict FedaPay. */
+                    <div className="rounded-lg border-2 border-dashed border-accent/60 bg-[#FFF9EF] p-5">
+                      <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+                        <Smartphone className="h-4 w-4 text-accent" aria-hidden />
+                        Mode test — paiement simulé
+                      </p>
+                      <p className="mt-1.5 text-xs leading-relaxed text-subtle">
+                        FedaPay n&apos;est pas connecté sur cet environnement : le paiement est simulé pour
+                        valider le parcours complet. En production, le formulaire FedaPay (MTN MoMo, Moov,
+                        carte) s&apos;affiche ici.
+                      </p>
+                      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                        <Button
+                          onClick={() => void verify("approved")}
+                          className="h-11 flex-1 bg-primary text-primary-foreground hover:bg-primary-hover"
+                        >
+                          <CheckCircle2 className="h-4 w-4" aria-hidden /> Simuler le paiement
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => void verify("declined")}
+                          className="h-11 flex-1 border-line"
+                        >
+                          Annuler le paiement
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center rounded-lg border border-line bg-white p-6 text-center">
+                      <CreditCard className="h-8 w-8 text-primary" aria-hidden />
+                      <p className="mt-2 text-sm text-subtle">
+                        {session.paymentUrl ? "La page de paiement sécurisée s'ouvre…" : "Préparation du paiement…"}
+                      </p>
+                      {session.paymentUrl && (
+                        <Button asChild className="mt-3 h-11 bg-primary px-5 text-primary-foreground hover:bg-primary-hover">
+                          <a href={session.paymentUrl}>Ouvrir la page de paiement sécurisée</a>
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => { setSession(null); setCheckoutData(null); setError(null); }}
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-subtle transition-colors hover:text-ink"
+                  >
+                    <ArrowLeft className="h-4 w-4" aria-hidden /> Changer de plan
+                  </button>
                 </div>
               )}
 
               {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}
 
-              <div className="flex gap-3">
-                {step > 1 && (
-                  <Button variant="outline" onClick={() => setStep((s) => s - 1)} className="h-12 border-line text-base">
-                    Retour
-                  </Button>
-                )}
-                {step < 3 ? (
-                  <Button onClick={next} className="h-12 flex-1 bg-primary text-base text-primary-foreground hover:bg-primary-hover">
-                    Continuer <ArrowRight className="h-4 w-4" aria-hidden />
-                  </Button>
-                ) : (
-                  <Button onClick={submit} disabled={loading} className="h-12 flex-1 bg-primary text-base text-primary-foreground hover:bg-primary-hover">
-                    {loading ? "Envoi…" : "Envoyer ma demande"}
-                  </Button>
-                )}
-              </div>
+              {!(step === 3 && session) && (
+                <div className="flex gap-3">
+                  {step > 1 && (
+                    <Button variant="outline" onClick={() => setStep((s) => s - 1)} className="h-12 border-line text-base">
+                      Retour
+                    </Button>
+                  )}
+                  {step < 3 ? (
+                    <Button onClick={next} className="h-12 flex-1 bg-primary text-base text-primary-foreground hover:bg-primary-hover">
+                      Continuer <ArrowRight className="h-4 w-4" aria-hidden />
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => void startPayment()}
+                      disabled={loading || !plan}
+                      className="h-12 flex-1 bg-primary text-base text-primary-foreground hover:bg-primary-hover"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Préparation du paiement…
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="h-4 w-4" aria-hidden />
+                          Payer {fcfa(amount)} et activer mon espace
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              )}
 
               <p className="text-center text-sm text-subtle">
                 Déjà un compte ?{" "}

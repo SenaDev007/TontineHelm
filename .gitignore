@@ -71,3 +71,8 @@ backend/node_modules/
 
 # Analyse offline-first — clone de référence hors dépôt
 /academia-Helm/
+backend/prisma/dev.db
+backend/prisma/schema.sqlite.prisma
+backend/backend.log
+backend/scripts/test-register.ts
+dev.log

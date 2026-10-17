@@ -238,6 +238,27 @@ model Subscription {
   structure Structure @relation(fields: [tenantId], references: [id])
 }
 
+// ── Paiement d'inscription (self-service, patron Academia Helm) ──
+// La structure et le compte dirigeant ne sont créés qu'APRÈS approbation du
+// paiement : toutes les informations du formulaire vivent dans `draft` (JSON)
+// jusqu'à confirmation par FedaPay. Le montant est calculé côté serveur.
+model SignupPayment {
+  id            String    @id @default(cuid())
+  provider      String    @default("fedapay")
+  providerRef   String? // identifiant de transaction FedaPay
+  plan          String // 'demarrage' | 'pro' | 'institution'
+  billingPeriod String    @default("monthly") // 'monthly' | 'yearly'
+  amount        Int // FCFA, calculé serveur selon plan + période
+  status        String    @default("pending") // pending | approved | declined | expired
+  draft         String // JSON : structure + dirigeant + pinHash
+  structureId   String? // renseigné à l'activation (idempotence)
+  error         String?
+  createdAt     DateTime  @default(now())
+  paidAt        DateTime?
+
+  @@index([status, createdAt])
+}
+
 model Invoice {
   id         String   @id @default(cuid())
   tenantId   String
