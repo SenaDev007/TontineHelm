@@ -6,20 +6,31 @@
 // sélectionner des lignes suivantes = payer d'AVANCE (le système calcule le
 // reste dynamiquement). La 31e ligne d'une feuille est la mise de l'ENTREPRISE :
 // marquée, jamais inscrite.
+//
+// Mode « Avance mensuelle » (2026-10-17) : le cotisant décide de payer d'avance
+// — on renseigne jusqu'où couvre l'avance (le mois en cours seul, rattrapage
+// inclus, ou plusieurs mois au-delà) et le système calcule automatiquement le
+// montant et ce qu'il restera à prendre.
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PassbookStatusBadge, SyncStatusPill } from "../StatusBadge";
-import { PayableLine, TourData, TourStop, formatFCFA } from "@/lib/types";
-import { Building2, Wallet, ChevronRight, Link2, Check, RotateCcw, TrendingUp } from "lucide-react";
+import { AdvanceOption, PayableLine, TourData, TourStop, formatFCFA } from "@/lib/types";
+import { Building2, Wallet, ChevronRight, Link2, Check, RotateCcw, TrendingUp, CalendarClock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Allocation d'un encaissement : une écriture par ligne du livret. */
 export interface CollectAllocation {
   line: number; // ligne absolue du livret (1..372)
   amount: number;
+  /** Avance mensuelle : une seule écriture couvrant plusieurs lignes d'avance. */
+  advance?: boolean;
+  /** Libellé de la feuille jusqu'où l'avance couvre (toast de confirmation). */
+  coversThrough?: string;
+  /** Ce qu'il restera à prendre après cette avance (notification). */
+  resteAfter?: number;
 }
 
 /* AmountKeypad (§15.7) : clavier numérique, cibles 48 px minimum. */
@@ -124,6 +135,8 @@ export function CollectScreen({
 }) {
   const [amountInput, setAmountInput] = useState<string | null>(null);
   const [selected, setSelected] = useState<number[] | null>(null); // null = sélection par défaut (ligne due)
+  const [mode, setMode] = useState<"lines" | "advance">("lines");
+  const [advanceSheet, setAdvanceSheet] = useState<number | null>(null); // feuille ciblée par l'avance
 
   const view = useMemo(() => {
     if (!stop) return null;
@@ -151,7 +164,7 @@ export function CollectScreen({
   // Allocation : remplit les lignes sélectionnées dans l'ordre (1 mise par ligne,
   // la dernière peut être partielle).
   const allocations = useMemo<CollectAllocation[]>(() => {
-    if (!view || !stop) return [];
+    if (!view || !stop || mode !== "lines") return [];
     let left = amount;
     const out: CollectAllocation[] = [];
     for (const line of effectiveSelected) {
@@ -160,13 +173,23 @@ export function CollectScreen({
       left -= take;
     }
     return out;
-  }, [amount, effectiveSelected, view, stop]);
+  }, [amount, effectiveSelected, view, stop, mode]);
+
+  // ── Avance mensuelle : options calculées par le système (montant + reste) ──
+  const advanceOptions = stop?.livret?.advanceOptions ?? [];
+  const advanceChoice: AdvanceOption | null = useMemo(() => {
+    if (advanceOptions.length === 0) return null;
+    return advanceOptions.find((o) => o.sheet === advanceSheet) ?? advanceOptions[0];
+  }, [advanceOptions, advanceSheet]);
 
   const cycleTotal = stop?.livret?.recap.attendu ?? 0;
-  const overMax = stop !== null && amount > cycleTotal - stop.balance;
-  const unallocated = amount > suggestedTotal; // trop de montant pour les lignes choisies
+  const overMax = mode === "lines" && stop !== null && amount > cycleTotal - stop.balance;
+  const unallocated = mode === "lines" && amount > suggestedTotal; // trop de montant pour les lignes choisies
   const canSubmit =
-    stop !== null && allocations.length > 0 && amount > 0 && !overMax && !unallocated;
+    stop !== null &&
+    (mode === "advance"
+      ? advanceChoice !== null
+      : allocations.length > 0 && amount > 0 && !overMax && !unallocated);
 
   if (loading && !tour) {
     return (
@@ -195,7 +218,7 @@ export function CollectScreen({
           {remaining.map((s) => (
             <button
               key={s.passbookId}
-              onClick={() => { setAmountInput(null); setSelected(null); onSelectStop(s); }}
+              onClick={() => { setAmountInput(null); setSelected(null); setMode("lines"); onSelectStop(s); }}
               className="flex w-full items-center gap-3 rounded-lg border border-line bg-surface p-4 text-left transition-colors hover:border-primary/40 hover:bg-[#F0F5FC]"
             >
               <span className="amount font-display flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#EDF2F7] text-sm font-bold text-ink" aria-hidden>
@@ -234,9 +257,28 @@ export function CollectScreen({
   const reset = () => {
     setAmountInput(null);
     setSelected(null);
+    setAdvanceSheet(null);
+  };
+
+  const submit = () => {
+    if (mode === "advance" && advanceChoice) {
+      onCollect(stop, [{
+        line: stop.livret.lineDue,
+        amount: advanceChoice.amount,
+        advance: true,
+        coversThrough: advanceChoice.label,
+        resteAfter: advanceChoice.resteAfter,
+      }]);
+    } else {
+      onCollect(stop, allocations);
+    }
+    setAmountInput(null);
+    setSelected(null);
+    setAdvanceSheet(null);
   };
 
   const sheet = stop.livret.sheet;
+  const advanceMonths = advanceChoice ? advanceChoice.sheet - stop.livret.currentSheet : 0;
 
   return (
     <div>
@@ -273,9 +315,12 @@ export function CollectScreen({
           </div>
           <div className="mt-2 flex items-center justify-between px-1">
             <span className="text-xs text-subtle">
-              Lignes couvertes : {stop.livret.coveredLines}/372
+              Lignes couvertes : {stop.livret.coveredLines}/{stop.livret.payableLines}
               {stop.livret.missedLines > 0 && (
                 <span className="font-semibold text-danger"> · {stop.livret.missedLines} en retard</span>
+              )}
+              {stop.livret.excusedLines > 0 && (
+                <span> · {stop.livret.excusedLines} avant arrivée</span>
               )}
             </span>
             {stop.collectedToday && (
@@ -287,100 +332,195 @@ export function CollectScreen({
         </CardContent>
       </Card>
 
-      {/* ── Sélecteur de lignes : due / rattrapage / avance ── */}
-      <div className="mt-4">
-        <div className="mb-1.5 flex items-center justify-between">
-          <Label className="text-xs font-medium uppercase tracking-wide text-subtle">
-            Lignes du livret à régler
-          </Label>
-          <button
-            className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-2 hover:underline"
-            onClick={reset}
-          >
-            <RotateCcw className="h-3 w-3" aria-hidden /> Réinitialiser
-          </button>
-        </div>
-
-        {view.payable.length === 0 ? (
-          <Card className="border-line bg-[#F4F7FB]">
-            <CardContent className="flex items-center gap-2 p-4 text-sm text-subtle">
-              <Check className="h-4 w-4 text-primary" aria-hidden />
-              Livret entièrement réglé : les 372 lignes sont couvertes.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3" role="group" aria-label="Lignes couvrables du livret">
-            {/* Ligne due — aujourd'hui, ou rattrapage si en retard */}
-            {view.due && (
-              <div>
-                <p className={cn(
-                  "mb-1 text-[11px] font-semibold uppercase tracking-wide",
-                  view.late ? "text-danger" : "text-subtle"
-                )}>
-                  {view.late
-                    ? `Rattrapage · ${stop.livret.missedLines} ligne${stop.livret.missedLines > 1 ? "s" : ""} en retard`
-                    : "Aujourd'hui"}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  <LineChip
-                    payable={view.due}
-                    dailyAmount={stop.dailyAmount}
-                    state={view.late ? "late" : "due"}
-                    selected={effectiveSelected.includes(view.due.line)}
-                    onToggle={() => toggleLine(view.due!.line)}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Lignes à venir : payer plusieurs lignes d'avance */}
-            {view.rest.length > 0 && (
-              <div>
-                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-subtle">
-                  Lignes suivantes · payer d&apos;avance
-                </p>
-                <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1.5">
-                  {view.rest.map((p) => (
-                    <LineChip
-                      key={p.line}
-                      payable={p}
-                      dailyAmount={stop.dailyAmount}
-                      state="advance"
-                      selected={effectiveSelected.includes(p.line)}
-                      onToggle={() => toggleLine(p.line)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Montant : 40 px, chiffres tabulaires (§15.4) */}
-      <div className="mt-4">
-        <Label className="text-xs font-medium uppercase tracking-wide text-subtle">Montant</Label>
-        <div
+      {/* ── Mode d'encaissement : ligne à ligne, ou avance mensuelle ── */}
+      <div className="mt-4 grid grid-cols-2 gap-1.5 rounded-xl border border-line bg-[#F4F7FB] p-1.5" role="tablist" aria-label="Mode d'encaissement">
+        <button
+          role="tab"
+          aria-selected={mode === "lines"}
+          onClick={() => setMode("lines")}
           className={cn(
-            "amount font-display mt-1 flex h-16 items-center justify-center rounded-lg border-2 text-[40px] font-bold leading-none",
-            overMax || unallocated ? "border-danger bg-[#FDECEA] text-danger" : "border-primary bg-[#EEF4FD] text-primary"
+            "flex h-11 items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-colors",
+            mode === "lines" ? "bg-white text-ink shadow-sm" : "text-subtle hover:text-ink"
           )}
-          role="status"
-          aria-live="polite"
         >
-          {formatFCFA(amount)}
-        </div>
-        <div className="mt-2 flex min-h-[20px] items-center justify-between">
-          <p className="text-xs text-subtle">
-            {effectiveSelected.length > 0
-              ? `${effectiveSelected.length} ligne${effectiveSelected.length > 1 ? "s" : ""} × ${formatFCFA(stop.dailyAmount)} · reste du livret : ${formatFCFA(Math.max(0, cycleTotal - stop.balance))}`
-              : `Mise du jour : ${formatFCFA(stop.dailyAmount)} · reste du livret : ${formatFCFA(Math.max(0, cycleTotal - stop.balance))}`}
-          </p>
-        </div>
+          <CalendarClock className="h-4 w-4" aria-hidden /> Ligne à ligne
+        </button>
+        <button
+          role="tab"
+          aria-selected={mode === "advance"}
+          onClick={() => setMode("advance")}
+          className={cn(
+            "flex h-11 items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-colors",
+            mode === "advance" ? "bg-white text-ink shadow-sm" : "text-subtle hover:text-ink"
+          )}
+        >
+          <TrendingUp className="h-4 w-4" aria-hidden /> Avance mensuelle
+        </button>
       </div>
+
+      {mode === "advance" ? (
+        /* ── Avance mensuelle : le cotisant paie d'avance, le système calcule ──
+           Une seule ligne de puces « Ce mois / +1 mois / +2 mois… » (pas de liste
+           à faire défiler), puis le montant et la notification restent visibles. */
+        <div className="mt-4">
+          <p className="mb-1.5 text-xs leading-relaxed text-subtle">
+            {stop.contributorName} décide de payer d&apos;avance ? Renseigne le nombre de mois que son avance
+            couvre — le système calcule le montant et ce qu&apos;il restera à prendre.
+          </p>
+
+          {advanceOptions.length === 0 ? (
+            <Card className="border-line bg-[#F4F7FB]">
+              <CardContent className="flex items-center gap-2 p-4 text-sm text-subtle">
+                <Check className="h-4 w-4 text-primary" aria-hidden />
+                Livret entièrement réglé : aucune avance possible.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1.5" role="tablist" aria-label="Mois couverts par l'avance">
+              {advanceOptions.map((o) => {
+                const months = o.sheet - stop.livret.currentSheet;
+                const isActive = advanceChoice?.sheet === o.sheet;
+                return (
+                  <button
+                    key={o.sheet}
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => setAdvanceSheet(o.sheet)}
+                    className={cn(
+                      "flex h-[52px] w-[92px] shrink-0 flex-col items-center justify-center rounded-lg border transition-colors",
+                      isActive
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-line bg-surface text-ink hover:border-primary/40 hover:bg-[#F0F5FC]"
+                    )}
+                  >
+                    <span className="text-xs font-semibold leading-none">
+                      {months === 0 ? "Ce mois" : `+${months} mois`}
+                    </span>
+                    <span className="mt-1 text-[10px] font-medium leading-none opacity-75">{o.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Montant de l'avance et notification du reste à prendre */}
+          {advanceChoice && (
+            <div className="mt-3">
+              <div
+                className="amount font-display flex h-16 items-center justify-center rounded-lg border-2 border-[#F0D48A] bg-[#FFF4D6] text-[40px] font-bold leading-none text-[#A66A00]"
+                role="status"
+                aria-live="polite"
+              >
+                {formatFCFA(advanceChoice.amount)}
+              </div>
+              <p className="mt-2 rounded-lg border border-[#F0D48A]/60 bg-[#FFFCF2] px-3 py-2.5 text-xs leading-relaxed text-[#7A5400]">
+                L&apos;avance règle tout ce qui est dû et couvre jusqu&apos;à <b>fin {advanceChoice.label}</b>
+                {advanceMonths > 0 ? ` (${advanceMonths} mois d'avance)` : ""}.
+                Après cet encaissement, il restera{" "}
+                <b className="amount">{formatFCFA(advanceChoice.resteAfter)}</b> à prendre sur le livret
+                {advanceChoice.resteAfter === 0 ? " : il sera entièrement réglé." : "."}
+              </p>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* ── Mode ligne à ligne : due / rattrapage / avance ── */
+        <div className="mt-4">
+          <div className="mb-1.5 flex items-center justify-between">
+            <Label className="text-xs font-medium uppercase tracking-wide text-subtle">
+              Lignes du livret à régler
+            </Label>
+            <button
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-2 hover:underline"
+              onClick={reset}
+            >
+              <RotateCcw className="h-3 w-3" aria-hidden /> Réinitialiser
+            </button>
+          </div>
+
+          {view.payable.length === 0 ? (
+            <Card className="border-line bg-[#F4F7FB]">
+              <CardContent className="flex items-center gap-2 p-4 text-sm text-subtle">
+                <Check className="h-4 w-4 text-primary" aria-hidden />
+                Livret entièrement réglé : toutes les lignes encaissables sont couvertes.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3" role="group" aria-label="Lignes couvrables du livret">
+              {/* Ligne due — aujourd'hui, ou rattrapage si en retard */}
+              {view.due && (
+                <div>
+                  <p className={cn(
+                    "mb-1 text-[11px] font-semibold uppercase tracking-wide",
+                    view.late ? "text-danger" : "text-subtle"
+                  )}>
+                    {view.late
+                      ? `Rattrapage · ${stop.livret.missedLines} ligne${stop.livret.missedLines > 1 ? "s" : ""} en retard`
+                      : "Aujourd'hui"}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <LineChip
+                      payable={view.due}
+                      dailyAmount={stop.dailyAmount}
+                      state={view.late ? "late" : "due"}
+                      selected={effectiveSelected.includes(view.due.line)}
+                      onToggle={() => toggleLine(view.due!.line)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Lignes à venir : payer plusieurs lignes d'avance */}
+              {view.rest.length > 0 && (
+                <div>
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-subtle">
+                    Lignes suivantes · payer d&apos;avance
+                  </p>
+                  <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1.5">
+                    {view.rest.map((p) => (
+                      <LineChip
+                        key={p.line}
+                        payable={p}
+                        dailyAmount={stop.dailyAmount}
+                        state="advance"
+                        selected={effectiveSelected.includes(p.line)}
+                        onToggle={() => toggleLine(p.line)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Montant (mode ligne à ligne) : 40 px, chiffres tabulaires (§15.4) */}
+      {mode === "lines" && (
+        <div className="mt-4">
+          <Label className="text-xs font-medium uppercase tracking-wide text-subtle">Montant</Label>
+          <div
+            className={cn(
+              "amount font-display mt-1 flex h-16 items-center justify-center rounded-lg border-2 text-[40px] font-bold leading-none",
+              overMax || unallocated ? "border-danger bg-[#FDECEA] text-danger" : "border-primary bg-[#EEF4FD] text-primary"
+            )}
+            role="status"
+            aria-live="polite"
+          >
+            {formatFCFA(amount)}
+          </div>
+          <div className="mt-2 flex min-h-[20px] items-center justify-between">
+            <p className="text-xs text-subtle">
+              {effectiveSelected.length > 0
+                ? `${effectiveSelected.length} ligne${effectiveSelected.length > 1 ? "s" : ""} × ${formatFCFA(stop.dailyAmount)} · reste du livret : ${formatFCFA(Math.max(0, cycleTotal - stop.balance))}`
+                : `Mise du jour : ${formatFCFA(stop.dailyAmount)} · reste du livret : ${formatFCFA(Math.max(0, cycleTotal - stop.balance))}`}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Répartition du montant sur les lignes choisies */}
-      {allocations.length > 0 && (
+      {mode === "lines" && allocations.length > 0 && (
         <div className="mt-3 rounded-lg border border-line bg-[#F4F7FB] px-3 py-2.5">
           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-subtle">Répartition</p>
           <ul className="space-y-1">
@@ -406,52 +546,63 @@ export function CollectScreen({
       )}
 
       {/* Messages d'erreur de validation */}
-      <div className="mt-3 space-y-1.5">
-        {unallocated && (
-          <p className="text-xs font-medium text-danger" role="alert">
-            Montant supérieur aux lignes sélectionnées. Sélectionne davantage de lignes à venir.
-          </p>
-        )}
-        {overMax && (
-          <p className="text-xs font-medium text-danger" role="alert">
-            Montant supérieur au restant du livret ({formatFCFA(Math.max(0, cycleTotal - stop.balance))}).
-          </p>
-        )}
-        {effectiveSelected.length === 0 && amount > 0 && (
-          <p className="text-xs font-medium text-warning" role="alert">
-            Choisis au moins une ligne pour attribuer l&apos;encaissement.
-          </p>
-        )}
-      </div>
+      {mode === "lines" && (
+        <div className="mt-3 space-y-1.5">
+          {unallocated && (
+            <p className="text-xs font-medium text-danger" role="alert">
+              Montant supérieur aux lignes sélectionnées. Sélectionne davantage de lignes à venir.
+            </p>
+          )}
+          {overMax && (
+            <p className="text-xs font-medium text-danger" role="alert">
+              Montant supérieur au restant du livret ({formatFCFA(Math.max(0, cycleTotal - stop.balance))}).
+            </p>
+          )}
+          {effectiveSelected.length === 0 && amount > 0 && (
+            <p className="text-xs font-medium text-warning" role="alert">
+              Choisis au moins une ligne pour attribuer l&apos;encaissement.
+            </p>
+          )}
+        </div>
+      )}
 
-      {/* Clavier numérique */}
-      <div className="mt-4">
-        <AmountKeypad
-          value={amountInput ?? ""}
-          onChange={(v) => setAmountInput(v)}
-          disabled={false}
-        />
-      </div>
+      {/* Clavier numérique (mode ligne à ligne) */}
+      {mode === "lines" && (
+        <div className="mt-4">
+          <AmountKeypad
+            value={amountInput ?? ""}
+            onChange={(v) => setAmountInput(v)}
+            disabled={false}
+          />
+        </div>
+      )}
 
       {/* Bouton Encaisser pleine largeur */}
       <Button
         disabled={!canSubmit}
-        onClick={() => {
-          onCollect(stop, allocations);
-          setAmountInput(null);
-          setSelected(null);
-        }}
-        className="mt-5 flex h-14 w-full flex-col items-center justify-center gap-0.5 bg-primary text-base font-semibold text-primary-foreground hover:bg-primary-hover"
+        onClick={submit}
+        className={cn(
+          "mt-5 flex h-14 w-full flex-col items-center justify-center gap-0.5 text-base font-semibold",
+          mode === "advance"
+            ? "bg-[#A66A00] text-white hover:bg-[#8f5a00]"
+            : "bg-primary text-primary-foreground hover:bg-primary-hover"
+        )}
       >
         <span className="amount inline-flex items-center gap-2">
           <Wallet className="h-5 w-5" aria-hidden />
-          Encaisser {formatFCFA(amount)}
+          {mode === "advance" && advanceChoice
+            ? `Encaisser l'avance ${formatFCFA(advanceChoice.amount)}`
+            : `Encaisser ${formatFCFA(amount)}`}
         </span>
-        {allocations.length > 1 && (
+        {mode === "advance" && advanceChoice ? (
+          <span className="text-[11px] font-medium text-white/80">
+            couvre jusqu&apos;à fin {advanceChoice.label}
+          </span>
+        ) : allocations.length > 1 ? (
           <span className="text-[11px] font-medium text-primary-foreground/80">
             {allocations.length} lignes · du n°{allocations[0].line} au n°{allocations[allocations.length - 1].line}
           </span>
-        )}
+        ) : null}
       </Button>
 
       <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-subtle">

@@ -134,10 +134,12 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
   }, [online, outbox, flushOutbox]);
 
   // ── Encaissement local : une écriture par ligne du livret, dans l'outbox,
-  // avec retour visuel immédiat (solde + marquage des lignes). ──
+  // avec retour visuel immédiat (solde + marquage des lignes). Une AVANCE
+  // mensuelle = une seule écriture qui couvre plusieurs lignes d'avance. ──
   const collect = useCallback(
     (stop: TourStop, allocations: CollectAllocation[]) => {
       const total = allocations.reduce((s, a) => s + a.amount, 0);
+      const advanceAllocation = allocations.find((a) => a.advance);
       const events: OutboxEvent[] = allocations
         .filter((a) => a.amount > 0)
         .map((a) => ({
@@ -145,7 +147,7 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
           passbookId: stop.passbookId,
           amount: a.amount,
           method: "cash" as const,
-          advance: false,
+          advance: a.advance ?? false,
           coversOn: null,
           collectedAt: new Date().toISOString(),
           passbookNumber: stop.passbookNumber,
@@ -156,18 +158,29 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
       setOutbox(next);
       saveOutbox(next);
       if (navigator.vibrate) navigator.vibrate(60);
-      const lignes = events.length;
-      toast({
-        title: `${formatFCFA(total)} encaissés chez ${stop.contributorName}.`,
-        description:
-          lignes > 1
-            ? `${lignes} lignes du livret couvertes (${online ? "synchronisation en cours" : "en attente d'envoi : enregistré sur ton téléphone"}).`
-            : online
-              ? undefined
-              : "En attente d'envoi : enregistré sur ton téléphone.",
-      });
+      if (advanceAllocation) {
+        // Notification exigée : le système calcule et notifie ce qu'il reste à prendre.
+        toast({
+          title: `Avance de ${formatFCFA(total)} encaissée chez ${stop.contributorName}.`,
+          description: advanceAllocation.coversThrough
+            ? `Ses versements couvrent jusqu'à fin ${advanceAllocation.coversThrough}. Il reste ${formatFCFA(advanceAllocation.resteAfter ?? 0)} à prendre sur le livret.`
+            : "Versement par anticipation enregistré.",
+        });
+      } else {
+        const lignes = events.length;
+        toast({
+          title: `${formatFCFA(total)} encaissés chez ${stop.contributorName}.`,
+          description:
+            lignes > 1
+              ? `${lignes} lignes du livret couvertes (${online ? "synchronisation en cours" : "en attente d'envoi : enregistré sur ton téléphone"}).`
+              : online
+                ? undefined
+                : "En attente d'envoi : enregistré sur ton téléphone.",
+        });
+      }
       // Mise à jour optimiste de la tournée locale (solde, lignes couvertes, feuille).
       const addedLines = Math.floor(total / stop.dailyAmount);
+      const payable = stop.livret.payableLines || 372;
       setTour((t) =>
         t
           ? {
@@ -182,8 +195,8 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
                       livret: {
                         ...s.livret,
                         balance: s.livret.balance + total,
-                        coveredLines: Math.min(372, s.livret.coveredLines + addedLines),
-                        lineDue: Math.min(373, s.livret.lineDue + addedLines),
+                        coveredLines: Math.min(payable, s.livret.coveredLines + addedLines),
+                        lineDue: Math.min(payable + 1, s.livret.lineDue + addedLines),
                         payable: s.livret.payable.map((p) => ({ ...p })),
                         sheet: {
                           ...s.livret.sheet,

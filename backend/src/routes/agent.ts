@@ -13,7 +13,7 @@ import { assertWritable } from "../lib/tenant";
 import { planOf } from "../lib/plans";
 import { passbookBalance, paidDays, closingGap, formatFCFA } from "../lib/domain";
 import {
-  LIVRET_DAYS, LIVRET_MONTHS, buildLivret, linePosition, monthStart, serializeLivret,
+  LIVRET_DAYS, LIVRET_MONTHS, buildLivret, firstPayableLine, linePosition, monthStart, serializeLivret,
 } from "../lib/livret";
 import { ensureShareToken, ensureStructureSlug, carnetUrl, entityUrl } from "../lib/share";
 import { autoScale } from "../lib/autoscale";
@@ -23,6 +23,8 @@ const router = Router();
 /** Fenêtre de lignes encaissables envoyée à l'écran d'encaissement (dues + avance). */
 function payableWindow(livret: ReturnType<typeof buildLivret>, count = 40) {
   const out: { line: number; sheet: number; lineInSheet: number; company: boolean; label: string }[] = [];
+  // Livret entièrement réglé : aucune ligne à proposer.
+  if (livret.lineDue > LIVRET_DAYS) return out;
   const start = Math.min(livret.lineDue, LIVRET_DAYS);
   for (let line = start; line < start + count && line <= LIVRET_DAYS; line += 1) {
     const pos = linePosition(line);
@@ -250,9 +252,11 @@ router.post(
         }
       }
       // Règle métier 2 : un encaissement ne dépasse jamais le montant restant du
-      // livret (372 lignes), sauf avance explicite pour laisser le surplus en dépôt.
-      const cycleTotal = passbook.dailyAmount * LIVRET_DAYS;
+      // livret (lignes encaissables, hors lignes excusées d'avant l'arrivée), sauf
+      // avance explicite pour laisser le surplus en dépôt.
       const balance = passbookBalance(passbook.collections);
+      const livretBefore = buildLivret(passbook, balance);
+      const cycleTotal = livretBefore.recap.attendu;
       if (!ev.advance && ev.amount > cycleTotal - balance) {
         throw new ApiError(
           "amount_exceeds",
@@ -260,8 +264,13 @@ router.post(
           422
         );
       }
-      // Ligne du livret : position séquentielle après pose de l'écriture.
-      const dayIndex = Math.min(paidDays(balance + ev.amount, passbook.dailyAmount), LIVRET_DAYS);
+      // Ligne du livret : position séquentielle après pose de l'écriture. Les
+      // lignes d'avant l'arrivée du cotisant sont excusées : la numérotation
+      // démarre à sa première ligne encaissable.
+      const dayIndex = Math.min(
+        firstPayableLine(passbook) + paidDays(balance + ev.amount, passbook.dailyAmount) - 1,
+        LIVRET_DAYS
+      );
       const collectedAt = new Date(ev.collectedAt);
 
       await db.collection.create({

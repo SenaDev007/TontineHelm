@@ -2,6 +2,7 @@
 // TontiHelm — tableau de bord du gérant (M6, écran 5) : jour/semaine/mois, graphique 7 jours,
 // carnets en retard classés par jours manqués, écarts non résolus, activité récente.
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -15,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 
 export function DashboardTab() {
+  const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -183,7 +185,12 @@ export function DashboardTab() {
                   </TableHeader>
                   <TableBody>
                     {data.latePassbooks.map((p) => (
-                      <TableRow key={p.passbookId} className="border-line">
+                      <TableRow
+                        key={p.passbookId}
+                        className="cursor-pointer border-line transition-colors hover:bg-[#F0F5FC]"
+                        onClick={() => router.push(`/livret/${p.passbookId}`)}
+                        title={`Ouvrir le livret de ${p.contributor}`}
+                      >
                         <TableCell className="py-2.5">
                           <p className="text-sm font-medium text-ink">{p.contributor}</p>
                           <p className="text-xs text-subtle">Carnet {p.number} · {p.agent}</p>

@@ -3,7 +3,7 @@
 // Usage : cd backend && DATABASE_URL="file:dev.db" bun src/scripts/e2e-clean.ts
 import { db } from "../lib/db";
 
-const NAMES = ["Flux Clients E2E", "Livret Annuel E2E"];
+const NAMES = ["Flux Clients E2E", "Livret Annuel E2E", "Avance Reste E2E"];
 
 async function main() {
   const structures = await db.structure.findMany({ where: { name: { in: NAMES } } });

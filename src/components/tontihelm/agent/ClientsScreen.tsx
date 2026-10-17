@@ -577,7 +577,7 @@ function ClientList({
                                   Carnet {k.number}{k.label ? <span className="font-normal text-subtle"> · {k.label}</span> : null}
                                 </p>
                                 <p className="amount text-[11px] text-subtle">
-                                  F{k.livret.currentSheet}/12 · {k.livret.coveredLines}/372 lignes ·{" "}
+                                  F{k.livret.currentSheet}/12 · {k.livret.coveredLines}/{k.livret.payableLines} lignes ·{" "}
                                   <span className={cn("font-semibold", k.livret.missedLines > 0 ? "text-danger" : "text-ink")}>
                                     {formatFCFA(k.balance)}
                                   </span>

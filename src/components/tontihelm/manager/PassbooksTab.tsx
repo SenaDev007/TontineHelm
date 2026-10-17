@@ -1,8 +1,9 @@
 "use client";
 // TontiHelm — liste des carnets (livrets annuels) : mise journalière, feuille en
-// cours, statut, solde. Chaque carnet s'ouvre en vue livret (12 feuilles + récap)
-// avec préparation de la remise de fin de souscription.
+// cours, statut, solde. Chaque carnet s'ouvre sur sa PAGE DÉDIÉE /livret/:id
+// (12 feuilles + récap) avec bouton Retour — plus de modal à barres de défilement.
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PassbookStatusBadge } from "../StatusBadge";
-import { CarnetCalendar } from "./CarnetCalendar";
 import { ContributorRow, PassbookRow, formatFCFA } from "@/lib/types";
 import { get, isOfflineQueued, post } from "@/lib/client";
 import { useSyncDone } from "@/lib/offline/hooks";
@@ -20,11 +20,11 @@ import { BookOpen, Search, CalendarDays, BellRing } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
+  const router = useRouter();
   const [rows, setRows] = useState<PassbookRow[] | null>(null);
   const [contributors, setContributors] = useState<ContributorRow[]>([]);
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
-  const [openCarnetId, setOpenCarnetId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     contributorId: "", dailyAmount: "", label: "",
@@ -200,7 +200,7 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                   </TableCell>
                   <TableCell className="amount text-sm font-semibold text-ink">{formatFCFA(r.balance)}</TableCell>
                   <TableCell className="amount text-sm text-subtle">
-                    F{r.currentSheet}/12 · {r.coveredLines}/372
+                    F{r.currentSheet}/12 · {r.coveredLines}/{r.payableLines}
                     {r.missedLines > 0 && <span className="ml-1 font-semibold text-danger">−{r.missedLines}</span>}
                   </TableCell>
                   <TableCell><PassbookStatusBadge status={r.status} /></TableCell>
@@ -223,7 +223,7 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                         variant="outline"
                         size="sm"
                         className="border-line"
-                        onClick={() => setOpenCarnetId(r.id)}
+                        onClick={() => router.push(`/livret/${r.id}`)}
                         aria-label={`Ouvrir le livret de ${r.contributor}`}
                       >
                         <CalendarDays className="h-4 w-4" aria-hidden /> Livret
@@ -256,7 +256,7 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                 <span className="amount font-semibold text-ink">{formatFCFA(r.balance)}</span>
               </div>
               <div className="mt-2 flex items-center justify-between text-xs">
-                <span className="amount text-subtle">{r.coveredLines}/372 lignes couvertes</span>
+                <span className="amount text-subtle">{r.coveredLines}/{r.payableLines} lignes couvertes</span>
                 {r.missedLines > 0 && <span className="font-semibold text-danger">{r.missedLines} manquées</span>}
               </div>
               {r.missedLines > 0 && r.status === "late" && r.phone && !readOnly && (
@@ -273,7 +273,7 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
               <Button
                 variant="outline"
                 className="mt-3 w-full border-line"
-                onClick={() => setOpenCarnetId(r.id)}
+                onClick={() => router.push(`/livret/${r.id}`)}
                 aria-label={`Ouvrir le livret de ${r.contributor}`}
               >
                 <CalendarDays className="h-4 w-4" aria-hidden /> Voir le livret annuel
@@ -282,17 +282,6 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
           </Card>
         ))}
       </div>
-
-      {/* Vue livret annuel du carnet sélectionné */}
-      <Dialog open={openCarnetId !== null} onOpenChange={(v) => !v && setOpenCarnetId(null)}>
-        <DialogContent className="max-h-[92vh] gap-0 overflow-y-auto border-line bg-canvas p-4 sm:max-w-3xl md:p-5 lg:max-w-4xl">
-          <DialogHeader className="sr-only">
-            <DialogTitle>Livret annuel du carnet</DialogTitle>
-            <DialogDescription>12 feuilles mensuelles, récapitulatif et fin de souscription.</DialogDescription>
-          </DialogHeader>
-          {openCarnetId && <CarnetCalendar passbookId={openCarnetId} />}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

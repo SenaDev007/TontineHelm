@@ -271,7 +271,7 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
                       r.carnets.map((k) => (
                         <p key={k.id} className="amount text-sm text-ink">
                           {k.number}{k.label ? <span className="text-xs font-normal text-subtle"> · {k.label}</span> : null}{" "}
-                          <span className="text-xs text-subtle">F{k.currentSheet}/12 · L{k.coveredLines}/372</span>
+                          <span className="text-xs text-subtle">F{k.currentSheet}/12 · L{k.coveredLines}/{k.payableLines}</span>
                         </p>
                       ))
                     ) : (

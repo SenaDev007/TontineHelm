@@ -51,6 +51,10 @@ export interface LivretSheet {
   complete: boolean;
   elapsedLines: number;
   current: boolean;
+  /** Lignes AVANT l'arrivée du cotisant (non dues) — feuille du mois d'arrivée. */
+  excused: number;
+  /** Lignes encaissables de la feuille = 31 − excused. */
+  payable: number;
 }
 
 /** 13e feuille — récapitulatif annuel. */
@@ -59,6 +63,8 @@ export interface LivretRecap {
   attendu: number;
   encaisse: number;
   reste: number;
+  /** Versé au-delà des échéances, toutes feuilles confondues. */
+  avanceTotale: number;
   partEntreprise: number;
   partClient: number;
   sheetsComplete: number;
@@ -66,15 +72,33 @@ export interface LivretRecap {
   missedLines: number;
 }
 
+/** Avance mensuelle calculée automatiquement par le système. */
+export interface AdvanceOption {
+  sheet: number; // 1..12 — l'avance couvre jusqu'à la FIN de cette feuille
+  label: string; // « nov. 2026 »
+  amount: number; // montant à encaisser
+  resteAfter: number; // ce qu'il restera à prendre après cette avance
+}
+
 export interface LivretData {
   months: number;
   startsOn: string;
+  /** Jour d'arrivée réel du cotisant — jamais en retard avant cette date. */
+  effectiveStart: string;
   dailyAmount: number;
   balance: number;
   coveredLines: number;
+  /** Lignes encaissables du livret (372 − excusées). */
+  payableLines: number;
+  /** Lignes excusées (avant l'arrivée du cotisant) — non dues. */
+  excusedLines: number;
   lineDue: number;
   missedLines: number;
   currentSheet: number;
+  /** Feuille la plus avancée couverte par les versements. */
+  coveredThrough: { sheet: number; label: string } | null;
+  /** Avances mensuelles : le système calcule montant et reste à prendre. */
+  advanceOptions: AdvanceOption[];
   sheets: LivretSheet[];
   recap: LivretRecap;
 }
@@ -178,7 +202,7 @@ export interface ContributorRow {
   /** Tous les carnets (livrets) du cotisant, regroupés sous son nom. */
   carnets: {
     id: string; number: string; label: string | null; dailyAmount: number;
-    balance: number; coveredLines: number; missedLines: number; currentSheet: number; status: string;
+    balance: number; coveredLines: number; payableLines: number; missedLines: number; currentSheet: number; status: string;
   }[];
   activeCarnets: number;
 }
@@ -251,6 +275,8 @@ export interface PassbookRow {
   status: string;
   balance: number;
   coveredLines: number;
+  payableLines: number;
+  excusedLines: number;
   missedLines: number;
   currentSheet: number;
   cycleTotal: number;
@@ -279,6 +305,8 @@ export interface CarnetData {
     createdAt: string;
     balance: number;
     coveredLines: number;
+    payableLines: number;
+    excusedLines: number;
     missedLines: number;
     currentSheet: number;
     cycleTotal: number;
