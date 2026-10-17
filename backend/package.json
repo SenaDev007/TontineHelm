@@ -9,9 +9,11 @@
     "db:push": "prisma db push --accept-data-loss",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "bootstrap:admin": "bun src/scripts/bootstrap-admin.ts"
+    "bootstrap:admin": "bun src/scripts/bootstrap-admin.ts",
+    "test": "DATABASE_URL=\"file:dev.db\" bun test"
   },
   "dependencies": {
+    "@noble/hashes": "^2.4.0",
     "@prisma/client": "^6.11.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

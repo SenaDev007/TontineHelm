@@ -13,6 +13,9 @@ import managerRoutes from "./routes/manager";
 import paymentsRoutes from "./routes/payments";
 import publicRoutes from "./routes/public";
 import exportRoutes from "./routes/export";
+import v1AuthRoutes from "./routes/v1/auth";
+import v1DeviceRoutes from "./routes/v1/devices";
+import v1SyncRoutes from "./routes/v1/sync";
 import { apiErrorHandler, getCurrentUser } from "./lib/auth";
 import { db } from "./lib/db";
 
@@ -89,6 +92,14 @@ app.use("/api/payments", paymentsRoutes);
 // Carnets publics des cotisants : lien personnel partagé par WhatsApp / e-mail,
 // consultation sans compte — accessible même si les autres routes changent.
 app.use("/api/public", publicRoutes);
+
+// ── Canal mobile natif Android (phase 1, PARITE.md §8) : préfixe /v1 STABLE, ──
+// purement additif — aucune route /api/* ci-dessus n'est déplacée ni modifiée.
+// Authentification appareil+OTP+jetons courts, gestion des appareils, puis
+// synchronisation push (accusés par événement) / pull (curseur incrémental).
+app.use("/v1/auth", v1AuthRoutes);
+app.use("/v1/devices", v1DeviceRoutes);
+app.use("/v1/sync", v1SyncRoutes);
 
 // 404 JSON uniforme pour toute route inconnue.
 app.use((_req, res) => {

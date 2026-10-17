@@ -44,7 +44,11 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-useless-escape": "off",
   },
 }, {
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills"]
+  // apps/web vit provisoirement à la RACINE du dépôt (déplacement coordonné
+  // avec le réglage Vercel Root Directory — PARITE.md §9) : ce lint ne couvre
+  // QUE le frontend Next.js. Le backend Express, le mobile Expo et les paquets
+  // partagés ont leurs propres outillages (bun test / tsc) et sont exclus.
+  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills", "backend/**", "apps/mobile/**", "packages/**", "repo-acadiahelm/**", "tool-results/**"]
 }];
 
 export default eslintConfig;

@@ -10,6 +10,9 @@ journal d'audit à chaîne de hash.
 ```
 TontineHelm/
 ├── src/                  ← FRONTEND Next.js 16 (déployé sur VERCEL)
+│   │                        [vit provisoirement à la racine — voir apps/web/README.md :
+│   │                         le déplacement physique est coordonné avec le réglage
+│   │                         Vercel Root Directory, PARITE.md §9, zéro interruption]
 │   ├── app/page.tsx      ← application (route unique : vitrine, connexion, back-offices)
 │   ├── components/tontihelm/
 │   │   ├── landing/      ← site vitrine
@@ -23,13 +26,33 @@ TontineHelm/
 ├── backend/              ← BACKEND Express + Prisma (déployé sur RAILWAY)
 │   ├── prisma/schema.prisma   ← schéma PostgreSQL (une seule source de vérité)
 │   ├── src/index.ts      ← API Express (auth, structures, agents, manager, paiements)
-│   ├── src/routes/       ← toutes les routes REST
+│   ├── src/routes/       ← toutes les routes REST (/api/* web + /v1/* mobile)
+│   ├── src/routes/v1/    ← canal mobile natif : auth appareil+OTP, appareils, sync
 │   ├── src/lib/          ← règles métier (domain), audit scellé, sessions, SMS
+│   │   ├── sync-engine.ts ← moteur d'encaissement partagé /api et /v1
+│   │   └── mobile-auth.ts ← Argon2id, OTP, jetons 15 min + refresh 30 j
 │   └── src/scripts/bootstrap-admin.ts  ← amorce du compte admin plateforme
+│
+├── apps/
+│   ├── web/              ← destination future du frontend (déménagement planifié)
+│   └── mobile/           ← APPLICATION ANDROID NATIVE (Expo, phase 1 : socle + /v1)
+│
+├── packages/
+│   ├── domain/           ← règles métier pures partagées web↔mobile (source de vérité,
+│   │                        tests de non-régression, sync vérifiée vers le backend)
+│   └── schemas/          ← schémas Zod partagés (sync /v1, auth mobile, appareils)
 │
 └── prisma/               ← artefact sandbox (SQLite, uniquement pour le dev local
                              du frontend — la vraie base est dans backend/)
 ```
+
+**Canal mobile natif (phase 1 du brief mobile)** : préfixe `/v1` purement additif —
+`/v1/auth/*` (téléphone + PIN Argon2id + OTP SMS + 2FA dirigeant/gérant + jetons
+15 min/rotation 30 j), `/v1/devices` (enregistrement, révocation à distance),
+`/v1/sync/push|pull` (accusés par événement, idempotence UUID, traction
+incrémentale par curseur, limite 300 req/min, décalage d'horloge surveillé).
+Aucune route `/api/*` du web n'a été modifiée — voir `PARITE.md` (matrice de
+parité et décisions du dirigeant) et `SIGNATURE.md` (politique de signature).
 
 **Règles d'or** : aucune donnée mock, rien de codé en dur. Tout ce que l'interface affiche
 provient de l'API Express et est persisté dans **PostgreSQL (Neon)**.

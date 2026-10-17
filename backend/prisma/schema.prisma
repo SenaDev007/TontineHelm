@@ -59,8 +59,14 @@ model User {
   agentContributors   Contributor[]        @relation("AgentContributors")
   agentPassbooks      Passbook[]           @relation("AgentPassbooks")
   agentCollections    Collection[]         @relation("AgentCollections")
-  agentClosings       Closing[]            @relation("AgentClosings")
+  agentClosings      Closing[]            @relation("AgentClosings")
   auditEntries        AuditLog[]           @relation("AuditActor")
+
+  // ── Mobile natif (phase 1, PARITE.md §8.5/§8.7) — additive, le web garde ──
+  // ses sessions 30 jours telles quelles : les appareils, le PIN Argon2id et ──
+  // les jetons mobiles vivent dans des tables séparées. ──
+  devices             Device[]
+  mobileCredential    MobileCredential?
 
   @@index([tenantId, role])
 }
@@ -91,6 +97,10 @@ model Contributor {
   shareToken   String?  @unique
   status       String   @default("active") // active | inactive
   createdAt    DateTime @default(now())
+  // Traction incrémentale /v1/sync/pull (phase 1) : NULL = jamais modifié
+  // depuis l'ajout de la colonne (l'état initial part du snapshot complet du
+  // premier pull). Renseigné automatiquement à chaque écriture ultérieure.
+  updatedAt    DateTime? @updatedAt
 
   structure Structure  @relation(fields: [tenantId], references: [id])
   agent     User       @relation("AgentContributors", fields: [agentId], references: [id])
@@ -125,6 +135,8 @@ model Passbook {
   signatureName String? // nom saisi par le signataire
   signatureData String? // tracé de signature (PNG dataURL, léger)
   signedAt      DateTime?
+  // Traction incrémentale /v1/sync/pull (phase 1) — même règle que Contributor.
+  updatedAt     DateTime? @updatedAt
 
   contributor Contributor  @relation(fields: [contributorId], references: [id])
   agent       User         @relation("AgentPassbooks", fields: [agentId], references: [id])
@@ -305,9 +317,9 @@ model Invoice {
 model PlanEvent {
   id           String   @id @default(cuid())
   tenantId     String
-  kind         String // 'scaling_warning' | 'plan_upgraded'
+  kind         String // 'scaling_warning' | 'plan_upgraded' | 'device_clock_skew' (phase 1, §8.6)
   fromPlan     String?
-  toPlan       String
+  toPlan       String? // null hors contexte de palier (p. ex. device_clock_skew, phase 1)
   contributors Int      @default(0) // cotisants actifs au moment de l'événement
   agents       Int      @default(0)
   volumeMonth  Int      @default(0) // FCFA encaissés sur 30 jours glissants
@@ -318,4 +330,75 @@ model PlanEvent {
   structure Structure @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId, createdAt])
+}
+
+// ── Mobile natif Android (phase 1) — PARITE.md §8.5/§8.7. ──
+// Tout est ADDITIF : aucune route /api/* ne lit ces tables ; l'authentification
+// web (Session + PIN scrypt) reste inchangée et fonctionne en parallèle.
+
+// Appareil enregistré par un membre du personnel. La révocation coupe les
+// jetons et la synchronisation de CET appareil uniquement ; l'utilisateur
+// lui-même ou le gérant liste et révoque (routes /v1/devices).
+model Device {
+  id           String    @id @default(cuid())
+  userId       String
+  label        String // nom saisi à l'enregistrement (« Samsung A15 de Yao »)
+  registeredAt DateTime  @default(now())
+  revokedAt    DateTime? // NULL = actif
+  lastSyncAt   DateTime? // mis à jour à chaque /v1/sync/*
+  clockSkewMs  Int? // décalage horloge téléphone vs serveur (§8.6)
+
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokens MobileToken[]
+
+  @@index([userId])
+  @@index([revokedAt])
+}
+
+// PIN mobile haché en Argon2id (le web garde scrypt — §8.7 : coexistence sur
+// des tables distinctes). Au PREMIER login mobile, le PIN vérifié contre le
+// scrypt du web crée la credential Argon2id (migration transparente).
+model MobileCredential {
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  pinHash        String // format : argon2id$t=..,m=..,p=..$salt$hash
+  failedAttempts Int       @default(0)
+  lockedUntil    DateTime? // verrou 15 min après 5 essais erronés
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Jetons de renouvellement opaques (rotation 30 jours, liés à l'appareil).
+// Stockés hachés (sha256). À chaque rotation l'ancienne ligne est SUPPRIMÉE et
+// remplacée ; un rejeu dans les 60 secondes qui suivent renvoie le même jeton
+// (tolérance de réseau), au-delà il est simplement refusé — jamais de
+// verrouillage d'un utilisateur légitime pour une réponse perdue.
+model MobileToken {
+  id        String   @id @default(cuid())
+  deviceId  String
+  tokenHash String   @unique // sha256 hex du refresh opaque
+  expiresAt DateTime // 30 jours glissants, repoussé à chaque rotation
+  createdAt DateTime @default(now())
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId])
+}
+
+// Code unique par SMS : enregistrement d'appareil (tous les rôles) et second
+// facteur à CHAQUE connexion des dirigeants et gérants (§8.7). 6 chiffres,
+// 5 minutes de validité, 5 essais, plafonné à 3 envois / heure / numéro.
+model OtpCode {
+  id         String    @id @default(cuid())
+  phone      String
+  codeHash   String // sha256 hex
+  purpose    String // 'device_registration' | 'device_login_2fa'
+  deviceId   String? // appareil concerné quand il est déjà connu (2FA)
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, createdAt])
 }

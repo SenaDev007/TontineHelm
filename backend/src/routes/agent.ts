@@ -11,66 +11,19 @@ import { requireUser, requireRole, requireTenant, ApiError, h } from "../lib/aut
 import { appendAudit } from "../lib/audit";
 import { assertWritable } from "../lib/tenant";
 import { planOf } from "../lib/plans";
-import { passbookBalance, paidDays, closingGap, formatFCFA } from "../lib/domain";
-import {
-  LIVRET_DAYS, LIVRET_MONTHS, buildLivret, firstPayableLine, linePosition, monthStart, serializeLivret,
-} from "../lib/livret";
+import { closingGap, formatFCFA } from "../lib/domain";
+import { LIVRET_DAYS, LIVRET_MONTHS, monthStart } from "../lib/livret";
+import { livretStop } from "../lib/tour";
+import { applyCollectionEvent } from "../lib/sync-engine";
 import { ensureShareToken, ensureStructureSlug, carnetUrl, entityUrl } from "../lib/share";
 import { autoScale } from "../lib/autoscale";
 
 const router = Router();
 
-/** Fenêtre de lignes encaissables envoyée à l'écran d'encaissement (dues + avance). */
-function payableWindow(livret: ReturnType<typeof buildLivret>, count = 40) {
-  const out: { line: number; sheet: number; lineInSheet: number; company: boolean; label: string }[] = [];
-  // Livret entièrement réglé : aucune ligne à proposer.
-  if (livret.lineDue > LIVRET_DAYS) return out;
-  const start = Math.min(livret.lineDue, LIVRET_DAYS);
-  for (let line = start; line < start + count && line <= LIVRET_DAYS; line += 1) {
-    const pos = linePosition(line);
-    const sheet = livret.sheets[pos.sheet - 1];
-    out.push({
-      line,
-      sheet: pos.sheet,
-      lineInSheet: pos.lineInSheet,
-      company: pos.company,
-      label: pos.company ? `Mise entreprise — ${sheet?.shortLabel ?? ""}` : `Ligne ${pos.lineInSheet}`,
-    });
-  }
-  return out;
-}
-
-/** Sérialisation « arrêt de tournée » d'un carnet (livret annuel). */
-function livretStop(pb: { id: string; number: string; label: string | null; dailyAmount: number; startsOn: Date; status: string }, collections: { amount: number }[], lateThreshold: number) {
-  const balance = passbookBalance(collections);
-  const livret = buildLivret(pb, balance);
-  const current = livret.sheets[livret.currentSheet - 1];
-  const duePos = linePosition(Math.min(livret.lineDue, LIVRET_DAYS));
-  const late = pb.status === "active" && livret.missedLines >= lateThreshold;
-  return {
-    passbookId: pb.id,
-    passbookNumber: pb.number,
-    passbookLabel: pb.label,
-    dailyAmount: pb.dailyAmount,
-    livret: {
-      ...serializeLivret(livret),
-      payable: payableWindow(livret),
-      sheet: {
-        index: current.index,
-        label: current.label,
-        attendu: current.attendu,
-        encaisse: current.encaisse,
-        avance: current.avance,
-        reste: current.reste,
-        coveredLines: current.coveredLines,
-      },
-      dueLineInSheet: duePos.lineInSheet,
-    },
-    balance,
-    status: late ? "late" : pb.status,
-    statusLabel: late ? "En retard" : pb.status === "active" ? "À jour" : pb.status === "closing" ? "Remise en cours" : pb.status === "completed" ? "Terminé" : "Clos",
-  };
-}
+// Phase 1 (PARITE.md §8.2) : la fenêtre encaissable et la sérialisation d'arrêt
+// vivent dans lib/tour.ts, le cœur d'application d'un événement dans
+// lib/sync-engine.ts — partagés avec /v1/sync/* (mobile). Ce routeur web garde
+// EXACTEMENT le même comportement : mêmes réponses, mêmes erreurs HTTP de lot.
 
 // ── GET /api/agent/tour — tournée du jour (§14.7 snapshot local). ──
 router.get(
@@ -195,6 +148,8 @@ router.post(
     }
 
     // Une clôture validée verrouille les encaissements de la journée (règle métier 5).
+    // Garde de LOT conservée à l'identique pour le web (PARITE.md écart n° 3) ;
+    // le canal /v1 applique la même règle par événement, sur la journée couverte.
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const validatedClosing = await db.closing.findFirst({
@@ -211,107 +166,9 @@ router.post(
     const acks: { id: string; status: "created" | "duplicate"; collectionId: string }[] = [];
 
     for (const ev of body.data.events) {
-      const existing = await db.collection.findUnique({ where: { id: ev.id } });
-      if (existing) {
-        acks.push({ id: ev.id, status: "duplicate", collectionId: existing.id });
-        continue;
-      }
-      const passbook = await db.passbook.findUnique({
-        where: { id: ev.passbookId },
-        include: { contributor: true, collections: true },
-      });
-      if (!passbook || passbook.tenantId !== tenantId || passbook.agentId !== user.id) {
-        acks.push({ id: ev.id, status: "duplicate", collectionId: ev.id });
-        continue;
-      }
-      if (passbook.status !== "active" && passbook.status !== "late") {
-        throw new ApiError(
-          "bad_state",
-          passbook.status === "closing" || passbook.status === "completed"
-            ? "Ce carnet est clôturé (remise en cours ou déjà signé) : plus aucun encaissement."
-            : "Ce carnet n'est plus actif.",
-          409
-        );
-      }
-      // Journée couverte (legacy) : elle doit tomber dans les 12 mois du livret.
-      let coversOn: Date | null = null;
-      if (ev.coversOn) {
-        coversOn = new Date(`${ev.coversOn}T00:00:00.000Z`);
-        if (Number.isNaN(coversOn.getTime())) {
-          throw new ApiError("invalid_input", "Journée couverte invalide.");
-        }
-        const livretStart = monthStart(passbook.startsOn);
-        const livretEnd = new Date(livretStart);
-        livretEnd.setUTCMonth(livretEnd.getUTCMonth() + LIVRET_MONTHS);
-        if (coversOn < livretStart || coversOn >= livretEnd) {
-          throw new ApiError(
-            "day_out_of_cycle",
-            "Cette journée est hors du livret annuel (12 feuilles mensuelles).",
-            422
-          );
-        }
-      }
-      // Règle métier 2 : un encaissement ne dépasse jamais le montant restant du
-      // livret (lignes encaissables, hors lignes excusées d'avant l'arrivée), sauf
-      // avance explicite pour laisser le surplus en dépôt.
-      const balance = passbookBalance(passbook.collections);
-      const livretBefore = buildLivret(passbook, balance);
-      const cycleTotal = livretBefore.recap.attendu;
-      if (!ev.advance && ev.amount > cycleTotal - balance) {
-        throw new ApiError(
-          "amount_exceeds",
-          "Encaissement supérieur au montant restant du livret. Marque-le comme paiement d'avance ou corrige le montant.",
-          422
-        );
-      }
-      // Ligne du livret : position séquentielle après pose de l'écriture. Les
-      // lignes d'avant l'arrivée du cotisant sont excusées : la numérotation
-      // démarre à sa première ligne encaissable.
-      const dayIndex = Math.min(
-        firstPayableLine(passbook) + paidDays(balance + ev.amount, passbook.dailyAmount) - 1,
-        LIVRET_DAYS
-      );
-      const collectedAt = new Date(ev.collectedAt);
-
-      await db.collection.create({
-        data: {
-          id: ev.id,
-          tenantId,
-          passbookId: passbook.id,
-          agentId: user.id,
-          amount: ev.amount,
-          method: ev.method,
-          dayIndex,
-          coversOn,
-          collectedAt,
-          receivedAt: new Date(),
-        },
-      });
-
-      const newBalance = balance + ev.amount;
-      await appendAudit({
-        tenantId,
-        actorId: user.id,
-        action: "collection",
-        entity: "collection",
-        entityId: ev.id,
-        payload: {
-          passbook: passbook.number,
-          contributor: passbook.contributor.fullName,
-          amount: ev.amount,
-          method: ev.method,
-          line: dayIndex,
-          coversOn: ev.coversOn ?? null,
-          advance: ev.advance,
-          source: "sync",
-        },
-        at: new Date(),
-      });
-
-      // Le carnet du cotisant est la source de vérité : chaque écriture y est
-      // visible immédiatement depuis son lien personnel (WhatsApp / e-mail).
-
-      acks.push({ id: ev.id, status: "created", collectionId: ev.id });
+      // Moteur partagé (lib/sync-engine.ts) — le rejet métier continue de faire
+      // échouer le lot en HTTP sur CE canal web, à l'identique d'avant l'extraction.
+      acks.push(await applyCollectionEvent({ tenantId, agentId: user.id, ev, source: "sync" }));
     }
 
     res.json({ acks });

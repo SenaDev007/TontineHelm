@@ -1,0 +1,16 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@tontihelm/domain": ["../../packages/domain/src/index.ts"],
+      "@tontihelm/domain/*": ["../../packages/domain/src/*"],
+      "@tontihelm/schemas": ["../../packages/schemas/src/index.ts"],
+      "@tontihelm/schemas/*": ["../../packages/schemas/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "expo-env.d.ts", "../../packages/domain/src/**/*.ts", "../../packages/schemas/src/**/*.ts"],
+  "exclude": ["node_modules"]
+}

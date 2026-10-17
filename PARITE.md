@@ -3,7 +3,7 @@
 Phase 0 (audit du code web existant, avant toute ligne de code mobile).
 Source de vérité auditée : frontend Next.js (`/home/z/my-project/src`), backend Express (`/home/z/my-project/backend/src`), schéma Prisma (`/home/z/my-project/backend/prisma/schema.prisma`).
 Date de l'audit : 17 octobre 2026. Déploiement : frontend Vercel, API Railway, PostgreSQL Neon.
-Mise à jour : **18 octobre 2026** — décisions écrites du dirigeant intégrées (journal complet en section 10) ; phase 0 validée, phase 1 ouverte.
+Mise à jour : **18 octobre 2026 — phase 1 LIVRÉE** — décisions écrites du dirigeant intégrées (journal complet en section 10) ; phase 0 validée ; phase 1 livrée le même jour (monorepo logique, `packages/schemas`, routes `/v1` auth/appareils/sync testées, socle `apps/mobile`, `SIGNATURE.md` — suivi d'exécution en section 11) ; revue de phase 1 : interprétation de l'écart n° 5 confirmée par écrit (§7.5, §10).
 
 Convention de statut utilisée dans ce document (phase 0) :
 - **existant** : présent dans le code web, à reproduire tel quel sur mobile ;
@@ -266,7 +266,7 @@ Décisions **tranchées par écrit par le dirigeant le 18 octobre 2026** (journa
 2. **Reçus SMS.** Le brief exige « Le reçu SMS part du serveur après la synchronisation » (M3) et mentionne des modèles `receipt`/`cycle_end`. Le web a **supprimé** tout envoi de SMS : le cotisant consultte son lien. Le schéma `Notification` existe (modèles listés) mais seule `late_reminder` (WhatsApp) est réellement écrite. Décision demandée : le mobile reproduit-il l'état actuel (lien de carnet, aucun SMS — recommandé pour la parité) ou réactive-t-on les reçus SMS côté serveur (ajout backend + coût + texte à valider) ? **Décision (18/10/2026) : le web les a supprimés — lien de carnet à la place.** Le mobile reproduit l'état actuel du web : aucun SMS de reçu ni de fin de cycle, le cotisant consulte son lien de carnet (puis son espace mobile authentifié) ; la relance WhatsApp `late_reminder` est conservée. Précision : les OTP d'authentification (enregistrement d'appareil du personnel, espace cotisant `/v1/me/*`) ne sont pas des reçus — ils restent au programme.
 3. **Clôture « validée verrouille les encaissements de la journée »** : vrai côté web au sens strict pour la **synchronisation du jour courant** et l'annulation (`day_locked`). Les événements datés d'un autre jour que la clôture ne sont pas bloqués par cette garde. À reproduire à l'identique ; signalé pour précision.
 4. **Changement d'agent en cours de cycle** (cas de test obligatoire du brief) : **aucune fonction du web** ne réassigne un carnet à un autre agent (`Passbook.agentId` fixé à la création ; aucune route, aucun écran). Le mobile ne peut pas reproduire une fonction inexistante. Décision demandée : abandonner ce cas de test, ou l'ajouter (ce serait une nouvelle règle métier, donc hors parité). **Décision (18/10/2026) : fonction à ajouter.** Réassignation d'un cotisant et de ses carnets actifs à un autre agent en cours de cycle — ajout backend additif journalisé (`agent_reassigned`), interface web d'abord (source de vérité), puis mobile ; spécification en section 8.13. Le cas de test obligatoire du brief redevient exécutable.
-5. **Cycle de 1 jour** (cas de test du brief) : impossible dans le modèle livret (12 mois fixes, `cycleDays = 372`, `dailyAmount ≥ 100`). Le cas de test « cycle de 1 jour » n'a pas d'équivalent web. Décision demandée : remplacer ce cas par « feuille du mois d'arrivée proratisée » (lignes excusées) qui couvre le même risque de bornes. **Décision (18/10/2026) : fonction à ajouter.** Interprétation retenue (à confirmer en revue de phase 1) : la durée de cycle devient paramétrable à la création du carnet — livret annuel (372 lignes) par défaut et produit standard, cycles courts possibles jusqu'à la borne minimale de 1 jour, le moteur du livret se généralisant (dernière ligne de chaque feuille = mise entreprise, dernière feuille éventuellement partielle) ; le cas « cycle de 1 jour » redevient exécutable en borne minimale (une ligne, mise entièrement en part entreprise). Si l'intention était plutôt le remplacement du cas de test par le mois d'arrivée proratisé (recommandation initiale), à corriger en revue — l'extraction de `packages/domain` (comportement actuel) précède de toute façon cette modification. Spécification en section 8.14.
+5. **Cycle de 1 jour** (cas de test du brief) : impossible dans le modèle livret (12 mois fixes, `cycleDays = 372`, `dailyAmount ≥ 100`). Le cas de test « cycle de 1 jour » n'a pas d'équivalent web. Décision demandée : remplacer ce cas par « feuille du mois d'arrivée proratisée » (lignes excusées) qui couvre le même risque de bornes. **Décision (18/10/2026) : fonction à ajouter.** Interprétation retenue : la durée de cycle devient paramétrable à la création du carnet — livret annuel (372 lignes) par défaut et produit standard, cycles courts possibles jusqu'à la borne minimale de 1 jour, le moteur du livret se généralisant (dernière ligne de chaque feuille = mise entreprise, dernière feuille éventuellement partielle) ; le cas « cycle de 1 jour » redevient exécutable en borne minimale (une ligne, mise entièrement en part entreprise). **Interprétation confirmée en revue de phase 1 (18/10/2026, écrit du dirigeant : « écarts 4 et 5 : spécifiés en §8.13/§8.14 — réassignation d'agent et durée de cycle paramétrable, livret annuel par défaut »)** — la recommandation initiale de remplacement du cas de test est écartée ; l'extraction de `packages/domain` (comportement actuel, faite et testée) précède cette modification, qui reste à implémenter web d'abord. Spécification en section 8.14.
 6. **Flux d'abonnement « essai → actif → en retard → lecture seule → réactivation »** : le web gère `trial` (approbation admin, 60 jours), `active`, `read_only` (verrouillage d'écriture), `canceled` ; mais **aucun code ne fait passer `past_due` à `read_only`** (la bascule « impayé > 15 jours » est évoquée en commentaire, jamais implémentée), et la facturation mensuelle n'a pas de cron de relance. Décision demandée : implémenter la bascule (ajout backend additif, recommandé) ou documenter que la lecture seule n'est today déclenchée que manuellement. **Décision (18/10/2026) : ajouter.** Bascule automatique `past_due` → `read_only` après 15 jours d'impayé — vérification au fil des requêtes + passe quotidienne, journalisée ; spécification en section 8.12.
 7. **Authentification mobile** : le web n'a ni Argon2id, ni OTP SMS, ni 2FA, ni jetons courts, ni rotation, ni verrouillage après 5 essais, ni gestion des appareils. Le brief prévoit ces ajouts (« si absente du web ») — ils sont donc des ajouts backend, sans toucher à l'authentification web. Confirmé : à construire en phase 1.
 8. **Limite de débit 300 req/min sur la synchronisation** : inexistante (seul le carnet public est limité, 60/10 min/IP, en mémoire). À ajouter.
@@ -329,6 +329,8 @@ Chaque ajout recevra ses tests d'intégration (idempotence, isolation cotisant e
 - **Phase 0 validée le 18 octobre 2026** : les 9 écarts bloquants (n° 1, 2, 4, 5, 6, 10, 11, 12, 18) sont tranchés par décision écrite du dirigeant — journal en section 10. Les ajouts métier décidés (réassignation d'agent, cycles courts, bascule `read_only`, export du journal d'audit) seront implémentés **web d'abord**, puis reproduits sur mobile.
 - **Phase 1 ouverte** : monorepo (`apps/web` sans régression, `apps/mobile`, `packages/domain` / `sync` / `api-client` / `schemas`), extraction de `packages/domain` avec tests de non-régression écrits AVANT l'extraction, socle mobile, ajouts backend additifs `/v1`, SIGNATURE.md. Le déplacement physique du frontend dans `apps/web` sera coordonné avec le réglage Vercel (Root Directory) afin de n'interrompre à aucun moment le déploiement web ; en attendant, `packages/domain` est la source de vérité et le backend la consomme par synchronisation vérifiée (diff nul).
 
+**Phase 1 — livrée le 18 octobre 2026** (détail et statuts en section 11) : `packages/schemas` (Zod, diff nul backend), routes `/v1` montées et testées (auth mobile, appareils, sync push/pull — 29 tests dédiés, suite backend 62 tests verts, non-régression `/api/agent/sync` prouvée par test), socle `apps/mobile` (Expo, connexion + OTP + sonde de synchronisation sur `/v1`), `apps/web/README.md` (procédure de déménagement différé), `SIGNATURE.md`. Les ajouts métier web d'abord (§8.12-§8.15) restent à implémenter — ils ne font PAS partie de la phase 1 livrée.
+
 ---
 
 ## 10. Journal des décisions du dirigeant — 18 octobre 2026
@@ -340,9 +342,85 @@ Réponse écrite du dirigeant aux écarts bloquants (section 7). Ces décisions 
 | 1 | Modèle de carnet | **Le mobile reproduit le livret annuel.** |
 | 2 | Reçus SMS | **Le web les a supprimés (lien de carnet à la place)** — le mobile reproduit l'état du web ; les OTP d'authentification restent au programme. |
 | 4 | Changement d'agent en cours de cycle | **Fonction à ajouter** (réassignation, web d'abord). |
-| 5 | Cas « cycle de 1 jour » | **Fonction à ajouter** — durée de cycle paramétrable, livret annuel par défaut (interprétation section 7, à confirmer en revue de phase 1). |
+| 5 | Cas « cycle de 1 jour » | **Fonction à ajouter** — durée de cycle paramétrable, livret annuel par défaut. Interprétation CONFIRMÉE en revue de phase 1 (voir après le tableau). |
 | 6 | Bascule `past_due` → `read_only` | **Ajouter** (15 jours d'impayé). |
 | 10 | Export du journal d'audit | **Ajouter** (`GET /api/manager/export/audit`, PDF/Excel). |
 | 11 | Administration plateforme sur mobile | **La conserver sur mobile.** |
 | 12 | Inscription sur mobile | **L'ajouter** (3 étapes + FedaPay reproduites). |
 | 18 | Barre de l'agent | **5 entrées** : Tournée, Encaisser, Clients, Clôture, Compte. |
+
+Revue de phase 1 (18 octobre 2026, même jour) : le dirigeant confirme par écrit la
+spécification des écarts 4 et 5 — « spécifiés en §8.13/§8.14 — réassignation
+d'agent et durée de cycle paramétrable (livret annuel par défaut) » — validant
+du même coup l'interprétation de l'écart n° 5 (§7.5). Ces fonctions restent à
+implémenter web d'abord.
+
+---
+
+## 11. Suivi d'exécution — phase 1 (18 octobre 2026)
+
+Ce qui suit est l'état constaté du dépôt après livraison de la phase 1. Le canal
+web `/api/*` est inchangé (non-régression testée) ; tout ce qui suit est additif.
+
+### 11.1 Routes /v1 livrées
+
+| Point d'accès | Rôle | Statut | Vérification |
+|---|---|---|---|
+| `POST /v1/auth/login` | public | Livré | v1-auth : OTP, jetons directs, verrouillage, normalisation |
+| `POST /v1/auth/otp/verify` | public | Livré | v1-auth : enregistrement d'appareil, 2FA, essais max |
+| `POST /v1/auth/refresh` | public | Livré | v1-auth : rotation + rejeu idempotent + expiration |
+| `POST /v1/auth/logout` | session mobile | Livré | v1-auth : jeton révoqué, appareil conservé |
+| `GET /v1/auth/me` | session mobile | Livré | v1-auth : utilisateur + abonnement + appareil |
+| `GET /v1/devices` (ou `?userId=`) | session mobile | Livré | v1-auth : listing propre + vue gérant/dirigeant |
+| `DELETE /v1/devices/:id` | session mobile | Livré | v1-auth : coupure immédiate + audit `device_revoked` |
+| `POST /v1/sync/push` | agent | Livré | v1-sync : accusés par événement, idempotence ×3, rejets web exacts |
+| `GET /v1/sync/pull` | agent | Livré | v1-pull : full + delta + curseur + appareil révoqué |
+
+### 11.2 Choix d'implémentation notables (fidèles aux décisions, transparents)
+
+- **Moteur partagé** : l'application d'un événement d'encaissement vit dans
+  `backend/src/lib/sync-engine.ts`, consommé par `/api/agent/sync` (comportement
+  de lot conservé : rejet métier = échec HTTP) ET `/v1/sync/push` (accusé par
+  événement). La sérialisation de tournée vit dans `backend/src/lib/tour.ts`.
+  Non-régression `/api` prouvée par test (422 de lot, libellés `created`/`duplicate`).
+- **Verrou de clôture** : sur `/v1`, appliqué **par événement sur la journée qu'il
+  couvre** (écart n° 3 : un événement daté d'un autre jour passe) ; le canal web
+  garde sa garde de lot d'origine, inchangée.
+- **PIN Argon2id** (`@noble/hashes`, paramètres OWASP m=19 Mio/t=3/p=1) : au
+  premier login mobile, le PIN est vérifié contre le scrypt du web puis la
+  credential Argon2id est créée (table séparée, scrypt web intact — §8.7).
+- **Jetons** : accès = HMAC-SHA256 compact 15 min (`MOBILE_TOKEN_SECRET`, ≥ 32
+  caractères, exigée en production sinon 503 explicite) ; renouvellement = opaque
+  haché, rotation par remplacement, 30 jours glissants ; rejeu réseau toléré
+  60 s (réponse idempotente) puis 401 — jamais de déconnexion abusive pour un
+  réseau perdu.
+- **OTP SMS** : 6 chiffres, 5 min, 5 essais, 3 envois/h/numéro. **Aucune
+  passerelle SMS n'étant branchée** (l'état du web), la production refuse
+  explicitement (`503 sms_unconfigured`, même garde que FedaPay
+  `payment_unconfigured`) ; hors production le code est renvoyé dans la réponse
+  (`devCode`) pour le terrain. Brancher une passerelle est un prérequis de mise
+  en production du canal mobile.
+- **Débit** : 300 req/min par appareil sur `/v1/sync/*` (surchargeable par
+  `SYNC_RATE_LIMIT_PER_MIN` pour les tests), fenêtre 60 s en mémoire.
+- **Décalage d'horloge** : mesuré à chaque sync (clientTime), conservé sur
+  l'appareil (`clockSkewMs`), marqué dans l'audit des écritures concernées,
+  alerte au gérant (`PlanEvent device_clock_skew`, ≤ 1/jour/appareil).
+- **Curseur pull** : horodatage serveur capturé avant les lectures — un doublon
+  de reprise est possible et idempotent (upsert côté téléphone) ; `updatedAt`
+  (nullable) ajouté à `Passbook`/`Contributor` pour le delta.
+
+### 11.3 Modèles Prisma ajoutés (additifs, production : `db push` au déploiement)
+
+`Device`, `MobileCredential`, `MobileToken`, `OtpCode` + colonnes
+`updatedAt` (nullables) sur `Passbook`/`Contributor` + `PlanEvent.toPlan`
+nullable. Aucune table web existante n'est lue ou modifiée par les routes
+`/api/*`.
+
+### 11.4 Reste à faire (hors phase 1, planifié)
+
+- §8.12-§8.15 (web d'abord) : réassignation d'agent, cycles courts
+  paramétrables, bascule `past_due→read_only`, export du journal d'audit.
+- §8.10/§8.11 : `GET /v1/app/version` (phase 6), espace cotisant `/v1/me/*`
+  (phase 3).
+- Phase 2 : SQLite chiffrée + outbox + écrans agent ; branchement d'une
+  passerelle SMS avant la mise en production du canal mobile.
