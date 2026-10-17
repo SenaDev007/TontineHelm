@@ -256,6 +256,7 @@ router.post(
     let approved = false;
     let failure: string | null = null;
     let verifiedAmount: number | null = null;
+    let definitive = false; // refus définitif (declined/canceled) — à distinguer de « pas encore payé »
     // ⚠ providerRef « undefined » = enregistrement antérieur au correctif de
     // l'enveloppe v1 : on le considère comme absent et on retombe (le cas
     // échéant) sur l'identifiant rapporté par le widget.
@@ -273,9 +274,11 @@ router.post(
           // on refuse une transaction approuvée d'un autre montant.
           approved = false;
           failure = `Le montant payé (${verifiedAmount} FCFA) ne correspond pas à l'abonnement (${payment.amount} FCFA). Reprends l'inscription.`;
+          definitive = true;
         }
         if (!approved && !failure && (tx.status === "declined" || tx.status === "canceled")) {
           failure = "Paiement refusé ou annulé sur la page FedaPay.";
+          definitive = true;
         }
         // Le widget intégré a payé SA transaction : on la mémorise comme
         // référence du paiement pour les vérifications suivantes.
@@ -316,7 +319,24 @@ router.post(
         return;
       }
       approved = outcome === "approved";
-      if (!approved) failure = "Paiement annulé (mode test).";
+      if (!approved) {
+        failure = "Paiement annulé (mode test).";
+        definitive = true;
+      }
+    }
+
+    if (!approved && !definitive) {
+      // ⚠ Transaction encore PENDING (l'utilisateur n'a pas encore payé, ou
+      // FedaPay n'a pas encore tranché) : on reste « pending » SANS marquer le
+      // paiement refusé — un verify prématuré ne doit jamais tuer l'inscription
+      // (bug du 17/10 : la moindre vérification anticipée verrouillait le
+      // paiement en « refusé » et imposait de tout recommencer).
+      res.json({
+        status: "pending",
+        activated: false,
+        message: "Paiement pas encore confirmé par FedaPay.",
+      });
+      return;
     }
 
     if (!approved) {
