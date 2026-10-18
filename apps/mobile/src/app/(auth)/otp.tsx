@@ -17,7 +17,7 @@ export default function OtpScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (status === "authenticated") router.replace("/(app)/home");
+    if (status === "authenticated") router.replace("/(app)");
     if (status === "anonymous") router.replace("/(auth)/login");
   }, [status]);
 
@@ -35,7 +35,7 @@ export default function OtpScreen() {
     setBusy(true);
     try {
       await verifyOtp(code, pending.deviceLabel);
-      router.replace("/(app)/home");
+      router.replace("/(app)");
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Code incorrect. Réessaie.");
     } finally {

@@ -2,16 +2,44 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
-    "types": ["nativewind/types"],
+    "types": [
+      "nativewind/types"
+    ],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@tontihelm/domain": ["../../packages/domain/src/index.ts"],
-      "@tontihelm/domain/*": ["../../packages/domain/src/*"],
-      "@tontihelm/schemas": ["../../packages/schemas/src/index.ts"],
-      "@tontihelm/schemas/*": ["../../packages/schemas/src/*"]
+      "@/*": [
+        "src/*"
+      ],
+      "@tontihelm/domain": [
+        "../../packages/domain/src/index.ts"
+      ],
+      "@tontihelm/domain/*": [
+        "../../packages/domain/src/*"
+      ],
+      "@tontihelm/schemas": [
+        "../../packages/schemas/src/index.ts"
+      ],
+      "@tontihelm/schemas/*": [
+        "../../packages/schemas/src/*"
+      ],
+      "@tontihelm/sync": [
+        "../../packages/sync/src/index.ts"
+      ],
+      "@tontihelm/sync/*": [
+        "../../packages/sync/src/*"
+      ]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "expo-env.d.ts", "../../packages/domain/src/**/*.ts", "../../packages/schemas/src/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "expo-env.d.ts",
+    "../../packages/domain/src/**/*.ts",
+    "../../packages/schemas/src/**/*.ts",
+    "../../packages/sync/src/**/*.ts",
+    "nativewind-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

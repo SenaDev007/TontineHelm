@@ -2,9 +2,12 @@
 // automatique (401 → refresh → nouvel essai), enregistrement d'appareil par
 // OTP, purge locale à la déconnexion et à la révocation (PARITE.md §8.5/§8.7).
 // Le PIN n'est JAMAIS conservé : il traverse une requête et disparaît.
+// La purge efface AUSSI le miroir chiffré de la tournée et la file d'envoi :
+// les données d'un appareil déconnecté ne restent pas sur le téléphone.
 import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
 import { apiGet, apiPost, ApiClientError } from "./api";
+import { wipeLocalData } from "@/local/db";
 import type { MobileUser, TokenPair } from "@tontihelm/schemas";
 
 const KEYS = {
@@ -64,6 +67,9 @@ async function clearAll(): Promise<void> {
     SecureStore.deleteItemAsync(KEYS.tokens).catch(() => undefined),
     SecureStore.deleteItemAsync(KEYS.device).catch(() => undefined),
     SecureStore.deleteItemAsync(KEYS.user).catch(() => undefined),
+    // Miroir + file d'envoi locaux : l'état d'un appareil déconnecté (ou
+    // révoqué) ne survit pas sur le téléphone (no-op si base jamais ouverte).
+    wipeLocalData().catch(() => undefined),
   ]);
 }
 

@@ -1,12 +1,12 @@
 # @tontihelm/mobile — application Android native (Expo)
 
-Socle **phase 1** du brief mobile TontiHelm (YEHI OR Tech) : application Expo
-(React Native, nouvelle architecture, Hermes, Expo Router) consommant le canal
-`/v1` du backend (authentification appareil + OTP + jetons courts, appareils,
-synchronisation push/pull). Les écrans métier arrivent aux phases 2 à 4 :
-barre agent à **5 entrées** (Tournée, Encaisser, Clients, Clôture, Compte —
-décision n° 18 du dirigeant), back-office gérant/dirigeant, administration
-plateforme, inscription.
+Application agent **phase 2 livrée** du brief mobile TontiHelm (YEHI OR Tech) :
+Expo (React Native, nouvelle architecture, Hermes, Expo Router) consommant le
+canal `/v1` du backend, avec **barre agent à 5 entrées** (Tournée, Encaisser,
+Clients, Clôture, Compte — décision n° 18 du dirigeant) et **mode hors ligne
+complet** : miroir local **SQLite chiffrée** (SQLCipher + Drizzle), file
+d'envoi (outbox) avec reprise **2/4/8/16 s puis 5 min**, blocage après 7 jours
+hors ligne. Les écrans gérant/dirigeant arrivent aux phases 3+.
 
 ## Démarrage
 
@@ -14,31 +14,42 @@ plateforme, inscription.
 cd apps/mobile
 bun install
 bunx expo install --fix   # aligne les versions exactes du SDK Expo courant
-bunx expo start --android
+bunx expo run:android     # BUILD natif (prebuild + gradle) — voir ci-dessous
 ```
+
+> **SQLCipher impose un build de développement** : le chiffrement de la base
+> locale est compilé dans l'application (plugin `expo-sqlite` → `useSQLCipher`
+> dans `app.json`). **Expo Go ne peut pas l'embarquer** — d'où
+> `expo run:android` (prebuild + compilation Gradle via Android Studio) au
+> premier lancement. Ensuite, pour le développement au quotidien :
+> `bunx expo start --dev-client` (rafraîchissement à chaud sur l'app installée).
+> Sur Expo Go, l'application démarre quand même — la base locale n'est alors
+> simplement pas chiffrée (développement uniquement).
 
 Variables d'environnement (copier `.env.example`) :
 - `EXPO_PUBLIC_API_BASE` — base de l'API `/v1` (défaut : `http://localhost:3001`).
 
-## Ce que le socle contient déjà
+## Ce que l'application contient
 
 | Élément | Détail |
 |---|---|
 | Connexion | Téléphone + PIN 6 chiffres + nom d'appareil ; OTP SMS (mode dev : code renvoyé dans la réponse) ; 2FA dirigeant/gérant gérée par le serveur. |
-| Session | Jetons dans `expo-secure-store` ; rotation automatique sur 401 (`refresh` puis nouvel essai) ; purge locale à la révocation/déconnexion. |
-| Sonde de synchronisation | L'écran d'accueil tire `/v1/sync/pull` (snapshot complet) et affiche le solde cumulé formaté par **@tontihelm/domain** (`formatFCFA`). |
-| Identifiants | Générateur **UUID v7** local (`src/lib/uuid7.ts`) pour les événements d'encaissement — validé par `@tontihelm/schemas` (UuidV7Schema). |
-| Paquets partagés | Imports directs via Metro `watchFolders` : `@tontihelm/domain`, `@tontihelm/schemas` (aucune copie, aucune dérive). |
+| Session | Jetons dans `expo-secure-store` ; rotation automatique sur 401 (`refresh` puis nouvel essai) ; purge locale (jetons + miroir + file) à la révocation/déconnexion. |
+| Barre 5 onglets | **Tournée** (tri quartier puis nom, filtres, indicateurs du jour), **Encaisser** (ligne à ligne + avance partielle — `advancePreview()` partagée), **Clients** (portefeuille complet, recherche instantanée), **Clôture** (déclaration de caisse `POST /v1/closing`), **Compte** (profil, synchronisation, écran de reprise des rejets). |
+| Hors ligne | Miroir du tirage `/v1/sync/pull` dans **SQLite chiffrée** (SQLCipher via expo-sqlite, clé 32 octets en `expo-secure-store`, requêtes **Drizzle**) — la tournée est lisible au démarrage sans réseau. |
+| File d'envoi | Outbox chiffrée : un **UUID v7 par ligne couverte** (`src/lib/uuid.ts`) ; accusés PAR ÉVÉNEMENT (accepté/doublon/rejeté + motif) ; reprise **2 s → 4 s → 8 s → 16 s puis 5 min** (machine pure **@tontihelm/sync**, 19 tests) ; rejets définitifs conservés pour reprise ; **blocage après 7 jours** hors ligne. |
+| Moteurs | Tireur temps réel (SSE `/v1/events` + filet 30 s + premier plan) et pousseur de file (retour du réseau, premier plan, réveil cadencé, récupération de crash `in_flight`). |
+| Paquets partagés | Imports directs via Metro `watchFolders` : `@tontihelm/domain`, `@tontihelm/schemas`, `@tontihelm/sync` (aucune copie, aucune dérive). |
 | Design | #0F6B4A / #C8962E, Plus Jakarta Sans + Inter, cibles tactiles 48 dp, **aucun emoji** (règle de marque). |
 
 ## Ce qui vient ensuite
 
-- Phase 2 : SQLite chiffrée (SQLCipher + Drizzle, clé en `expo-secure-store`),
-  outbox avec reprise 2/4/8/16 s puis 5 min, écrans agent (tournée,
-  encaissement ligne à ligne + avances mensuelles, clients, clôture, compte),
-  blocage après 7 jours hors ligne.
-- Phase 3 : espace cotisant authentifié (`/v1/me/*`).
+- Phase 3 : espace cotisant authentifié (`/v1/me/*`), création de client sur
+  le canal mobile (routes `/v1/clients` à ajouter, écart n° 8).
 - Phase 4 : gérant/dirigeant/contrôleur, administration plateforme.
+- Incrément hors ligne : relance de la file en tâche de fond OS
+  (`expo-background-task`, ≥ 15 min imposées par Android — la cadence courte
+  du brief reste tenue par le moteur premier plan).
 - Phase 6 : EAS Build, signature (voir `SIGNATURE.md` à la racine du monorepo).
 
 ## Tester dans Android Studio (machine locale)
@@ -50,13 +61,24 @@ Variables d'environnement (copier `.env.example`) :
    `http://10.0.2.2:3001` (alias hôte de l'émulateur) est déjà la bonne.
    Sur téléphone physique : mettre l'adresse LAN du PC (même réseau Wi-Fi).
 3. **Lancer** : ouvrir Android Studio → Device Manager → créer/lancer un
-   émulateur (Android 14+ conseillé), puis `bunx expo start --android`
-   (ouvre l'émulateur et installe Expo Go automatiquement).
+   émulateur (Android 14+ conseillé), puis `bunx expo run:android` :
+   le **premier build compile le natif** (SQLCipher inclus — compte 10 à 20 min
+   selon la machine), les suivants sont immédiats. Pour itérer ensuite :
+   `bunx expo start --dev-client`.
 4. **OTP en mode dev** : le backend hors production renvoie le code à 6
    chiffres dans sa réponse (`devCode`) — aucun SMS nécessaire pour tester.
-5. **Typage** : `bun run typecheck` (0 erreur attendue ; `expo-env.d.ts` est
+5. **Hors ligne** : couper le réseau de l'émulateur (icône Wi-Fi du Device
+   Manager ou `adb shell svc data disable` / `adb shell svc wifi disable`) —
+   la tournée reste lisible, les encaissements s'enregistrent (bandeau
+   « Hors ligne », pastille « N en attente »), tout repart seul au retour du
+   réseau (2/4/8/16 s puis 5 min).
+6. **Typage** : `bun run typecheck` (0 erreur attendue ; `expo-env.d.ts` est
    régénéré par Expo, il est gitignore — si `process` est inconnu après un
    clone, lancer une fois `bunx expo start`).
+7. **Bundle de vérification** (sans Android Studio) :
+   `bunx expo export --platform android` doit finir sur « Exported » — c'est
+   le contrôle qui a piégé les deux erreurs de socle corrigées en phase 2
+   (preset NativeWind, import du CSS).
 
 ## Règles du dépôt
 

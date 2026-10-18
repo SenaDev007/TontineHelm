@@ -1,28 +1,24 @@
-// TontiHelm mobile — écran Encaisser (2026-10-18) : correction du dirigeant —
+// TontiHelm mobile — écran Encaisser (phase 2) : correction du dirigeant —
 // l'AVANCE n'est pas obligatoirement le total du mois : le cotisant peut verser
 // une PARTIE. L'agent saisit le montant désiré (pavé numérique) ; les puces de
 // feuille restent des raccourcis qui préremplissent le total. Même logique que
 // le web : advancePreview() vient du paquet partagé @tontihelm/domain.
 // Mode « Ligne à ligne » : due / rattrapage / lignes suivantes (avance), comme
-// le web. Envoi immédiat /v1/sync/push (en ligne) — la file hors ligne arrive
-// en phase 2 ; les accusés PAR ÉVÉNEMENT s'affichent (accepté / doublon /
-// rejeté + motif), puis la traction delta rafraîchit l'écran.
-import { useMemo, useState } from "react";
+// le web. HORS LIGNE (écarts n° 6/7) : chaque écriture tombe dans la file
+// chiffrée (SQLCipher) — un UUID v7 par ligne couverte, ou l'écriture unique
+// de l'avance — puis part SEULE : immédiatement en ligne, sinon à la cadence
+// 2/4/8/16 s puis 5 min ; les rejets définitifs remontent ici et dans l'écran
+// de reprise (Compte).
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View, Vibration } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import { colors } from "@/theme/tokens";
-import { useSession } from "@/lib/session";
 import { useTour, todayOf } from "@/lib/tour-store";
-import { uuidv7 } from "@/lib/uuid7";
-import { ApiClientError } from "@/lib/api";
+import { useOutbox } from "@/lib/outbox-store";
+import { RealtimePill, SyncPill } from "@/components/pills";
 import { advancePreview, formatFCFA } from "@tontihelm/domain";
 
 type Mode = "lines" | "advance";
-
-interface AckRow {
-  amount: number;
-  status: "accepted" | "duplicate" | "rejected";
-  message?: string;
-}
 
 /* Pavé numérique (§15.7) : cibles 48 dp minimum, aucun emoji. */
 function Keypad({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -60,18 +56,6 @@ function StatusChip({ label }: { label: string }) {
   );
 }
 
-function RealtimePill({ state }: { state: "connecting" | "open" | "reconnecting" }) {
-  const label = state === "open" ? "Temps réel actif" : state === "connecting" ? "Connexion…" : "Reconnexion…";
-  const color = state === "open" ? colors.primary : colors.warning;
-  return (
-    <View className="rounded-full px-3 py-1" style={{ backgroundColor: colors.goldSoft }}>
-      <Text className="font-medium text-[11px]" style={{ color }}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
 export default function CollectScreen() {
   const stops = useTour((s) => s.stops);
   const contributors = useTour((s) => s.contributors);
@@ -81,16 +65,27 @@ export default function CollectScreen() {
   const realtime = useTour((s) => s.realtime);
   const closing = useTour((s) => s.closing);
   const refresh = useTour((s) => s.refresh);
-  const authedPost = useSession((s) => s.authedPost);
+
+  const enqueue = useOutbox((s) => s.enqueue);
+  const pending = useOutbox((s) => s.pending);
+  const online = useOutbox((s) => s.online);
+  const blocked = useOutbox((s) => s.blocked);
+  const rejectedCount = useOutbox((s) => s.rejected.length);
+
+  // Arrêt ciblé depuis la Tournée ou l'onglet Clients (« Encaisser sur ce carnet »).
+  const params = useLocalSearchParams<{ passbook?: string }>();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("lines");
   const [lineSel, setLineSel] = useState<number[] | null>(null); // null = ligne due
   const [amountInput, setAmountInput] = useState<string | null>(null);
   const [advanceInput, setAdvanceInput] = useState<string | null>(null); // null = preset
-  const [pushing, setPushing] = useState(false);
-  const [acks, setAcks] = useState<AckRow[] | null>(null);
-  const [pushError, setPushError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [savedCount, setSavedCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (params.passbook) openStop(String(params.passbook));
+  }, [params.passbook]);
 
   const stop = stops.find((s) => s.passbookId === selectedId) ?? null;
   const contributor = stop ? contributors.find((c) => c.id === stop.contributorId) ?? null : null;
@@ -156,7 +151,8 @@ export default function CollectScreen() {
   const unallocated = mode === "lines" && amount > suggestedTotal;
   const canSubmit =
     stop !== null &&
-    !pushing &&
+    !saving &&
+    !blocked &&
     closing?.status !== "validated" &&
     (mode === "advance"
       ? preview !== null && preview.valid && !preview.exceedsReste
@@ -168,64 +164,27 @@ export default function CollectScreen() {
     setLineSel(null);
     setAmountInput(null);
     setAdvanceInput(null);
-    setAcks(null);
-    setPushError(null);
+    setSavedCount(null);
   };
 
   const submit = async () => {
     if (!stop || !canSubmit) return;
-    setPushing(true);
-    setPushError(null);
-    setAcks(null);
+    setSaving(true);
     try {
-      const events =
+      // Un événement PAR LIGNE couverte, ou l'écriture unique de l'avance :
+      // la file fabrique UUID v7, deviceId et horodatages (écarts n° 6/7).
+      const inputs =
         mode === "advance" && preview
-          ? [{
-              id: uuidv7(),
-              passbookId: stop.passbookId,
-              amount: preview.amount,
-              method: "cash",
-              advance: true,
-              collectedAt: new Date().toISOString(),
-            }]
-          : allocations.map((a) => ({
-              id: uuidv7(),
-              passbookId: stop.passbookId,
-              amount: a.amount,
-              method: "cash",
-              advance: false,
-              collectedAt: new Date().toISOString(),
-            }));
-      const body = (await authedPost("/v1/sync/push", {
-        events,
-        clientTime: new Date().toISOString(),
-      })) as {
-        acks?: { id: string; status: "accepted" | "duplicate" | "rejected"; reason?: { message?: string } }[];
-      };
-      const byId = new Map((body.acks ?? []).map((a) => [a.id, a]));
-      setAcks(
-        events.map((ev) => {
-          const ack = byId.get(ev.id);
-          return {
-            amount: ev.amount,
-            status: ack?.status ?? "rejected",
-            message: ack?.reason?.message,
-          };
-        })
-      );
-      const ok = (body.acks ?? []).every((a) => a.status === "accepted" || a.status === "duplicate");
-      if (ok) Vibration.vibrate(60);
-      // Traction delta : l'écran (et le web connecté) reflètent l'écriture.
-      await refresh();
+          ? [{ passbookId: stop.passbookId, amount: preview.amount, advance: true }]
+          : allocations.map((a) => ({ passbookId: stop.passbookId, amount: a.amount, advance: false }));
+      await enqueue(inputs);
+      Vibration.vibrate(60); // confirmation tactile, comme le web
+      setSavedCount(inputs.length);
       setLineSel(null);
       setAmountInput(null);
       setAdvanceInput(null);
-    } catch (err) {
-      setPushError(
-        err instanceof ApiClientError ? err.message : "Envoi impossible. Vérifie ta connexion et réessaie."
-      );
     } finally {
-      setPushing(false);
+      setSaving(false);
     }
   };
 
@@ -252,7 +211,10 @@ export default function CollectScreen() {
       >
         <View className="flex-row items-center justify-between">
           <Text className="font-title text-[28px] leading-[34px] text-ink">Encaisser</Text>
-          <RealtimePill state={realtime} />
+          <View className="flex-row items-center gap-2">
+            <SyncPill compact />
+            <RealtimePill state={realtime} />
+          </View>
         </View>
         <Text className="mt-1 font-body text-base text-ink-muted">
           {ready
@@ -261,6 +223,29 @@ export default function CollectScreen() {
               : "Tous tes clients du jour sont encaissés."
             : "Chargement de la tournée…"}
         </Text>
+        {/* Bandeaux d'état de la file — indicateur permanent (écart n° 7) */}
+        {online === false ? (
+          <View className="mt-4 rounded-xl px-4 py-3" style={{ backgroundColor: colors.goldSoft }}>
+            <Text className="font-body text-[13px] leading-[19px] text-warning">
+              Hors ligne — les encaissements s'enregistrent sur le téléphone et partent seuls au retour du réseau.
+            </Text>
+          </View>
+        ) : null}
+        {blocked ? (
+          <View className="mt-4 rounded-xl px-4 py-3" style={{ backgroundColor: "#FDECEA" }}>
+            <Text className="font-body text-[13px] leading-[19px] text-danger">
+              Hors ligne depuis plus de 7 jours : reconnecte-toi et synchronise avant de continuer à encaisser.
+            </Text>
+          </View>
+        ) : null}
+        {rejectedCount > 0 ? (
+          <View className="mt-4 rounded-xl px-4 py-3" style={{ backgroundColor: "#FDECEA" }}>
+            <Text className="font-body text-[13px] leading-[19px] text-danger">
+              {rejectedCount} écriture{rejectedCount > 1 ? "s" : ""} refusée{rejectedCount > 1 ? "s" : ""} par le serveur —
+              détails et mise de côté dans l'onglet Compte.
+            </Text>
+          </View>
+        ) : null}
         {error ? (
           <View className="mt-4 rounded-xl px-4 py-3" style={{ backgroundColor: "#FDECEA" }}>
             <Text className="font-body text-[14px] leading-[20px] text-danger">{error}</Text>
@@ -342,7 +327,10 @@ export default function CollectScreen() {
         >
           <Text className="font-heading text-[14px] text-primary">Retour</Text>
         </Pressable>
-        <RealtimePill state={realtime} />
+        <View className="flex-row items-center gap-2">
+          <SyncPill compact />
+          <RealtimePill state={realtime} />
+        </View>
       </View>
 
       {/* En-tête du carnet */}
@@ -670,8 +658,8 @@ export default function CollectScreen() {
         }}
       >
         <Text className="font-heading text-[16px] text-white">
-          {pushing
-            ? "Envoi…"
+          {saving
+            ? "Enregistrement…"
             : mode === "advance" && preview && preview.valid && !preview.exceedsReste
               ? `Encaisser l'avance ${formatFCFA(preview.amount)}`
               : `Encaisser ${formatFCFA(amount)}`}
@@ -693,45 +681,35 @@ export default function CollectScreen() {
           Clôture validée : les encaissements du jour sont verrouillés.
         </Text>
       ) : null}
+      {blocked ? (
+        <Text className="mt-2 text-center font-medium text-[12px] text-danger">
+          Hors ligne depuis plus de 7 jours : synchronise (onglet Compte) avant de continuer.
+        </Text>
+      ) : null}
 
-      {/* Accusés PAR ÉVÉNEMENT (§8.2) */}
-      {acks ? (
-        <View className="mt-3 rounded-xl border border-line bg-[#F4F7FB] px-3 py-2.5">
-          <Text className="mb-1.5 font-medium text-[11px] uppercase tracking-wide text-ink-muted">
-            Accusés du serveur
+      {/* Confirmation locale : la file tient l'envoi (accusés §8.2 asynchrones) */}
+      {savedCount ? (
+        <View className="mt-3 rounded-xl px-4 py-3" style={{ backgroundColor: colors.primarySoft }}>
+          <Text className="font-body text-[13px] leading-[19px] text-primary-dark">
+            {savedCount} écriture{savedCount > 1 ? "s" : ""} enregistrée{savedCount > 1 ? "s" : ""} sur le téléphone —{" "}
+            {pending > 0
+              ? "envoi en cours, le carnet se met à jour dès l'accusé du serveur."
+              : "envoyée : le carnet du cotisant se met à jour sur son lien dès l'écriture."}
           </Text>
-          {acks.map((a, i) => (
-            <Text
-              key={i}
-              className="font-body text-[12px] leading-[19px]"
-              style={{
-                color:
-                  a.status === "accepted"
-                    ? colors.primaryDark
-                    : a.status === "duplicate"
-                      ? colors.warning
-                      : colors.danger,
-              }}
-            >
-              {formatFCFA(a.amount)} —{" "}
-              {a.status === "accepted"
-                ? "écriture acceptée"
-                : a.status === "duplicate"
-                  ? "doublon (déjà enregistré)"
-                  : `rejetée : ${a.message ?? "motif inconnu"}`}
-            </Text>
-          ))}
         </View>
       ) : null}
-      {pushError ? (
+      {rejectedCount > 0 ? (
         <View className="mt-3 rounded-xl px-4 py-3" style={{ backgroundColor: "#FDECEA" }}>
-          <Text className="font-body text-[13px] leading-[19px] text-danger">{pushError}</Text>
+          <Text className="font-body text-[13px] leading-[19px] text-danger">
+            {rejectedCount} écriture{rejectedCount > 1 ? "s" : ""} refusée{rejectedCount > 1 ? "s" : ""} par le serveur —
+            détails dans l'onglet Compte.
+          </Text>
         </View>
       ) : null}
 
       <Text className="mt-3 text-center font-body text-[11px] leading-[17px] text-ink-muted">
-        Envoi en ligne immédiat — la file hors ligne arrive en phase 2. Le carnet du cotisant se met à
-        jour sur son lien dès l'écriture.
+        Enregistrement chiffré sur le téléphone puis envoi automatique — en ligne l'accusé revient en
+        quelques secondes, hors ligne la file reprend seule (2/4/8/16 s puis 5 min).
       </Text>
     </ScrollView>
   );

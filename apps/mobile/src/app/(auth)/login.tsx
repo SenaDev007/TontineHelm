@@ -45,7 +45,7 @@ export default function LoginScreen() {
     try {
       const next = await login(phone.trim(), pin, deviceLabel.trim());
       if (next === "otp") router.replace("/(auth)/otp");
-      else router.replace("/(app)/home");
+      else router.replace("/(app)");
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Connexion impossible. Réessaie.");
     } finally {

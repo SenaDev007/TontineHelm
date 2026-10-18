@@ -11,7 +11,7 @@ export default function Index() {
 
   useEffect(() => {
     if (status === "anonymous") router.replace("/(auth)/login");
-    if (status === "authenticated") router.replace("/(app)/home");
+    if (status === "authenticated") router.replace("/(app)");
     if (status === "otp_pending") router.replace("/(auth)/otp");
   }, [status]);
 

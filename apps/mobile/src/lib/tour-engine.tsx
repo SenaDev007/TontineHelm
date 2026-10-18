@@ -1,12 +1,12 @@
-// TontiHelm mobile — moteur temps réel (2026-10-18) : monte UNE fois dans la
-// pile (app), démarre la traction initiale puis maintient la fraîcheur des
-// données par TROIS mécanismes complémentaires :
+// TontiHelm mobile — moteur temps réel (2026-10-18, phase 2) : monte UNE fois
+// dans la pile (app), démarre la traction initiale puis maintient la fraîcheur
+// des données par TROIS mécanismes complémentaires :
 //   1. flux SSE /v1/events — pousse chaque écriture (web OU mobile) dès qu'elle
 //      arrive : traction delta immédiate (temps réel proprement dit) ;
 //   2. filet de sécurité : pull delta toutes les 30 s (flux coupé en silence,
 //      réseau mobile instable) — 2 req/min, loin du plafond 300 req/min ;
 //   3. retour au premier plan (AppState) : rattrapage après écran éteint.
-// La file d'attente hors ligne (outbox) arrive en phase 2.
+// La file d'envoi hors ligne (pousseur) vit dans outbox-engine, à côté.
 import { useEffect } from "react";
 import { AppState } from "react-native";
 import { useSession } from "./session";

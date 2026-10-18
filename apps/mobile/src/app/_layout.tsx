@@ -1,7 +1,9 @@
 // TontiHelm mobile — navigateur racine : polices (Plus Jakarta Sans + Inter),
 // splash tant que la session démarre, pile expo-router avec groupes
-// (auth) / (app). Socle phase 1 — les écrans métier arrivent en phase 2.
-import "../global.css";
+// (auth) / (app). Correction de phase 2 : l'import du CSS remonte à la
+// RACINE du projet (../../global.css) — ../ pointait vers src/ et cassait
+// le bundle (piégé par l'export de vérification Metro, jamais lancé avant).
+import "../../global.css";
 import { useEffect } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
