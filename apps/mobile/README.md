@@ -41,6 +41,23 @@ Variables d'environnement (copier `.env.example`) :
 - Phase 4 : gérant/dirigeant/contrôleur, administration plateforme.
 - Phase 6 : EAS Build, signature (voir `SIGNATURE.md` à la racine du monorepo).
 
+## Tester dans Android Studio (machine locale)
+
+1. **Backend** : `cd backend && cp .env.example .env` (renseigner
+   `DATABASE_URL` PostgreSQL — Neon), puis `bun run dev` → écoute sur 3001.
+2. **Cette application** : `cp .env.example .env` — l'émulateur Android
+   n'atteint PAS le `localhost` de ta machine ; la valeur par défaut
+   `http://10.0.2.2:3001` (alias hôte de l'émulateur) est déjà la bonne.
+   Sur téléphone physique : mettre l'adresse LAN du PC (même réseau Wi-Fi).
+3. **Lancer** : ouvrir Android Studio → Device Manager → créer/lancer un
+   émulateur (Android 14+ conseillé), puis `bunx expo start --android`
+   (ouvre l'émulateur et installe Expo Go automatiquement).
+4. **OTP en mode dev** : le backend hors production renvoie le code à 6
+   chiffres dans sa réponse (`devCode`) — aucun SMS nécessaire pour tester.
+5. **Typage** : `bun run typecheck` (0 erreur attendue ; `expo-env.d.ts` est
+   régénéré par Expo, il est gitignore — si `process` est inconnu après un
+   clone, lancer une fois `bunx expo start`).
+
 ## Règles du dépôt
 
 Le web reste la source de vérité fonctionnelle (PARITE.md) : tout écran mobile
