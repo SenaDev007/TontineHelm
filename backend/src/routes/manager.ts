@@ -12,7 +12,7 @@ import { passbookBalance, formatFCFA } from "../lib/domain";
 import { planOf } from "../lib/plans";
 import { ensureShareToken, ensureStructureSlug, carnetUrl, entityUrl, whatsappShareUrl } from "../lib/share";
 import {
-  LIVRET_DAYS, LIVRET_MONTHS, buildLivret, monthStart as livretMonthStart, serializeLivret,
+  LIVRET_DAYS, buildLivret, monthStart as livretMonthStart, serializeLivret, sheetsForCycleDays,
 } from "../lib/livret";
 import { autoScale, recentPlanEvents, markPlanEventsRead } from "../lib/autoscale";
 import { parseDayParam } from "../lib/report";
@@ -301,6 +301,7 @@ router.get(
             payableLines: livret.payableLines,
             missedLines: livret.missedLines,
             currentSheet: livret.currentSheet,
+            months: livret.months,
             status: pb.status,
           };
         });
@@ -312,6 +313,7 @@ router.get(
           neighborhood: c.neighborhood,
           idNumber: c.idNumber,
           agent: c.agent?.fullName ?? "—",
+          agentId: c.agentId,
           status: c.status,
           createdAt: c.createdAt,
           shareToken: c.shareToken,
@@ -409,6 +411,99 @@ router.post(
   })
 );
 
+// ── POST /api/manager/contributors/:id/reassign — réassignation d'agent en cours
+// de cycle (décision n° 4 du dirigeant, PARITE.md §8.13). Tous les carnets
+// ACTIFS du cotisant suivent le nouvel agent ; les carnets terminés et toutes
+// les écritures passées conservent leur agent d'origine ; la tournée du jour
+// est recalculée pour les deux agents (elle se déduit des carnets).
+const reassignSchema = z.object({
+  agentId: z.string().min(1, "Choisis le nouvel agent."),
+});
+
+router.post(
+  "/contributors/:id/reassign",
+  h(async (req, res) => {
+    const user = await requireUser(req);
+    requireRole(user, ["manager", "owner"]);
+    const tenantId = requireTenant(user);
+    await assertWritable(tenantId);
+
+    const body = reassignSchema.safeParse(req.body ?? {});
+    if (!body.success) {
+      const issue = body.error.issues[0]?.message ?? "Formulaire incomplet.";
+      throw new ApiError("invalid_input", issue);
+    }
+
+    const contributor = await db.contributor.findUnique({
+      where: { id: req.params.id },
+      include: { agent: { select: { id: true, fullName: true } } },
+    });
+    if (!contributor || contributor.tenantId !== tenantId) {
+      throw new ApiError("not_found", "Cotisant introuvable.", 404);
+    }
+    if (contributor.status !== "active") {
+      throw new ApiError("bad_state", "Ce cotisant n'est plus actif : aucune réassignation possible.", 400);
+    }
+
+    // Agent cible : actif, rôle agent, MÊME structure (isolation multi-tenant).
+    const target = await db.user.findFirst({
+      where: { id: body.data.agentId, tenantId, role: "agent" },
+    });
+    if (!target) throw new ApiError("not_found", "Agent introuvable dans ta structure.", 404);
+    if (target.status !== "active") {
+      throw new ApiError("bad_state", "Cet agent n'est plus actif : choisis un autre agent.", 400);
+    }
+    if (target.id === contributor.agentId) {
+      throw new ApiError("same_agent", `${contributor.fullName} est déjà rattaché à ${target.fullName}.`, 400);
+    }
+
+    // Les carnets en cours de collecte (active | late) suivent le nouvel agent.
+    // Les carnets closing/completed/closed/withdrawn restent à l'agent qui les
+    // a menés — comme les encaissements déjà écrits (Collection.agentId d'origine).
+    const moved = await db.passbook.updateMany({
+      where: { contributorId: contributor.id, tenantId, status: { in: ["active", "late"] } },
+      data: { agentId: target.id },
+    });
+    await db.contributor.update({
+      where: { id: contributor.id },
+      data: { agentId: target.id },
+    });
+
+    await appendAudit({
+      tenantId,
+      actorId: user.id,
+      action: "agent_reassigned",
+      entity: "contributor",
+      entityId: contributor.id,
+      payload: {
+        contributor: contributor.fullName,
+        fromAgent: contributor.agent?.fullName ?? "—",
+        toAgent: target.fullName,
+        passbooksMoved: moved.count,
+      },
+    });
+
+    // Temps réel web ↔ mobile (§8.18) : la tournée des DEUX agents change dès
+    // la validation — les écrans abonnés au flux se rafraîchissent.
+    publishTenantEvent({
+      type: "contributor",
+      tenantId,
+      at: new Date().toISOString(),
+      contributorId: contributor.id,
+      agentId: target.id,
+    });
+
+    res.json({
+      ok: true,
+      passbooksMoved: moved.count,
+      message:
+        `${contributor.fullName} est désormais collecté par ${target.fullName} : ` +
+        `${moved.count} carnet${moved.count > 1 ? "s" : ""} actif${moved.count > 1 ? "s" : ""} ` +
+        `${moved.count > 1 ? "suivent" : "suit"} le nouvel agent, la tournée du jour est recalculée pour les deux agents.`,
+    });
+  })
+);
+
 // ── GET /api/manager/passbooks — liste des carnets (livrets annuels) avec soldes. ──
 router.get(
   "/passbooks",
@@ -451,6 +546,7 @@ router.get(
           excusedLines: livret.excusedLines,
           missedLines: livret.missedLines,
           currentSheet: livret.currentSheet,
+          months: livret.months,
           cycleTotal: livret.recap.attendu,
         };
       }),
@@ -458,13 +554,22 @@ router.get(
   })
 );
 
-// ── POST /api/manager/passbooks — nouveau livret annuel pour un cotisant (M2). ──
+// ── POST /api/manager/passbooks — nouveau livret pour un cotisant (M2). ──
 // La mise journalière suffit : le livret démarre automatiquement au mois en
 // cours et compte 12 feuilles mensuelles + la 13e feuille de récapitulatif.
+// Durée du cycle OPTIONNELLE (§8.14, décision n° 5) : bornée 1..372 jours,
+// défaut 372 (livret annuel) — une durée courte réduit le nombre de feuilles,
+// la dernière feuille peut être partielle.
 const createPassbookSchema = z.object({
   contributorId: z.string().min(1, "Choisis le cotisant."),
   dailyAmount: z.number().int().min(100, "La mise journalière minimum est de 100 FCFA."),
   label: z.string().max(60, "Le surnom du carnet est trop long.").optional().or(z.literal("")),
+  cycleDays: z
+    .number()
+    .int()
+    .min(1, "La durée minimum d'un cycle est de 1 jour.")
+    .max(372, "La durée maximum d'un cycle est de 372 jours (livret annuel).")
+    .optional(),
 });
 
 router.post(
@@ -488,6 +593,7 @@ router.post(
     const last = await db.passbook.findFirst({ where: { tenantId }, orderBy: { number: "desc" } });
     const nextNumber = String((last ? parseInt(last.number, 10) : 100) + 1).padStart(4, "0");
     const startsOn = livretMonthStart(new Date());
+    const cycleDays = body.data.cycleDays ?? LIVRET_DAYS;
 
     const passbook = await db.passbook.create({
       data: {
@@ -496,7 +602,7 @@ router.post(
         agentId: contributor.agentId,
         number: nextNumber,
         dailyAmount: body.data.dailyAmount,
-        cycleDays: LIVRET_DAYS,
+        cycleDays,
         startsOn,
         label: body.data.label || null,
       },
@@ -512,7 +618,8 @@ router.post(
         label: passbook.label,
         contributor: contributor.fullName,
         dailyAmount: body.data.dailyAmount,
-        months: LIVRET_MONTHS,
+        cycleDays,
+        months: sheetsForCycleDays(cycleDays),
         startsOn: startsOn.toISOString().slice(0, 10),
       },
     });

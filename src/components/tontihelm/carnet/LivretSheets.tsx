@@ -147,11 +147,12 @@ function RecapSheet({ livret }: { livret: LivretData }) {
     <div className="space-y-3">
       <div className="rounded-xl border border-primary/30 bg-[#EEF4FD] p-4">
         <p className="flex items-center gap-2 text-sm font-bold text-primary">
-          <BookOpenCheck className="h-4 w-4" aria-hidden /> 13e feuille — Récapitulatif annuel
+          <BookOpenCheck className="h-4 w-4" aria-hidden /> Feuille finale — Récapitulatif
+          {livret.months === 12 ? " annuel" : ` du cycle (${livret.cycleDays ?? livret.months * 31} jours)`}
         </p>
         <p className="mt-1 text-xs leading-relaxed text-subtle">
-          Le livret compte 12 feuilles mensuelles de 31 mises. Sur chaque feuille, la 31e mise revient à
-          l&apos;entreprise : {formatFCFA(r.mise)} × 12 = <span className="amount font-semibold text-ink">{formatFCFA(12 * r.mise)}</span> sur l&apos;année.
+          Le livret compte {livret.months} feuille{livret.months > 1 ? "s" : ""} mensuelle{livret.months > 1 ? "s" : ""}. Sur chaque feuille, la dernière mise revient à
+          l&apos;entreprise : {formatFCFA(r.mise)} × {livret.months} = <span className="amount font-semibold text-ink">{formatFCFA(livret.months * r.mise)}</span> sur le cycle.
           {livret.excusedLines > 0 && (
             <>
               {" "}Arrivée en cours de mois : {livret.excusedLines} ligne{livret.excusedLines > 1 ? "s" : ""} d&apos;avant
@@ -179,7 +180,7 @@ function RecapSheet({ livret }: { livret: LivretData }) {
             <PiggyBank className="h-3 w-3" aria-hidden /> Ce que tu as réuni
           </p>
           <p className="amount mt-0.5 text-sm font-bold text-[#00806B]">{formatFCFA(r.encaisse)}</p>
-          <p className="amount mt-0.5 text-[10px] text-subtle">{r.sheetsComplete}/12 feuilles complètes</p>
+          <p className="amount mt-0.5 text-[10px] text-subtle">{r.sheetsComplete}/{livret.months} feuilles complètes</p>
         </div>
         <div className="rounded-lg bg-[#EEF4FD] px-3 py-2.5">
           <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
@@ -363,7 +364,7 @@ export function LivretSheets({
             <div>
               <p className="font-display text-sm font-bold text-ink">
                 {sheet.index}
-                <span className="text-subtle">/12</span> · {sheet.label}
+                <span className="text-subtle">/{livret.months}</span> · {sheet.label}
               </p>
               <p className="text-xs text-subtle">
                 {sheet.coveredLines}/{sheet.payable} lignes couvertes

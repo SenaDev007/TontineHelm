@@ -12,7 +12,7 @@ import { appendAudit } from "../lib/audit";
 import { assertWritable } from "../lib/tenant";
 import { planOf } from "../lib/plans";
 import { closingGap, formatFCFA } from "../lib/domain";
-import { LIVRET_DAYS, LIVRET_MONTHS, monthStart } from "../lib/livret";
+import { LIVRET_DAYS, monthStart, sheetsForCycleDays } from "../lib/livret";
 import { livretStop } from "../lib/tour";
 import { applyCollectionEvent } from "../lib/sync-engine";
 import { ensureShareToken, ensureStructureSlug, carnetUrl, entityUrl } from "../lib/share";
@@ -238,6 +238,13 @@ router.get(
 // suffit — le livret annuel démarre AUTOMATIQUEMENT au mois en cours (12 feuilles
 // mensuelles + récap). Le surnom du carnet est facultatif. Le lien personnel est
 // généré immédiatement, prêt à partager par WhatsApp ou e-mail.
+const cycleDaysField = z
+  .number()
+  .int()
+  .min(1, "La durée minimum d'un cycle est de 1 jour.")
+  .max(372, "La durée maximum d'un cycle est de 372 jours (livret annuel).")
+  .optional();
+
 const createClientSchema = z.object({
   fullName: z.string().min(2, "Saisis le nom complet du client."),
   phone: z.string().regex(/^\+?\d{8,15}$/, "Numéro invalide. Saisis le numéro complet, sans espace."),
@@ -246,6 +253,8 @@ const createClientSchema = z.object({
   idNumber: z.string().min(3, "Saisis le numéro de pièce d'identité.").optional().or(z.literal("")),
   dailyAmount: z.number().int().min(100, "La mise journalière minimum est de 100 FCFA."),
   label: z.string().max(60, "Le surnom du carnet est trop long.").optional().or(z.literal("")),
+  // Durée du cycle optionnelle (§8.14) : défaut 372 (livret annuel).
+  cycleDays: cycleDaysField,
 });
 
 router.post(
@@ -277,8 +286,10 @@ router.post(
       );
     }
 
-    // Livret annuel : démarre au mois en cours, détecté automatiquement.
+    // Livret à durée paramétrable (§8.14) : démarre au mois en cours, détecté
+    // automatiquement. Défaut 372 (livret annuel complet).
     const startsOn = monthStart(new Date());
+    const cycleDays = body.data.cycleDays ?? LIVRET_DAYS;
 
     // Numéro de carnet : séquence tenant, partagée avec le back-office.
     const last = await db.passbook.findFirst({ where: { tenantId }, orderBy: { number: "desc" } });
@@ -303,7 +314,7 @@ router.post(
         agentId: user.id,
         number: nextNumber,
         dailyAmount: body.data.dailyAmount,
-        cycleDays: LIVRET_DAYS,
+        cycleDays,
         startsOn,
         label: body.data.label || null,
       },
@@ -333,7 +344,8 @@ router.post(
         label: passbook.label,
         contributor: contributor.fullName,
         dailyAmount: body.data.dailyAmount,
-        months: LIVRET_MONTHS,
+        cycleDays,
+        months: sheetsForCycleDays(cycleDays),
         startsOn: startsOn.toISOString().slice(0, 10),
         source: "terrain",
       },
@@ -357,6 +369,8 @@ router.post(
 const createCarnetSchema = z.object({
   dailyAmount: z.number().int().min(100, "La mise journalière minimum est de 100 FCFA."),
   label: z.string().max(60, "Le surnom du carnet est trop long.").optional().or(z.literal("")),
+  // Durée du cycle optionnelle (§8.14) : défaut 372 (livret annuel).
+  cycleDays: cycleDaysField,
 });
 
 router.post(
@@ -381,6 +395,7 @@ router.post(
     const last = await db.passbook.findFirst({ where: { tenantId }, orderBy: { number: "desc" } });
     const nextNumber = String((last ? parseInt(last.number, 10) : 100) + 1).padStart(4, "0");
     const startsOn = monthStart(new Date());
+    const cycleDays = body.data.cycleDays ?? LIVRET_DAYS;
 
     const passbook = await db.passbook.create({
       data: {
@@ -389,7 +404,7 @@ router.post(
         agentId: user.id,
         number: nextNumber,
         dailyAmount: body.data.dailyAmount,
-        cycleDays: LIVRET_DAYS,
+        cycleDays,
         startsOn,
         label: body.data.label || null,
       },
@@ -405,7 +420,8 @@ router.post(
         label: passbook.label,
         contributor: contributor.fullName,
         dailyAmount: body.data.dailyAmount,
-        months: LIVRET_MONTHS,
+        cycleDays,
+        months: sheetsForCycleDays(cycleDays),
         startsOn: startsOn.toISOString().slice(0, 10),
         source: "terrain",
         additional: true,

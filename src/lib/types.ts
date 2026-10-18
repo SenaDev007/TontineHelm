@@ -82,6 +82,8 @@ export interface AdvanceOption {
 
 export interface LivretData {
   months: number;
+  /** Durée du cycle en lignes (§8.14) : 1..372, 372 = livret annuel. */
+  cycleDays: number;
   startsOn: string;
   /** Jour d'arrivée réel du cotisant — jamais en retard avant cette date. */
   effectiveStart: string;
@@ -194,6 +196,8 @@ export interface ContributorRow {
   neighborhood: string | null;
   idNumber: string | null;
   agent: string;
+  /** Agent référent courant (réassignation en cours de cycle, PARITE.md §8.13). */
+  agentId?: string;
   status: string;
   createdAt: string;
   shareToken: string | null;
@@ -203,6 +207,8 @@ export interface ContributorRow {
   carnets: {
     id: string; number: string; label: string | null; dailyAmount: number;
     balance: number; coveredLines: number; payableLines: number; missedLines: number; currentSheet: number; status: string;
+    /** Nombre de feuilles du livret (§8.14) — 12 en livret annuel. */
+    months?: number;
   }[];
   activeCarnets: number;
 }
@@ -271,6 +277,8 @@ export interface PassbookRow {
   agent: string;
   dailyAmount: number;
   cycleDays: number;
+  /** Nombre de feuilles du livret (§8.14) : 12 en livret annuel. */
+  months?: number;
   startsOn: string;
   status: string;
   balance: number;

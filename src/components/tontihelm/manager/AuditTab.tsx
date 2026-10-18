@@ -1,14 +1,18 @@
 "use client";
-// TontiHelm — journal d'audit (M8, écran 8) : chaîne de hash vérifiée, export par le contrôleur.
+// TontiHelm — journal d'audit (M8, écran 8, + décision n° 10 / PARITE.md §8.15) :
+// chaîne de hash vérifiée, export PDF / Excel GÉNÉRÉ PAR LE SERVEUR (marque
+// TontiHelm — mêmes générateurs que les autres rapports) avec filtre d'action
+// et période. L'export est journalisé (report_exported) : la sortie du journal
+// fait partie du journal.
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AuditPage, formatFCFA } from "@/lib/types";
-import { get } from "@/lib/client";
-import { downloadCsv, printReport } from "@/lib/export";
+import { downloadFile, get } from "@/lib/client";
 import { ExportMenu } from "./ExportMenu";
 import { Link2, ShieldCheck, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -27,14 +31,22 @@ const ACTION_LABELS: Record<string, string> = {
   contributor_created: "Cotisant créé",
   passbook_created: "Carnet créé",
   agent_created: "Agent créé",
+  agent_reassigned: "Agent réassigné",
   reminder_sent: "Rappel envoyé",
   structure_reactivated: "Structure réactivée",
+  structure_activated: "Structure activée",
+  subscription_read_only: "Lecture seule (abonnement)",
+  report_exported: "Rapport exporté",
+  device_revoked: "Appareil révoqué",
 };
 
 export function AuditTab({ structureName }: { structureName: string }) {
   const [data, setData] = useState<AuditPage | null>(null);
   const [page, setPage] = useState(1);
   const [action, setAction] = useState("all");
+  /* Période d'export (§8.15) : s'applique aux fichiers générés par le serveur. */
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -52,72 +64,32 @@ export function AuditTab({ structureName }: { structureName: string }) {
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
-  /* ── Export réel du journal : toutes les pages, filtre d'action appliqué ── */
+  /* ── Export réel du journal (§8.15) : PDF / Excel générés par le BACKEND, ──
+     filtres d'action et de période appliqués, chaîne vérifiée dans le fichier. */
   const [exporting, setExporting] = useState(false);
 
-  async function fetchAllAudit(): Promise<AuditPage["logs"]> {
-    const all = [] as AuditPage["logs"];
-    let p = 1;
-    for (let guard = 0; guard < 100; guard++, p++) {
-      const d = await get<AuditPage>(`/api/manager/audit?page=${p}${action !== "all" ? `&action=${action}` : ""}`);
-      all.push(...d.logs);
-      if (p * d.pageSize >= d.total || d.logs.length === 0) break;
-    }
-    return all;
-  }
-
-  function auditRows(logs: AuditPage["logs"]) {
-    return logs.map((l) => [
-      new Date(l.at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }),
-      l.actor,
-      l.actorRole,
-      ACTION_LABELS[l.action] ?? l.action,
-      JSON.stringify(l.payload),
-      l.hash.slice(0, 12),
-    ]);
-  }
-
-  async function exportCsv() {
+  async function exportJournal(format: "pdf" | "xlsx") {
     setExporting(true);
     try {
-      const logs = await fetchAllAudit();
-      const header = ["Horodatage", "Auteur", "Rôle", "Action", "Détail (JSON)", "Hash (début)"];
-      downloadCsv(`journal-audit-${new Date().toISOString().slice(0, 10)}`, [header, ...auditRows(logs)]);
-      toast({ title: "Export Excel prêt.", description: `${logs.length} lignes du journal téléchargées.` });
-    } catch {
-      toast({ title: "Export impossible", description: "Vérifie ta connexion puis réessaie." });
-    } finally {
-      setExporting(false);
-    }
-  }
-
-  async function exportPdf() {
-    setExporting(true);
-    try {
-      const logs = await fetchAllAudit();
-      printReport(
-        {
-          structure: structureName,
-          title: "Journal d'audit",
-          subtitle: `${action === "all" ? "Toutes les actions" : ACTION_LABELS[action] ?? action} · ${logs.length} lignes · chaîne ${data?.chainOk ? "intacte" : "INTERROMPUE"}`,
-        },
-        [
-          { header: "Horodatage" },
-          { header: "Auteur" },
-          { header: "Rôle" },
-          { header: "Action" },
-          { header: "Hash" },
-        ],
-        logs.map((l) => [
-          new Date(l.at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }),
-          l.actor,
-          l.actorRole,
-          ACTION_LABELS[l.action] ?? l.action,
-          l.hash.slice(0, 12) + "…",
-        ])
+      const stamp = new Date().toISOString().slice(0, 10);
+      const params = new URLSearchParams({ format });
+      if (action !== "all") params.set("action", action);
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+      await downloadFile(
+        `/api/manager/export/audit?${params.toString()}`,
+        `journal-audit-${action !== "all" ? `${action}-` : ""}${stamp}.${format}`
       );
-    } catch {
-      toast({ title: "Export impossible", description: "Vérifie ta connexion puis réessaie." });
+      setTimeout(() => {
+        toast({
+          title: format === "pdf" ? "Journal PDF prêt." : "Journal Excel prêt.",
+          description:
+            `${data?.total ?? "Toutes les"} lignes ${action !== "all" ? `de type « ${ACTION_LABELS[action] ?? action} » ` : ""}` +
+            `période ${from || to ? `${from || "origine"} → ${to || "aujourd'hui"}` : "complète"} — chaîne ${data?.chainOk ? "intacte" : "INTERROMPUE"}.`,
+        });
+      }, 600);
+    } catch (err) {
+      toast({ title: "Export impossible", description: err instanceof Error ? err.message : "Réessaie." });
     } finally {
       setExporting(false);
     }
@@ -147,12 +119,19 @@ export function AuditTab({ structureName }: { structureName: string }) {
               </p>
             </div>
           </div>
-          <ExportMenu onExcel={exportCsv} onPdf={exportPdf} label="Exporter le journal" busy={exporting} excelLabel="Excel (CSV)" pdfLabel="PDF (impression)" />
+          <ExportMenu
+            onExcel={() => exportJournal("xlsx")}
+            onPdf={() => exportJournal("pdf")}
+            label="Exporter le journal"
+            busy={exporting}
+            excelLabel="Excel (.xlsx)"
+            pdfLabel="PDF"
+          />
         </CardContent>
       </Card>
 
-      {/* Filtres */}
-      <div className="flex items-center justify-between gap-3">
+      {/* Filtres : action + période d'export */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Select value={action} onValueChange={(v) => { setAction(v); setPage(1); }}>
           <SelectTrigger className="h-11 w-full border-line sm:w-56" aria-label="Filtrer par type d'action">
             <SelectValue />
@@ -166,6 +145,25 @@ export function AuditTab({ structureName }: { structureName: string }) {
             ))}
           </SelectContent>
         </Select>
+        <div className="flex items-center gap-2">
+          <Input
+            type="date"
+            value={from}
+            max={to || undefined}
+            onChange={(e) => setFrom(e.target.value)}
+            className="h-11 w-full border-line sm:w-40"
+            aria-label="Début de période d'export"
+          />
+          <span className="text-xs text-subtle" aria-hidden>→</span>
+          <Input
+            type="date"
+            value={to}
+            min={from || undefined}
+            onChange={(e) => setTo(e.target.value)}
+            className="h-11 w-full border-line sm:w-40"
+            aria-label="Fin de période d'export"
+          />
+        </div>
         <p className="hidden text-sm text-subtle sm:block">Page {data.page}/{totalPages}</p>
       </div>
 

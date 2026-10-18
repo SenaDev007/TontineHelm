@@ -52,7 +52,7 @@ export function CollectionRow({
             <MapPin className="h-3.5 w-3.5 tontihelm-icon" aria-hidden />
             {stop.neighborhood}
           </span>
-          <span>F{stop.livret?.currentSheet ?? "?"}/12 · L{stop.livret?.dueLineInSheet ?? "?"}{stop.passbookLabel ? ` · ${stop.passbookLabel}` : ""}</span>
+          <span>F{stop.livret?.currentSheet ?? "?"}/{stop.livret?.months ?? 12} · L{stop.livret?.dueLineInSheet ?? "?"}{stop.passbookLabel ? ` · ${stop.passbookLabel}` : ""}</span>
           <span>Solde {formatFCFA(stop.balance)}</span>
           {pendingLocal > 0 && (
             <span className="font-medium text-[#A66A00]">{pendingLocal} en attente</span>

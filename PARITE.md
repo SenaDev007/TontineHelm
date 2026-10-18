@@ -429,8 +429,9 @@ nullable. Aucune table web existante n'est lue ou modifiée par les routes
 
 ### 11.4 Reste à faire (hors phase 1, planifié)
 
-- §8.12-§8.15 (web d'abord) : réassignation d'agent, cycles courts
-  paramétrables, bascule `past_due→read_only`, export du journal d'audit.
+- ~~§8.12-§8.15 (web d'abord) : réassignation d'agent, cycles courts
+  paramétrables, bascule `past_due→read_only`, export du journal d'audit.~~
+  **LIVRÉS le 18/10/2026 (voir §11.6).**
 - §8.10/§8.11 : `GET /v1/app/version` (phase 6), espace cotisant `/v1/me/*`
   (phase 3).
 - Phase 2 : SQLite chiffrée + outbox + écrans agent ; branchement d'une
@@ -471,3 +472,62 @@ nullable. Aucune table web existante n'est lue ou modifiée par les routes
   est direct) ; le filet mobile de 30 s garantit de toute façon la fraîcheur
   des données. L'écran Encaisser mobile est en ligne immédiat — la file hors
   ligne (outbox) reste planifiée en phase 2, conformément au PARITE.
+
+### 11.6 Livraison « ajouts web d'abord » — 18 octobre 2026 (fin de journée)
+
+Les quatre fonctions décidées en phase 0 (décisions n° 4, 5, 6 et 10) sont
+livrées **web d'abord**, conformément à la règle « le mobile reproduit » : le
+backend sert déjà tout ce que les écrans mobiles des phases 2-4 consommeront.
+
+- **§8.13 Réassignation d'agent (décision n° 4)** :
+  `POST /api/manager/contributors/:id/reassign` — tous les carnets ACTIFS
+  (`active|late`) du cotisant suivent le nouvel agent (agent cible vérifié :
+  actif, rôle agent, même structure) ; les carnets terminés et TOUTES les
+  écritures passées conservent leur agent d'origine ; écriture d'audit
+  `agent_reassigned` (source, cible, nombre de carnets) ; événement temps réel
+  `contributor` publié (tournées des deux agents rafraîchies web ET mobile).
+  Interface web : bouton « Réassigner » (tableau + cartes) avec dialogue de
+  choix d'agent dans l'onglet Cotisants (gérant/propriétaire, hors lecture
+  seule). Tests : 5 (dont isolation multi-structure, rejet même agent, agent
+  non gérant, écriture passée conservée).
+- **§8.15 Export du journal d'audit (décision n° 10)** :
+  `GET /api/manager/export/audit?format=pdf|xlsx[&action=&from=&to=]` —
+  générateurs serveur de marque (mêmes bandeaux/pieds paginés que les autres
+  rapports), filtres action + période (bornes incluses, garde 5 ans), chaîne
+  vérifiée affichée dans le fichier ET la journalisation `report_exported`
+  (entity `audit`) AVANT l'envoi — la sortie du journal fait partie du
+  journal. Onglet Audit du web : export serveur PDF/Excel (remplace le CSV
+  client et l'impression navigateur), filtre d'action existant + bornes de
+  période. Tests : 4 (PDF, Excel, filtre, période inversée).
+- **§8.12 Bascule `past_due → read_only` (décision n° 6)** : 15 jours
+  d'impayé après la fin de période. Vérification AU FIL DES REQUÊTES
+  (`assertWritable` : la bascule a lieu puis l'écriture courante est refusée
+  `read_only`) + passe quotidienne `flipOverdueSubscriptions()` branchée sur
+  `register/cleanup` (patron « au passage, sans cron », renvoie
+  `readOnlyFlipped`). Bascule au plus une fois (garde de statut
+  `updateMany`), journalisée `subscription_read_only` ; sortie par le
+  règlement du renouvellement (période repoussée + retour `active` — chemin
+  testé). Tests : 3 (refus + journalisation unique, passe quotidienne,
+  rétablissement).
+- **§8.14 Cycles courts paramétrables (décision n° 5)** :
+  `Passbook.cycleDays` paramétrable à la création (gérant ET agent, champ
+  optionnel « durée du cycle »), bornes 1..372, défaut 372 = livret annuel.
+  Moteur `packages/domain/src/livret.ts` généralisé : feuilles de 31 lignes,
+  dernière ligne de CHAQUE feuille = mise entreprise (y compris la dernière
+  feuille partielle, p. ex. 45 jours = 31 + 14), lignes excusées d'avant
+  l'arrivée (prorata) conservées, avances et `advancePreview` bornées par la
+  durée. **Comportement à 372 strictement identique** (tests de
+  non-régression 41/41 verts, `372 explicite ≡ champ absent` prouvé par test).
+  Sync-engine : garde `day_out_of_cycle` et `dayIndex` bornés par la durée du
+  carnet ; tournée web ET pull mobile exposent `months`/`cycleDays` ;
+  affichages web (« F2/12 » → dynamique, formulaires, livret détaillé, espace
+  cotisant public) et mobile passés au nombre de feuilles réel. Tests domaine
+  nouveaux : 14 (bornes 1/45/372, mois d'arrivée proratisé, entreprises,
+  avances) ; tests backend : 4 (création 45 j, défaut 372, bornes 0/400,
+  encaissement borné `amount_exceeds`).
+- **Vérifications de la livraison** : suite backend complète verte (29
+  fichiers d'assertions + 16 tests `manager-parite` nouveaux, 0 échec) contre
+  PostgreSQL ; domaine 47/47 ; `tsc` backend/racine/mobile 0 erreur ;
+  `next build` production vert ; sync packages↔backend diff nul. Les tests
+  d'intégration exigent PostgreSQL (`DATABASE_URL`) — exécutés ici sur une
+  base embarquée, reproductibles sur ta machine via `cd backend && DATABASE_URL="…" bun test`.

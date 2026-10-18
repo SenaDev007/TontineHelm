@@ -275,7 +275,7 @@ export function AgentApp({ user, onLogout }: { user: SessionUser; onLogout: () =
       passbookNumber: carnet.number,
       passbookLabel: carnet.label,
       dailyAmount: carnet.dailyAmount,
-      cycleDays: 372,
+      cycleDays: carnet.livret.cycleDays ?? 372,
       startsOn: carnet.livret.startsOn,
       livret: carnet.livret,
       dayIndex: carnet.livret.coveredLines,

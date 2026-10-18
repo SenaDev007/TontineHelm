@@ -16,6 +16,7 @@ import { z } from "zod";
 import { db } from "../lib/db";
 import { hashPin, createSession, setSessionCookie, errorResponse, ApiError, h } from "../lib/auth";
 import { appendAudit } from "../lib/audit";
+import { flipOverdueSubscriptions } from "../lib/tenant";
 import { PLANS } from "../lib/plans";
 import { ensureStructureSlug, entityUrl } from "../lib/share";
 import {
@@ -473,7 +474,9 @@ function safeDraftOf(payment: { draft: string }): SignupDraft | null {
 }
 
 // Nettoyage : les intentions de paiement abandonnées depuis plus de 24 h expirent
-// (pas de cron nécessaire — exécuté au passage sur /register).
+// (pas de cron nécessaire — exécuté au passage sur /register). La même passe
+// fait la bascule quotidienne past_due → read_only (§8.12) : 15 jours d'impayé
+// après la fin de période, journalisée au plus une fois par structure.
 router.post(
   "/register/cleanup",
   h(async (_req, res) => {
@@ -482,7 +485,8 @@ router.post(
       where: { status: "pending", createdAt: { lt: yesterday }, structureId: null },
       data: { status: "expired" },
     });
-    res.json({ ok: true, expired: result.count });
+    const flipped = await flipOverdueSubscriptions();
+    res.json({ ok: true, expired: result.count, readOnlyFlipped: flipped });
   })
 );
 

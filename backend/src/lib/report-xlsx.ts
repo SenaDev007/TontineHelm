@@ -7,6 +7,7 @@
 // page ajustée à la largeur (paysage A4).
 import ExcelJS from "exceljs";
 import {
+  AuditReport,
   CollectionsReport,
   ContributorsReport,
   formatDayShort,
@@ -402,4 +403,133 @@ export async function collectionsXlsx(report: CollectionsReport): Promise<Buffer
 
   const out = await wb.xlsx.writeBuffer();
   return Buffer.from(out as unknown as ArrayBuffer);
+}
+
+/* ── Journal d'audit (décision n° 10, PARITE.md §8.15) ── */
+
+export async function auditXlsx(report: AuditReport): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "TontiHelm";
+  wb.created = report.generatedAt;
+  const ws = wb.addWorksheet("Journal d'audit", { views: [{ state: "frozen", ySplit: 6 }] });
+
+  const HEADERS = ["N°", "Date", "Heure", "Auteur", "Rôle", "Action", "Entité", "Détail (JSON)", "Hash"];
+  const WIDTHS = [8, 12, 9, 22, 13, 22, 14, 60, 34];
+  ws.columns = HEADERS.map((h, i) => ({ header: "", key: `c${i}`, width: WIDTHS[i] }));
+  const LAST = HEADERS.length; // 9 colonnes (A..I)
+
+  titleBlock(
+    ws,
+    LAST,
+    report.structure.name,
+    "Journal d'audit",
+    [
+      `Généré le ${formatDateTimeLong(report.generatedAt)}`,
+      `Période : ${report.period.label}${report.actionFilter ? ` · action « ${report.actionFilter} »` : ""}`,
+    ],
+    ""
+  );
+
+  // Ligne 4 : résumé ; ligne 5 : liseré jaune ; ligne 6 : en-têtes.
+  const summaryRow = ws.getRow(4);
+  ws.mergeCells(4, 1, 4, LAST);
+  const sum = summaryRow.getCell(1);
+  sum.value =
+    `${formatNumberFr(report.totals.rows)} lignes · ${report.totals.actions} type${report.totals.actions > 1 ? "s" : ""} d'action · ` +
+    `chaîne d'audit ${report.chainOk ? "INTACTE" : "INTERROMPUE"}`;
+  sum.font = { name: "Calibri", size: 9, color: { argb: report.chainOk ? C.ink : C.red } };
+  sum.alignment = { horizontal: "left", vertical: "middle" };
+  summaryRow.height = 14;
+
+  const stripRow = ws.getRow(5);
+  for (let col = 1; col <= LAST; col += 1) {
+    const cell = stripRow.getCell(col);
+    cell.fill = fill(C.yellow);
+    cell.border = thin(C.yellow);
+  }
+  stripRow.height = 4;
+
+  const headerRow = ws.getRow(6);
+  headerRow.height = 22;
+  HEADERS.forEach((h, i) => {
+    const cell = headerRow.getCell(i + 1);
+    cell.value = h;
+    cell.font = { name: "Calibri", size: 10, bold: true, color: { argb: C.white } };
+    cell.fill = fill(C.blue);
+    cell.border = thin(C.blue);
+    cell.alignment = { horizontal: i === 0 ? "right" : "left", vertical: "middle" };
+  });
+  ws.autoFilter = { from: { row: 6, column: 1 }, to: { row: 6, column: LAST } };
+
+  let r = 7;
+  report.rows.forEach((row, idx) => {
+    const x = ws.getRow(r);
+    x.height = 15;
+    const values: (string | number | null)[] = [
+      row.seq,
+      formatDayShort(row.at),
+      formatTime(row.at),
+      row.actor,
+      roleLabelFr(row.actorRole),
+      row.action,
+      row.entity,
+      row.payload,
+      row.hash,
+    ];
+    values.forEach((v, i) => {
+      const cell = x.getCell(i + 1);
+      cell.value = v;
+      cell.font = { name: "Calibri", size: 9.5, color: { argb: C.ink } };
+      cell.border = thin();
+      if (i === 0) cell.alignment = { horizontal: "right", vertical: "middle" };
+      else if (i === 1 || i === 2) cell.alignment = { horizontal: "center", vertical: "middle" };
+      else cell.alignment = { horizontal: "left", vertical: "middle" };
+      if (idx % 2 === 1) cell.fill = fill(C.zebra);
+    });
+    x.getCell(8).font = { name: "Consolas", size: 8.5, color: { argb: C.subtle } };
+    x.getCell(9).font = { name: "Consolas", size: 8.5, color: { argb: C.subtle } };
+    r += 1;
+  });
+
+  if (report.rows.length === 0) {
+    const empty = ws.getRow(r);
+    ws.mergeCells(r, 1, r, LAST);
+    empty.getCell(1).value = "Aucune entrée pour ces filtres.";
+    empty.getCell(1).font = { name: "Calibri", size: 10, italic: true, color: { argb: C.subtle } };
+    empty.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+    r += 1;
+  }
+
+  // Totaux + état de la chaîne.
+  const totalRow = ws.getRow(r);
+  ws.mergeCells(r, 1, r, LAST - 1);
+  const tl = totalRow.getCell(1);
+  tl.value = `TOTAL DU JOURNAL — ${formatNumberFr(report.totals.rows)} lignes · chaîne d'audit ${report.chainOk ? "intacte" : "INTERROMPUE"}`;
+  tl.font = { name: "Calibri", size: 10, bold: true, color: { argb: report.chainOk ? C.blue : C.red } };
+  tl.alignment = { horizontal: "left", vertical: "middle" };
+  totalRow.getCell(LAST).value = report.chainOk ? "Vérifiée" : "À inspecter";
+  totalRow.getCell(LAST).font = { name: "Calibri", size: 10, bold: true, color: { argb: report.chainOk ? C.teal : C.red } };
+  totalRow.getCell(LAST).alignment = { horizontal: "right", vertical: "middle" };
+  for (let col = 1; col <= LAST; col += 1) {
+    const cell = totalRow.getCell(col);
+    cell.fill = fill(C.blueSoft);
+    cell.border = thin(C.blueSoft);
+  }
+  totalRow.height = 19;
+
+  applyPrintSetup(ws, "Journal d'audit", report.structure.name, formatDayShort(report.generatedAt));
+
+  const out = await wb.xlsx.writeBuffer();
+  return Buffer.from(out as unknown as ArrayBuffer);
+}
+
+function roleLabelFr(role: string): string {
+  switch (role) {
+    case "owner": return "propriétaire";
+    case "manager": return "gérante";
+    case "agent": return "agent";
+    case "controller": return "contrôleur";
+    case "admin": return "admin";
+    default: return "système";
+  }
 }

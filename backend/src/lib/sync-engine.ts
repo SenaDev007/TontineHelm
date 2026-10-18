@@ -12,7 +12,9 @@ import { ApiError } from "./auth";
 import { appendAudit } from "./audit";
 import { publishTenantEvent } from "./events";
 import { passbookBalance, paidDays } from "./domain";
-import { LIVRET_DAYS, LIVRET_MONTHS, buildLivret, firstPayableLine, monthStart } from "./livret";
+import {
+  buildLivret, clampCycleDays, firstPayableLine, monthStart, sheetsForCycleDays,
+} from "./livret";
 
 /** Entrée d'un événement — compatible avec les schémas /api ET /v1 (packages/schemas). */
 export interface SyncEventInput {
@@ -70,16 +72,18 @@ export async function applyCollectionEvent(opts: {
       409
     );
   }
-  // Journée couverte (legacy) : elle doit tomber dans les 12 mois du livret.
+  // Journée couverte (legacy) : elle doit tomber dans les feuilles du livret
+  // (durée du cycle §8.14 — 372 par défaut, moins en cycle court).
   let coversOn: Date | null = null;
   if (ev.coversOn) {
     coversOn = new Date(`${ev.coversOn}T00:00:00.000Z`);
     if (Number.isNaN(coversOn.getTime())) {
       throw new ApiError("invalid_input", "Journée couverte invalide.");
     }
+    const cycleDays = clampCycleDays(passbook.cycleDays);
     const livretStart = monthStart(passbook.startsOn);
     const livretEnd = new Date(livretStart);
-    livretEnd.setUTCMonth(livretEnd.getUTCMonth() + LIVRET_MONTHS);
+    livretEnd.setUTCMonth(livretEnd.getUTCMonth() + sheetsForCycleDays(cycleDays));
     if (coversOn < livretStart || coversOn >= livretEnd) {
       throw new ApiError(
         "day_out_of_cycle",
@@ -103,10 +107,10 @@ export async function applyCollectionEvent(opts: {
   }
   // Ligne du livret : position séquentielle après pose de l'écriture. Les
   // lignes d'avant l'arrivée du cotisant sont excusées : la numérotation
-  // démarre à sa première ligne encaissable.
+  // démarre à sa première ligne encaissable. Bornée par la durée du cycle.
   const dayIndex = Math.min(
     firstPayableLine(passbook) + paidDays(balance + ev.amount, passbook.dailyAmount) - 1,
-    LIVRET_DAYS
+    clampCycleDays(passbook.cycleDays)
   );
   const collectedAt = new Date(ev.collectedAt);
 

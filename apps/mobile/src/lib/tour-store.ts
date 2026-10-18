@@ -34,6 +34,10 @@ export interface PullStop {
   statusLabel: string;
   livret: {
     currentSheet: number;
+    /** Nombre de feuilles du livret (§8.14) : 12 en livret annuel. */
+    months?: number;
+    /** Durée du cycle en lignes (§8.14) : 1..372, 372 par défaut. */
+    cycleDays?: number;
     dueLineInSheet: number;
     lineDue: number;
     coveredLines: number;

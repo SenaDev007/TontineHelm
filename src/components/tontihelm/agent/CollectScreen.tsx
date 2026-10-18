@@ -197,7 +197,8 @@ export function CollectScreen({
   const activePreset = advanceOptions.find((o) => o.amount === advanceValue) ?? null;
 
   // Aperçu partagé web ↔ mobile (packages/domain) : jusqu'où l'avance couvre,
-  // ligne entamée, reste à prendre après l'écriture.
+  // ligne entamée, reste à prendre après l'écriture. cycleDays suit la durée
+  // du carnet (§8.14 — 372 par défaut, moins en cycle court).
   const preview = useMemo(() => {
     if (!stop || mode !== "advance") return null;
     return advancePreview(
@@ -209,6 +210,7 @@ export function CollectScreen({
         lineDue: stop.livret.lineDue,
         attendu: stop.livret.recap.attendu,
         sheets: stop.livret.sheets,
+        cycleDays: stop.livret.cycleDays,
       },
       advanceValue
     );
@@ -260,7 +262,7 @@ export function CollectScreen({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[15px] font-semibold text-ink">{s.contributorName}</p>
                 <p className="mt-0.5 text-xs text-subtle">
-                  {s.neighborhood} · F{s.livret.currentSheet}/12 · L{s.livret.dueLineInSheet} · {formatFCFA(s.dailyAmount)}
+                  {s.neighborhood} · F{s.livret.currentSheet}/{s.livret.months ?? 12} · L{s.livret.dueLineInSheet} · {formatFCFA(s.dailyAmount)}
                 </p>
               </div>
               <ChevronRight className="h-5 w-5 shrink-0 text-subtle" aria-hidden />
@@ -340,7 +342,7 @@ export function CollectScreen({
               </p>
               <p className="font-display mt-0.5 text-xl font-bold text-ink">{stop.contributorName}</p>
               <p className="mt-0.5 text-sm text-subtle">
-                Feuille {sheet.index}/12 ({sheet.label}) · ligne {stop.livret.dueLineInSheet} · {stop.neighborhood}
+                Feuille {sheet.index}/{stop.livret.months ?? 12} ({sheet.label}) · ligne {stop.livret.dueLineInSheet} · {stop.neighborhood}
               </p>
             </div>
             <PassbookStatusBadge status={stop.status} />

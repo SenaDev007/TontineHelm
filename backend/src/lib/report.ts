@@ -278,3 +278,94 @@ export function formatDateTimeLong(d: Date): string {
     timeZone: "UTC",
   })} à ${formatTime(d)}`;
 }
+
+// ── Journal d'audit (décision n° 10, PARITE.md §8.15) ─────────────────────────
+// Export du journal complet d'une structure : chaque ligne horodatée, son auteur,
+// son action, le détail (payload JSON) et l'empreinte de chaînage — l'ordre des
+// numéros de séquence EST l'ordre de scellement de la chaîne.
+
+import { verifyAuditChain } from "./audit";
+
+export interface AuditReportRow {
+  seq: number;
+  at: Date;
+  actor: string;
+  actorRole: string;
+  action: string;
+  entity: string;
+  entityId: string | null;
+  payload: string; // JSON compact (une ligne)
+  hash: string;
+}
+
+export interface AuditReport {
+  structure: ReportStructure;
+  generatedAt: Date;
+  actionFilter: string | null;
+  period: { from: Date | null; to: Date | null; label: string };
+  chainOk: boolean;
+  rows: AuditReportRow[];
+  totals: { rows: number; actions: number };
+}
+
+/** Journal d'audit exportable : filtre d'action et période (bornes inclusives). */
+export async function buildAuditReport(
+  tenantId: string,
+  opts: { action?: string | undefined; from?: Date | undefined; to?: Date | undefined } = {}
+): Promise<AuditReport> {
+  const toExclusive = opts.to ? new Date(opts.to.getTime() + 24 * 60 * 60 * 1000) : undefined;
+
+  const [structure, logs, chainOk] = await Promise.all([
+    db.structure.findUnique({
+      where: { id: tenantId },
+      select: { name: true, city: true, slug: true },
+    }),
+    db.auditLog.findMany({
+      where: {
+        tenantId,
+        ...(opts.action ? { action: opts.action } : {}),
+        ...(opts.from || toExclusive
+          ? { at: { ...(opts.from ? { gte: opts.from } : {}), ...(toExclusive ? { lt: toExclusive } : {}) } }
+          : {}),
+      },
+      include: { actor: { select: { fullName: true, role: true } } },
+      orderBy: { seq: "asc" },
+    }),
+    verifyAuditChain(tenantId),
+  ]);
+
+  const rows: AuditReportRow[] = logs.map((l) => ({
+    seq: Number(l.seq),
+    at: l.at,
+    actor: l.actor?.fullName ?? "Système",
+    actorRole: l.actor?.role ?? "system",
+    action: l.action,
+    entity: l.entity,
+    entityId: l.entityId,
+    payload: JSON.stringify(JSON.parse(l.payload)),
+    hash: l.hash,
+  }));
+
+  const fmtDay = (d: Date) =>
+    d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  const periodLabel = opts.from || opts.to
+    ? `du ${opts.from ? fmtDay(opts.from) : "l'origine"} au ${opts.to ? fmtDay(opts.to) : "aujourd'hui"}`
+    : "depuis l'origine";
+
+  return {
+    structure: {
+      name: structure?.name ?? "Structure",
+      city: structure?.city ?? null,
+      slug: structure?.slug ?? null,
+    },
+    generatedAt: new Date(),
+    actionFilter: opts.action ?? null,
+    period: { from: opts.from ?? null, to: opts.to ?? null, label: periodLabel },
+    chainOk,
+    rows,
+    totals: {
+      rows: rows.length,
+      actions: new Set(rows.map((r) => r.action)).size,
+    },
+  };
+}

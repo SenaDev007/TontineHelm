@@ -322,6 +322,23 @@ bun run dev
 Sans `NEXT_PUBLIC_API_URL`, le frontend appelle l'API en relatif et transmet le port du
 backend via le paramètre `XTransformPort` (utile derrière la passerelle de préproduction).
 
+### Tests
+
+```bash
+# Tests du backend (exigent PostgreSQL — la même base que le dev suffit)
+cd backend
+DATABASE_URL="postgresql://…" bun test
+
+# Tests du paquet partagé (purs, aucune base requise)
+cd packages/domain
+bun test
+```
+
+La suite backend couvre : non-régression du domaine (livret annuel, lignes
+excusées), avances partielles, canal mobile `/v1` (auth, sync, pull, temps
+réel), enveloppe FedaPay, et les ajouts PARITE.md §8.12-§8.15 (réassignation
+d'agent, export du journal d'audit, bascule read_only, cycles courts).
+
 ## Rôles et parcours
 
 | Rôle | Ce qu'il fait |

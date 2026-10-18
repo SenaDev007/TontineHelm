@@ -16,7 +16,7 @@ import { ContributorRow, formatFCFA } from "@/lib/types";
 import { downloadFile, get, isOfflineQueued, post } from "@/lib/client";
 import { useSyncDone } from "@/lib/offline/hooks";
 import { usePlanQuota } from "./usePlanQuota";
-import { UserPlus, Search, Phone, MapPin, IdCard, Link2 } from "lucide-react";
+import { UserPlus, Search, Phone, MapPin, IdCard, Link2, ArrowLeftRight } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean; structureName: string }) {
@@ -33,6 +33,12 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
     passbookNumber: string | null;
     url: string;
   } | null>(null);
+  /* Réassignation d'agent en cours de cycle (PARITE.md §8.13, décision n° 4) :
+     tous les carnets actifs du cotisant suivent le nouvel agent, la tournée du
+     jour est recalculée pour les deux agents. */
+  const [reassign, setReassign] = useState<ContributorRow | null>(null);
+  const [reassignAgent, setReassignAgent] = useState("");
+  const [reassigning, setReassigning] = useState(false);
   const quota = usePlanQuota();
   const contributorsQuotaReached =
     !readOnly && quota !== null && (rows?.length ?? 0) >= quota.usage.contributorsQuota;
@@ -103,6 +109,31 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
       });
     } catch (err) {
       toast({ title: "Lien indisponible", description: err instanceof Error ? err.message : "Réessaie." });
+    }
+  }
+
+  /* Réassignation : le serveur déplace les carnets actifs, journalise l'écriture
+     d'audit et publie l'événement temps réel aux tournées des deux agents. */
+  async function doReassign() {
+    if (!reassign || !reassignAgent) return;
+    setReassigning(true);
+    try {
+      const res = await post<{ message: string; passbooksMoved?: number }>(
+        `/api/manager/contributors/${reassign.id}/reassign`,
+        { agentId: reassignAgent }
+      );
+      if (isOfflineQueued(res)) {
+        toast({ title: "Enregistré hors ligne.", description: "La réassignation partira au serveur dès le retour du réseau." });
+      } else {
+        toast({ title: "Cotisant réassigné.", description: res.message });
+        load();
+      }
+      setReassign(null);
+      setReassignAgent("");
+    } catch (err) {
+      toast({ title: "Réassignation impossible", description: err instanceof Error ? err.message : "Réessaie." });
+    } finally {
+      setReassigning(false);
     }
   }
 
@@ -271,7 +302,7 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
                       r.carnets.map((k) => (
                         <p key={k.id} className="amount text-sm text-ink">
                           {k.number}{k.label ? <span className="text-xs font-normal text-subtle"> · {k.label}</span> : null}{" "}
-                          <span className="text-xs text-subtle">F{k.currentSheet}/12 · L{k.coveredLines}/{k.payableLines}</span>
+                          <span className="text-xs text-subtle">F{k.currentSheet}/{k.months ?? 12} · L{k.coveredLines}/{k.payableLines}</span>
                         </p>
                       ))
                     ) : (
@@ -285,16 +316,30 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
                     {worst ? <PassbookStatusBadge status={worst.status} /> : <span className="text-xs text-subtle">—</span>}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="border-[#9ED9D3] bg-[#F0FBFA] text-primary hover:bg-[#DFF6F4] hover:text-primary"
-                      onClick={() => openShare(r)}
-                      aria-label={`Lien du carnet de ${r.fullName}`}
-                      title="Partager le lien du carnet (WhatsApp / e-mail)"
-                    >
-                      <Link2 className="h-4 w-4" aria-hidden /> <span className="hidden xl:inline">Partager</span>
-                    </Button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      {!readOnly && agents.length > 1 && r.status === "active" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-line"
+                          onClick={() => { setReassign(r); setReassignAgent(""); }}
+                          aria-label={`Réassigner ${r.fullName} à un autre agent`}
+                          title="Transférer ce cotisant à un autre agent (carnets actifs inclus)"
+                        >
+                          <ArrowLeftRight className="h-4 w-4" aria-hidden /> <span className="hidden xl:inline">Réassigner</span>
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-[#9ED9D3] bg-[#F0FBFA] text-primary hover:bg-[#DFF6F4] hover:text-primary"
+                        onClick={() => openShare(r)}
+                        aria-label={`Lien du carnet de ${r.fullName}`}
+                        title="Partager le lien du carnet (WhatsApp / e-mail)"
+                      >
+                        <Link2 className="h-4 w-4" aria-hidden /> <span className="hidden xl:inline">Partager</span>
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
                 );
@@ -329,7 +374,7 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
                   {r.carnets.map((k) => (
                     <div key={k.id} className="flex items-center justify-between rounded-lg bg-[#F4F7FB] px-3 py-2">
                       <span className="amount text-xs text-subtle">
-                        Carnet {k.number}{k.label ? ` · ${k.label}` : ""} · F{k.currentSheet}/12
+                        Carnet {k.number}{k.label ? ` · ${k.label}` : ""} · F{k.currentSheet}/{k.months ?? 12}
                       </span>
                       <span className="amount text-sm font-semibold text-ink">{formatFCFA(k.balance)}</span>
                     </div>
@@ -347,11 +392,62 @@ export function ContributorsTab({ readOnly, structureName }: { readOnly: boolean
               >
                 <Link2 className="h-4 w-4" aria-hidden /> Lien du carnet (WhatsApp / e-mail)
               </Button>
+              {!readOnly && agents.length > 1 && r.status === "active" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 w-full border-line"
+                  onClick={() => { setReassign(r); setReassignAgent(""); }}
+                >
+                  <ArrowLeftRight className="h-4 w-4" aria-hidden /> Réassigner à un autre agent
+                </Button>
+              )}
             </CardContent>
           </Card>
           );
         })}
       </div>
+
+      {/* Réassignation d'agent en cours de cycle (§8.13) */}
+      <Dialog open={reassign !== null} onOpenChange={(v) => { if (!v) { setReassign(null); setReassignAgent(""); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display">Réassigner {reassign?.fullName}</DialogTitle>
+            <DialogDescription>
+              Tous ses carnets actifs suivront le nouvel agent ; les encaissements déjà écrits restent à leur
+              agent d'origine. La tournée du jour est recalculée pour les deux agents dès la validation.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="space-y-2">
+              <Label>Nouvel agent</Label>
+              <Select value={reassignAgent} onValueChange={setReassignAgent}>
+                <SelectTrigger className="h-11 border-line" aria-label="Nouvel agent">
+                  <SelectValue placeholder="Choisis le nouvel agent" />
+                </SelectTrigger>
+                <SelectContent>
+                  {agents
+                    .filter((a) => a.id !== reassign?.agentId)
+                    .map((a) => (
+                      <SelectItem key={a.id} value={a.id}>{a.fullName}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="rounded-lg bg-[#F4F7FB] p-3 text-xs leading-relaxed text-subtle">
+              Agent actuel : <span className="font-medium text-ink">{reassign?.agent}</span> ·{" "}
+              {reassign?.activeCarnets ?? 0} carnet{(reassign?.activeCarnets ?? 0) > 1 ? "s" : ""} actif
+              {(reassign?.activeCarnets ?? 0) > 1 ? "s" : ""} {(reassign?.activeCarnets ?? 0) > 1 ? "suivront" : "suivra"} le nouvel agent.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setReassign(null); setReassignAgent(""); }} className="border-line">Annuler</Button>
+            <Button onClick={doReassign} disabled={reassigning || !reassignAgent} className="bg-primary text-primary-foreground hover:bg-primary-hover">
+              {reassigning ? "Transfert…" : "Transférer au nouvel agent"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Partage du lien de carnet */}
       <ShareLinkDialog

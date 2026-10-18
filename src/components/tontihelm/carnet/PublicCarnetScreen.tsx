@@ -310,7 +310,9 @@ export function PublicCarnetScreen({ token }: { token: string }) {
                         {pb.label ? <span className="font-normal text-subtle"> · {pb.label}</span> : null}
                       </p>
                       <p className="text-xs text-subtle">
-                        Livret annuel · 12 feuilles mensuelles · mise {formatFCFA(pb.dailyAmount)}
+                        {pb.livret.months === 12
+                          ? "Livret annuel · 12 feuilles mensuelles"
+                          : `Cycle de ${pb.livret.cycleDays ?? pb.livret.months * 31} jours · ${pb.livret.months} feuille${pb.livret.months > 1 ? "s" : ""}`} · mise {formatFCFA(pb.dailyAmount)}
                       </p>
                     </div>
                     <StatusPill status={pb.status} label={pb.statusLabel} />

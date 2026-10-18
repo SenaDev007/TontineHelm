@@ -27,8 +27,12 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
-    contributorId: "", dailyAmount: "", label: "",
+    contributorId: "", dailyAmount: "", label: "", cycleDays: "",
   });
+  /* Durée du cycle (§8.14) : vide = 372 (livret annuel). Feuilles = ceil(n/31). */
+  const cycleDaysNum = parseInt(form.cycleDays, 10) || 0;
+  const effectiveCycle = cycleDaysNum > 0 ? Math.min(Math.max(cycleDaysNum, 1), 372) : 372;
+  const sheetsCount = Math.ceil(effectiveCycle / 31);
 
   const load = () => {
     get<{ passbooks: PassbookRow[] }>("/api/manager/passbooks")
@@ -81,15 +85,22 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
         contributorId: form.contributorId,
         dailyAmount: parseInt(form.dailyAmount, 10) || 0,
         label: form.label.trim(),
+        ...(cycleDaysNum > 0 ? { cycleDays: cycleDaysNum } : {}),
       });
       if (isOfflineQueued(res)) {
         toast({ title: "Enregistré hors ligne.", description: "Le carnet partira au serveur dès le retour du réseau." });
       } else {
-        toast({ title: "Livret annuel créé.", description: "12 feuilles mensuelles démarrent ce mois-ci — visible dans la tournée de l'agent référent." });
+        toast({
+          title: effectiveCycle === 372 ? "Livret annuel créé." : `Carnet de ${effectiveCycle} jours créé.`,
+          description:
+            effectiveCycle === 372
+              ? "12 feuilles mensuelles démarrent ce mois-ci — visible dans la tournée de l'agent référent."
+              : `${sheetsCount} feuille${sheetsCount > 1 ? "s" : ""} démarrent ce mois-ci, la dernière peut être partielle — visible dans la tournée de l'agent référent.`,
+        });
         load();
       }
       setOpen(false);
-      setForm({ ...form, contributorId: "", dailyAmount: "", label: "" });
+      setForm({ ...form, contributorId: "", dailyAmount: "", label: "", cycleDays: "" });
     } catch (err) {
       toast({ title: "Création impossible", description: err instanceof Error ? err.message : "Réessaie." });
     } finally {
@@ -123,8 +134,8 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle className="font-display">Nouveau carnet (livret annuel)</DialogTitle>
-                <DialogDescription>Choisis le cotisant et sa mise journalière : le livret de 12 feuilles mensuelles démarre automatiquement au mois en cours, avec sa 13e feuille de récapitulatif.</DialogDescription>
+                <DialogTitle className="font-display">Nouveau carnet (livret)</DialogTitle>
+                <DialogDescription>Choisis le cotisant et sa mise journalière : le livret démarre automatiquement au mois en cours, avec sa feuille de récapitulatif en fin de cycle.</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">
                 <div className="space-y-2">
@@ -150,16 +161,32 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                     <Input id="pb-label" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className="h-11 border-line" placeholder="Boutique, école…" />
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pb-cycle">Durée du cycle (jours) — optionnel</Label>
+                  <Input
+                    id="pb-cycle"
+                    inputMode="numeric"
+                    value={form.cycleDays}
+                    onChange={(e) => setForm({ ...form, cycleDays: e.target.value.replace(/\D/g, "").slice(0, 3) })}
+                    className="amount h-11 border-line"
+                    placeholder="372 (livret annuel)"
+                  />
+                  <p className="text-xs text-subtle">
+                    {cycleDaysNum > 0 && (cycleDaysNum < 1 || cycleDaysNum > 372)
+                      ? "Entre 1 et 372 jours — le livret annuel complet en fait 372."
+                      : `Cycle de ${effectiveCycle} jours : ${sheetsCount} feuille${sheetsCount > 1 ? "s" : ""} mensuelle${sheetsCount > 1 ? "s" : ""}${effectiveCycle % 31 !== 0 && effectiveCycle !== 372 ? `, la dernière partielle (${effectiveCycle % 31} lignes)` : ""}.`}
+                  </p>
+                </div>
                 <p className="rounded-lg bg-[#F4F7FB] p-3 text-xs leading-relaxed text-subtle">
-                  Chaque feuille mensuelle compte 31 mises : les 30 premières créditent le cotisant, la 31e
-                  revient à l&apos;entreprise (marquée, sans inscription). Sur l&apos;année : 12 mises pour
-                  l&apos;entreprise, le reste lui est restitué à la fin de sa souscription (signature numérique).
+                  Chaque feuille mensuelle porte ses mises : les précédant la dernière créditent le cotisant, la
+                  dernière revient à l&apos;entreprise (marquée, sans inscription). En fin de souscription, le solde
+                  lui est restitué (signature numérique).
                 </p>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOpen(false)} className="border-line">Annuler</Button>
-                <Button onClick={submit} disabled={submitting || !form.contributorId} className="bg-primary text-primary-foreground hover:bg-primary-hover">
-                  {submitting ? "Création…" : "Créer le livret annuel"}
+                <Button onClick={submit} disabled={submitting || !form.contributorId || (cycleDaysNum > 0 && (cycleDaysNum < 1 || cycleDaysNum > 372))} className="bg-primary text-primary-foreground hover:bg-primary-hover">
+                  {submitting ? "Création…" : effectiveCycle === 372 ? "Créer le livret annuel" : `Créer le carnet de ${effectiveCycle} jours`}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -200,7 +227,7 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                   </TableCell>
                   <TableCell className="amount text-sm font-semibold text-ink">{formatFCFA(r.balance)}</TableCell>
                   <TableCell className="amount text-sm text-subtle">
-                    F{r.currentSheet}/12 · {r.coveredLines}/{r.payableLines}
+                    F{r.currentSheet}/{r.months ?? 12} · {r.coveredLines}/{r.payableLines}
                     {r.missedLines > 0 && <span className="ml-1 font-semibold text-danger">−{r.missedLines}</span>}
                   </TableCell>
                   <TableCell><PassbookStatusBadge status={r.status} /></TableCell>
@@ -251,7 +278,7 @@ export function PassbooksTab({ readOnly }: { readOnly: boolean }) {
                 <PassbookStatusBadge status={r.status} />
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-[#F4F7FB] px-3 py-2 text-xs">
-                <span className="amount flex items-center gap-1 text-subtle"><CalendarDays className="h-3.5 w-3.5" aria-hidden /> F{r.currentSheet}/12</span>
+                <span className="amount flex items-center gap-1 text-subtle"><CalendarDays className="h-3.5 w-3.5" aria-hidden /> F{r.currentSheet}/{r.months ?? 12}</span>
                 <span className="amount text-subtle">Mise {formatFCFA(r.dailyAmount)}</span>
                 <span className="amount font-semibold text-ink">{formatFCFA(r.balance)}</span>
               </div>

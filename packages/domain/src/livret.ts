@@ -1,9 +1,17 @@
 // TontiHelm — livret annuel : le moteur des carnets (2026-10).
-// Un carnet = un livret annuel d'UNE personne : 12 feuilles mensuelles (une par
-// mois, en commençant par le mois en cours à la création) + une 13e feuille de
-// récapitulatif. Chaque feuille porte 31 lignes ; la 31e ligne est la mise de
-// l'entreprise (marquée, jamais inscrite) : le client verse 31 mises par mois,
-// les 30 premières créditent son livret, la 31e revient à la structure.
+// Un carnet = un livret d'UNE personne : des feuilles mensuelles (une par mois,
+// en commençant par le mois en cours à la création) + une feuille finale de
+// récapitulatif. Chaque feuille porte 31 lignes ; la DERNIÈRE ligne de chaque
+// feuille est la mise de l'entreprise (marquée, jamais inscrite) : le client
+// verse ses mises, les précédentes créditent son livret, la dernière revient à
+// la structure.
+//
+// Durée de cycle PARAMÉTRABLE (décision n° 5 du dirigeant, PARITE.md §8.14) :
+// `cycleDays` fixé à la création, bornes 1..372, défaut 372 = le livret annuel
+// historique (12 feuilles). Une durée plus courte produit moins de feuilles —
+// la DERNIÈRE feuille peut être PARTIELLE (p. ex. 45 jours = 31 + 14 lignes) ;
+// sa dernière ligne reste la mise entreprise. Le comportement à 372 est
+// strictement identique à celui du moteur historique (tests de non-régression).
 //
 // Les écritures remplissent les lignes SÉQUENTIELLEMENT (ligne 1, 2, 3… puis la
 // feuille suivante) — exactement comme l'agent marque le carnet papier : chaque
@@ -22,10 +30,34 @@ import { formatFCFA } from "./domain";
 
 export const LIVRET_MONTHS = 12;
 export const SHEET_DAYS = 31;
-export const LIVRET_DAYS = LIVRET_MONTHS * SHEET_DAYS; // 372 lignes
+export const LIVRET_DAYS = LIVRET_MONTHS * SHEET_DAYS; // 372 lignes (défaut)
+export const MIN_CYCLE_DAYS = 1; // bornes §8.14 : durée de cycle 1..372
 export const CLIENT_LINES_PER_SHEET = SHEET_DAYS - 1; // lignes 1..30 créditent le client
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** Durée de cycle bornée (§8.14) : entier 1..372, repli 372 si absente/invalide. */
+export function clampCycleDays(cycleDays: number | null | undefined): number {
+  const n = typeof cycleDays === "number" && Number.isFinite(cycleDays) ? Math.floor(cycleDays) : LIVRET_DAYS;
+  return Math.min(Math.max(n, MIN_CYCLE_DAYS), LIVRET_DAYS);
+}
+
+/** Nombre de feuilles d'un cycle : ceil(cycleDays / 31), dernière partielle. */
+export function sheetsForCycleDays(cycleDays: number): number {
+  const total = clampCycleDays(cycleDays);
+  return Math.ceil(total / SHEET_DAYS);
+}
+
+/** Nombre de lignes de la feuille d'index 0..n-1 (31, sauf la dernière partielle). */
+export function sheetLength(sheetIdx0: number, cycleDays: number): number {
+  const total = clampCycleDays(cycleDays);
+  return Math.max(0, Math.min(SHEET_DAYS, total - sheetIdx0 * SHEET_DAYS));
+}
+
+/** Dernière ligne ABSOLUE d'une feuille (1..cycleDays) — c'est la mise entreprise. */
+export function sheetLastLine(sheetIdx0: number, cycleDays: number): number {
+  return sheetIdx0 * SHEET_DAYS + sheetLength(sheetIdx0, cycleDays);
+}
 
 /** Minuit UTC du premier jour du mois d'une date. */
 export function monthStart(d: Date): Date {
@@ -62,17 +94,19 @@ export interface LivretLike {
   startsOn: Date;
   /** Date de création du carnet : borne le début réel (jamais en retard avant son arrivée). */
   createdAt?: Date | null;
+  /** Durée du cycle en lignes (§8.14) : 1..372, défaut 372 (livret annuel). */
+  cycleDays?: number | null;
 }
 
 export interface AdvanceOption {
-  sheet: number; // 1..12 — l'avance couvre jusqu'à la FIN de cette feuille
+  sheet: number; // 1..n — l'avance couvre jusqu'à la FIN de cette feuille
   label: string; // « nov. 2026 »
   amount: number; // montant à encaisser pour couvrir jusqu'à cette feuille
   resteAfter: number; // ce qu'il restera à prendre après cette avance
 }
 
 export interface LivretSheetView {
-  index: number; // 1..12
+  index: number; // 1..n
   key: string; // « 2026-10 »
   year: number;
   month: number; // 0..11
@@ -83,15 +117,15 @@ export interface LivretSheetView {
   encaisse: number; // versé sur cette feuille
   avance: number; // versé au-delà des jours échus (dynamique)
   reste: number; // attendu − encaissé (dynamique)
-  coveredLines: number; // lignes entièrement couvertes (0..31)
+  coveredLines: number; // lignes entièrement couvertes (0..longueur de feuille)
   partial: number; // montant sur la ligne en cours (0..mise)
   partClient: number; // ce qui revient au client sur cette feuille
   partEntreprise: number; // mise de l'entreprise (0 ou mise)
   complete: boolean;
-  elapsedLines: number; // lignes « échues » à date (0..31) — pour l'avance
+  elapsedLines: number; // lignes « échues » à date (0..longueur de feuille) — pour l'avance
   current: boolean;
   excused: number; // lignes AVANT l'arrivée du cotisant (non dues) — feuille du mois d'arrivée
-  payable: number; // lignes encaissables de la feuille = 31 − excused
+  payable: number; // lignes encaissables de la feuille = longueur − excused
 }
 
 export interface LivretRecap {
@@ -100,7 +134,7 @@ export interface LivretRecap {
   encaisse: number; // total réellement versé
   reste: number; // attendu − encaisse — « il lui reste à prendre »
   avanceTotale: number; // versé au-delà des échéances, toutes feuilles confondues
-  partEntreprise: number; // 31es mises acquises à la structure
+  partEntreprise: number; // mises entreprise acquises à la structure
   partClient: number; // ce qui revient au client (encaissé − part entreprise)
   sheetsComplete: number; // feuilles mensuelles entièrement réglées
   sheetsStarted: number; // feuilles avec au moins un versement
@@ -108,17 +142,18 @@ export interface LivretRecap {
 }
 
 export interface LivretView {
-  months: number;
+  months: number; // nombre de feuilles (12 pour le livret annuel, moins en cycle court)
+  cycleDays: number; // durée du cycle en lignes (1..372)
   startsOn: string; // AAAA-MM-JJ (1er du mois de départ)
   effectiveStart: string; // AAAA-MM-JJ — jour d'arrivée réel du cotisant
   dailyAmount: number;
   balance: number; // encaissé cumulé (annulations incluses)
   coveredLines: number; // lignes encaissables couvertes (décompte, pas la ligne absolue)
-  payableLines: number; // lignes encaissables du livret (372 − excusées)
+  payableLines: number; // lignes encaissables du livret (cycleDays − excusées)
   excusedLines: number; // lignes avant l'arrivée (non dues)
-  lineDue: number; // prochaine ligne à encaisser, ABSOLUE (1..373)
+  lineDue: number; // prochaine ligne à encaisser, ABSOLUE (1..cycleDays+1)
   missedLines: number;
-  currentSheet: number; // 1..12
+  currentSheet: number; // 1..months
   coveredThrough: { sheet: number; label: string } | null; // feuille la plus avancée couverte
   advanceOptions: AdvanceOption[]; // avances mensuelles calculées automatiquement
   sheets: LivretSheetView[];
@@ -155,53 +190,57 @@ export function effectiveStartDay(passbook: LivretLike): Date {
 }
 
 /**
- * Première ligne encaissable du livret (ABSOLUE, 1..372) : celle du jour
+ * Première ligne encaissable du livret (ABSOLUE, 1..cycleDays) : celle du jour
  * d'arrivée. Les lignes 1..firstLine−1 sont excusées (avant l'arrivée).
  */
 export function firstPayableLine(passbook: LivretLike): number {
+  const totalDays = clampCycleDays(passbook.cycleDays);
+  const sheetCount = sheetsForCycleDays(totalDays);
   const start = livretStart(passbook.startsOn);
   const eff = effectiveStartDay(passbook);
-  const effMonth = Math.min(Math.max(monthsBetween(start, monthStart(eff)), 0), LIVRET_MONTHS);
+  const effMonth = Math.min(Math.max(monthsBetween(start, monthStart(eff)), 0), sheetCount);
   const day = Math.min(Math.max(eff.getUTCDate(), 1), SHEET_DAYS);
-  return Math.min(effMonth * SHEET_DAYS + day, LIVRET_DAYS);
+  return Math.min(effMonth * SHEET_DAYS + day, totalDays);
 }
 
 /**
- * Construit la vue complète du livret annuel : 12 feuilles mensuelles + récap.
+ * Construit la vue complète du livret : feuilles mensuelles + récap.
  * `balance` = somme des écritures (positif, négatif pour annulations).
  */
 export function buildLivret(passbook: LivretLike, balance: number, today: Date = new Date()): LivretView {
   const mise = Math.max(1, passbook.dailyAmount);
   const start = livretStart(passbook.startsOn);
   const todayMonth = monthStart(today);
+  const cycleDays = clampCycleDays(passbook.cycleDays);
+  const sheetCount = sheetsForCycleDays(cycleDays);
 
   // ── Arrivée du cotisant et lignes excusées (jamais en retard avant son arrivée) ──
   const firstLine = firstPayableLine(passbook);
   const excusedTotal = firstLine - 1;
   const effMonthIdx = Math.floor((firstLine - 1) / SHEET_DAYS); // feuille (0-based) de l'arrivée
   const effDayInSheet = ((firstLine - 1) % SHEET_DAYS) + 1; // 1..31 dans sa feuille
-  const payableTotal = LIVRET_DAYS - excusedTotal;
+  const payableTotal = cycleDays - excusedTotal;
 
   const positiveBalance = Math.max(0, balance);
   const coveredLines = Math.min(payableTotal, Math.floor(positiveBalance / mise));
   const partial = coveredLines >= payableTotal ? 0 : positiveBalance - coveredLines * mise;
   const lastCoveredAbs = coveredLines > 0 ? firstLine + coveredLines - 1 : 0; // ligne absolue de la dernière mise
-  // Feuille portant la ligne partielle (index 0..11) — aucune si partial = 0.
+  // Feuille portant la ligne partielle (index 0..n-1) — aucune si partial = 0.
   const partialLineAbs = partial > 0 ? firstLine + coveredLines : 0;
 
   const sheets: LivretSheetView[] = [];
   let elapsedTotal = 0;
-  for (let i = 0; i < LIVRET_MONTHS; i += 1) {
+  for (let i = 0; i < sheetCount; i += 1) {
     const sheetStart = addMonths(start, i);
     const year = sheetStart.getUTCFullYear();
     const month = sheetStart.getUTCMonth();
     const sheetFirstAbs = i * SHEET_DAYS + 1;
-    const sheetLastAbs = (i + 1) * SHEET_DAYS;
+    const sheetLastAbs = sheetLastLine(i, cycleDays); // dernière ligne = mise entreprise
 
     // Lignes excusées de la feuille : toute la feuille avant le mois d'arrivée,
     // ou les lignes d'avant le jour d'arrivée dans la feuille d'arrivée.
-    const excused = i < effMonthIdx ? SHEET_DAYS : i === effMonthIdx ? effDayInSheet - 1 : 0;
-    const payableCount = SHEET_DAYS - excused;
+    const excused = i < effMonthIdx ? sheetLastAbs - sheetFirstAbs + 1 : i === effMonthIdx ? effDayInSheet - 1 : 0;
+    const payableCount = sheetLastAbs - sheetFirstAbs + 1 - excused;
 
     // Lignes couvertes de la feuille : intersection de la plage couverte
     // [firstLine, lastCoveredAbs] avec les lignes absolues de la feuille.
@@ -215,6 +254,7 @@ export function buildLivret(passbook: LivretLike, balance: number, today: Date =
 
     // Lignes échues de la feuille : par calendrier, MAIS en comptant depuis le
     // jour d'arrivée sur la feuille d'arrivée (jamais en retard avant l'arrivée).
+    // Une feuille partielle du cycle court plafonne d'elle-même (payableCount).
     const rel = monthsBetween(sheetStart, todayMonth);
     const elapsedLines =
       rel > 0
@@ -225,7 +265,7 @@ export function buildLivret(passbook: LivretLike, balance: number, today: Date =
     elapsedTotal += elapsedLines;
 
     const avance = Math.max(0, encaisse - mise * elapsedLines);
-    const clientLines = Math.max(0, payableCount - 1); // la 31e ligne = entreprise
+    const clientLines = Math.max(0, payableCount - 1); // la dernière ligne de feuille = entreprise
     const partEntreprise = Math.min(mise, Math.max(0, encaisse - mise * clientLines));
     sheets.push({
       index: i + 1,
@@ -271,12 +311,12 @@ export function buildLivret(passbook: LivretLike, balance: number, today: Date =
   // Feuille courante : celle du mois en cours, sinon la dernière feuille atteinte.
   let currentSheet = monthsBetween(start, todayMonth) + 1;
   if (currentSheet < 1) currentSheet = 1;
-  if (currentSheet > LIVRET_MONTHS) currentSheet = LIVRET_MONTHS;
+  if (currentSheet > sheetCount) currentSheet = sheetCount;
 
   // Feuille la plus avancée couverte par les versements (affichage « couvre jusqu'à »).
   let coveredThrough: { sheet: number; label: string } | null = null;
   if (coveredLines > 0) {
-    const throughSheet = Math.min(Math.ceil(lastCoveredAbs / SHEET_DAYS), LIVRET_MONTHS);
+    const throughSheet = Math.min(Math.ceil(lastCoveredAbs / SHEET_DAYS), sheetCount);
     coveredThrough = { sheet: throughSheet, label: sheets[throughSheet - 1].label };
   }
 
@@ -285,8 +325,8 @@ export function buildLivret(passbook: LivretLike, balance: number, today: Date =
   // fin du mois en cours seul, ou plusieurs mois au-delà) et le système calcule
   // le montant (rattrapage inclus) puis ce qu'il restera à prendre.
   const advanceOptions: AdvanceOption[] = [];
-  for (let m = effMonthIdx + 1; m <= LIVRET_MONTHS; m += 1) {
-    const targetAbs = m * SHEET_DAYS; // dernière ligne (absolue) de la feuille m
+  for (let m = effMonthIdx + 1; m <= sheetCount; m += 1) {
+    const targetAbs = sheetLastLine(m - 1, cycleDays); // dernière ligne (absolue) de la feuille m
     const amount = mise * (targetAbs - firstLine + 1) - positiveBalance;
     if (amount > 0) {
       advanceOptions.push({
@@ -299,7 +339,8 @@ export function buildLivret(passbook: LivretLike, balance: number, today: Date =
   }
 
   return {
-    months: LIVRET_MONTHS,
+    months: sheetCount,
+    cycleDays,
     startsOn: start.toISOString().slice(0, 10),
     effectiveStart: new Date(Date.UTC(
       addMonths(start, effMonthIdx).getUTCFullYear(),
@@ -311,7 +352,7 @@ export function buildLivret(passbook: LivretLike, balance: number, today: Date =
     coveredLines,
     payableLines: payableTotal,
     excusedLines: excusedTotal,
-    lineDue: Math.min(firstLine + coveredLines, LIVRET_DAYS + 1),
+    lineDue: Math.min(firstLine + coveredLines, cycleDays + 1),
     missedLines,
     currentSheet,
     coveredThrough,
@@ -321,25 +362,29 @@ export function buildLivret(passbook: LivretLike, balance: number, today: Date =
   };
 }
 
-/** Position (feuille, ligne) d'une ligne absolue 1..372. */
-export function linePosition(line: number): { sheet: number; lineInSheet: number; company: boolean } {
-  const clamped = Math.min(Math.max(1, line), LIVRET_DAYS);
+/** Position (feuille, ligne) d'une ligne absolue 1..cycleDays. */
+export function linePosition(line: number, cycleDays: number = LIVRET_DAYS): { sheet: number; lineInSheet: number; company: boolean } {
+  const total = clampCycleDays(cycleDays);
+  const clamped = Math.min(Math.max(1, line), total);
   const sheet = Math.floor((clamped - 1) / SHEET_DAYS) + 1;
   const lineInSheet = ((clamped - 1) % SHEET_DAYS) + 1;
-  return { sheet, lineInSheet, company: lineInSheet === SHEET_DAYS };
+  // Mise entreprise : la DERNIÈRE ligne de SA feuille (31e en feuille pleine,
+  // dernière ligne de la feuille partielle finale en cycle court).
+  const company = lineInSheet === sheetLength(sheet - 1, total);
+  return { sheet, lineInSheet, company };
 }
 
 /** Libellé humain d'une ligne : « L12 · feuille 1 (oct. 2026) » ou mise entreprise. */
-export function lineLabel(line: number, start: Date): string {
-  const { sheet, lineInSheet, company } = linePosition(line);
+export function lineLabel(line: number, start: Date, cycleDays: number = LIVRET_DAYS): string {
+  const { sheet, lineInSheet, company } = linePosition(line, cycleDays);
   const sheetStart = addMonths(livretStart(start), sheet - 1);
   const label = monthLabel(sheetStart.getUTCFullYear(), sheetStart.getUTCMonth(), true);
   return company ? `Mise entreprise · ${label}` : `Ligne ${lineInSheet} · ${label}`;
 }
 
 /** Total attendu d'un livret (FCFA) — toutes lignes, hors excuses. */
-export function livretTotal(dailyAmount: number): number {
-  return dailyAmount * LIVRET_DAYS;
+export function livretTotal(dailyAmount: number, cycleDays: number = LIVRET_DAYS): number {
+  return dailyAmount * clampCycleDays(cycleDays);
 }
 
 // ── Avance PARTIELLE (décision du dirigeant, 2026-10-18) ──────────────────────
@@ -355,10 +400,12 @@ export interface AdvancePreviewInput {
   dailyAmount: number;
   balance: number; // solde cumulé (annulations incluses, peut être négatif)
   coveredLines: number; // lignes encaissables couvertes (décompte)
-  payableLines: number; // lignes encaissables du livret (372 − excusées)
-  lineDue: number; // prochaine ligne à encaisser, ABSOLUE (1..373)
+  payableLines: number; // lignes encaissables du livret (cycleDays − excusées)
+  lineDue: number; // prochaine ligne à encaisser, ABSOLUE (1..cycleDays+1)
   attendu: number; // total attendu du livret (recap.attendu)
-  sheets: { shortLabel: string }[]; // 12 libellés courts « oct. 2026 »
+  sheets: { shortLabel: string }[]; // libellés courts « oct. 2026 » (autant que de feuilles)
+  /** Durée du cycle en lignes (§8.14) — défaut 372 (livret annuel). */
+  cycleDays?: number;
 }
 
 /** Aperçu d'une avance (totale ou partielle) avant encaissement. */
@@ -369,7 +416,7 @@ export interface AdvancePreviewResult {
   resteBefore: number; // reste à encaisser AVANT l'écriture
   linesCoveredAfter: number; // lignes entièrement couvertes après l'écriture
   coversThroughLine: number; // dernière ligne ABSOLUE couverte (0 si aucune)
-  coversThroughSheet: number | null; // feuille (1..12) de cette ligne
+  coversThroughSheet: number | null; // feuille (1..n) de cette ligne
   coversThroughLabel: string | null; // « nov. 2026 »
   coversFullSheet: boolean; // l'avance atteint la FIN de la feuille couverte
   partialAfter: number; // montant posé sur la ligne entamée (0..mise−1)
@@ -378,15 +425,17 @@ export interface AdvancePreviewResult {
 
 export function advancePreview(v: AdvancePreviewInput, amount: number): AdvancePreviewResult {
   const mise = Math.max(1, v.dailyAmount);
+  const cycleDays = clampCycleDays(v.cycleDays);
+  const sheetCount = sheetsForCycleDays(cycleDays);
   const positiveBalance = Math.max(0, v.balance);
-  const firstLine = Math.max(1, Math.min(v.lineDue - v.coveredLines, LIVRET_DAYS));
+  const firstLine = Math.max(1, Math.min(v.lineDue - v.coveredLines, cycleDays));
   const resteBefore = Math.max(0, v.attendu - positiveBalance);
   const raw = Number.isFinite(amount) ? Math.floor(amount) : 0;
   const safe = Math.max(0, raw);
   const exceedsReste = safe > resteBefore;
   const coveredAfter = Math.min(v.payableLines, Math.floor((positiveBalance + safe) / mise));
   const lastCoveredAbs = coveredAfter > 0 ? firstLine + coveredAfter - 1 : 0;
-  const sheet = lastCoveredAbs > 0 ? Math.min(LIVRET_MONTHS, Math.ceil(lastCoveredAbs / SHEET_DAYS)) : null;
+  const sheet = lastCoveredAbs > 0 ? Math.min(sheetCount, Math.ceil(lastCoveredAbs / SHEET_DAYS)) : null;
   const label = sheet !== null ? v.sheets[sheet - 1]?.shortLabel ?? null : null;
   return {
     amount: raw,
@@ -397,7 +446,7 @@ export function advancePreview(v: AdvancePreviewInput, amount: number): AdvanceP
     coversThroughLine: lastCoveredAbs,
     coversThroughSheet: sheet,
     coversThroughLabel: label,
-    coversFullSheet: sheet !== null && lastCoveredAbs === sheet * SHEET_DAYS,
+    coversFullSheet: sheet !== null && lastCoveredAbs === sheetLastLine(sheet - 1, cycleDays),
     partialAfter: Math.max(0, positiveBalance + Math.min(safe, resteBefore) - coveredAfter * mise),
     resteAfter: Math.max(0, resteBefore - safe),
   };
@@ -417,6 +466,7 @@ function utcDay(d: Date): number {
 export function serializeLivret(livret: LivretView) {
   return {
     months: livret.months,
+    cycleDays: livret.cycleDays,
     startsOn: livret.startsOn,
     effectiveStart: livret.effectiveStart,
     dailyAmount: livret.dailyAmount,

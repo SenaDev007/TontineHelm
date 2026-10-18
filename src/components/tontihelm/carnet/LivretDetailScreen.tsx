@@ -172,7 +172,9 @@ function CarnetDetail({ passbookId, readOnly }: { passbookId: string; readOnly: 
                 <span>Agent : {pb.agent}</span>
               </p>
               <p className="mt-1 text-xs text-subtle">
-                Livret annuel · 12 feuilles mensuelles · mise {formatFCFA(pb.dailyAmount)} · cotisant arrivé le{" "}
+                {data.livret.months === 12
+                  ? "Livret annuel · 12 feuilles mensuelles"
+                  : `Cycle de ${data.livret.cycleDays ?? data.livret.months * 31} jours · ${data.livret.months} feuille${data.livret.months > 1 ? "s" : ""}`} · mise {formatFCFA(pb.dailyAmount)} · cotisant arrivé le{" "}
                 {new Date(arrivedOn).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
                 {data.livret.excusedLines > 0 && (
                   <span className="text-subtle"> · {data.livret.excusedLines} lignes d&apos;avant son arrivée non dues</span>
@@ -192,7 +194,7 @@ function CarnetDetail({ passbookId, readOnly }: { passbookId: string; readOnly: 
             </div>
             <div className="rounded-lg bg-[#F4F7FB] px-3 py-2.5">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-subtle">Feuille en cours</p>
-              <p className="amount text-sm font-bold text-ink">{pb.currentSheet}/12</p>
+              <p className="amount text-sm font-bold text-ink">{pb.currentSheet}/{data.livret.months ?? 12}</p>
             </div>
           </div>
         </CardContent>

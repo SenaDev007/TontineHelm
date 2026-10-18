@@ -145,6 +145,7 @@ export default function CollectScreen() {
         lineDue: stop.livret.lineDue,
         attendu: stop.livret.recap.attendu,
         sheets: stop.livret.sheets,
+        cycleDays: stop.livret.cycleDays,
       },
       advanceValue
     );
@@ -294,7 +295,7 @@ export default function CollectScreen() {
                       {name}
                     </Text>
                     <Text className="mt-0.5 font-body text-[12px] text-ink-muted" numberOfLines={1}>
-                      {neighborhood || "—"} · F{s.livret.currentSheet}/12 · L{s.livret.dueLineInSheet} ·{" "}
+                      {neighborhood || "—"} · F{s.livret.currentSheet}/{s.livret.months ?? 12} · L{s.livret.dueLineInSheet} ·{" "}
                       {formatFCFA(s.dailyAmount)}
                     </Text>
                   </View>
@@ -356,7 +357,7 @@ export default function CollectScreen() {
               {contributor?.fullName ?? "Cotisant"}
             </Text>
             <Text className="mt-0.5 font-body text-[13px] text-ink-muted">
-              Feuille {sheet.index}/12 ({sheet.label}) · ligne {stop.livret.dueLineInSheet}
+              Feuille {sheet.index}/{stop.livret.months ?? 12} ({sheet.label}) · ligne {stop.livret.dueLineInSheet}
             </Text>
           </View>
           <StatusChip label={stop.statusLabel} />

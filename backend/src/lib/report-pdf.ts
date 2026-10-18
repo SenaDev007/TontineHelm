@@ -10,6 +10,7 @@
 //   · texte nettoyé WinAnsi (accents français intégraux) et tronqué proprement.
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import {
+  AuditReport,
   CollectionsReport,
   ContributorsReport,
   formatDateTimeLong,
@@ -476,4 +477,98 @@ export async function collectionsPdf(report: CollectionsReport): Promise<Uint8Ar
   });
 
   return painter.finish();
+}
+
+/* ── Journal d'audit (décision n° 10, PARITE.md §8.15) ── */
+
+const AUDIT_COLS: Column[] = [
+  { header: "N°", w: 30, align: "right" },
+  { header: "Date", w: 52, align: "center" },
+  { header: "Heure", w: 38, align: "center" },
+  { header: "Auteur", w: 100, align: "left" },
+  { header: "Rôle", w: 55, align: "left" },
+  { header: "Action", w: 90, align: "left" },
+  { header: "Entité", w: 65, align: "left" },
+  { header: "Détail", w: 234, align: "left" },
+  { header: "Hash", w: 100, align: "left" },
+];
+
+export async function auditPdf(report: AuditReport): Promise<Uint8Array> {
+  const painter = new PdfReport({
+    structure: report.structure.name,
+    city: report.structure.city,
+    title: "Journal d'audit",
+    subtitle: "Journal d'audit",
+    metaLine:
+      `Période : ${report.period.label} · ${report.actionFilter ? `action « ${report.actionFilter} » · ` : ""}` +
+      `${formatNumberFr(report.totals.rows)} lignes · ${report.totals.actions} type${report.totals.actions > 1 ? "s" : ""} d'action · ` +
+      `chaîne ${report.chainOk ? "INTACTE" : "INTERROMPUE"}`,
+    generatedAt: report.generatedAt,
+  });
+  await painter.init();
+  painter.newPage(true);
+  const { xs, widths } = layoutColumns(AUDIT_COLS);
+  const ROW_H = 13.5;
+
+  const drawHeader = () => painter.tableHeader(painter.pages[painter.pages.length - 1], xs, AUDIT_COLS);
+  drawHeader();
+
+  if (report.rows.length === 0) {
+    const p = painter.pages[painter.pages.length - 1];
+    painter.cell(p, MARGIN, painter.y - 30, PAGE.w - 2 * MARGIN, 30, "Aucune entrée pour ces filtres.", {
+      size: 9, color: B.subtle, align: "center", bg: B.zebra,
+    });
+  }
+
+  report.rows.forEach((row, idx) => {
+    painter.ensure(ROW_H, drawHeader);
+    const p = painter.pages[painter.pages.length - 1];
+    const bottom = painter.y - ROW_H;
+    const zebra = idx % 2 === 1 ? B.zebra : B.white;
+    const values: { col: number; value: string; opts?: Parameters<PdfReport["cell"]>[6] }[] = [
+      { col: 0, value: formatNumberFr(row.seq), opts: { align: "right", size: 7.6, color: B.subtle } },
+      { col: 1, value: formatDayShort(row.at), opts: { align: "center", size: 7.6, color: B.subtle } },
+      { col: 2, value: formatTime(row.at), opts: { align: "center", size: 7.6, color: B.subtle } },
+      { col: 3, value: row.actor, opts: { size: 8, font: painter.bold } },
+      { col: 4, value: roleLabel(row.actorRole), opts: { size: 7.2, color: B.subtle } },
+      { col: 5, value: row.action, opts: { size: 7.6 } },
+      { col: 6, value: row.entity, opts: { size: 7.6, color: B.subtle } },
+      { col: 7, value: row.payload, opts: { size: 6.8, color: B.subtle } },
+      { col: 8, value: `${row.hash.slice(0, 16)}…`, opts: { size: 6.8, color: B.subtle } },
+    ];
+    for (const v of values) {
+      painter.cell(p, xs[v.col], bottom, widths[v.col], ROW_H, v.value, { bg: zebra, ...(v.opts ?? {}) });
+    }
+    painter.y -= ROW_H;
+  });
+
+  // Totaux + état de la chaîne.
+  painter.ensure(20, drawHeader);
+  const p = painter.pages[painter.pages.length - 1];
+  p.drawRectangle({
+    x: MARGIN, y: painter.y - 20, width: PAGE.w - 2 * MARGIN, height: 20,
+    color: B.blueSoft, borderColor: B.blueSoft, borderWidth: 0.5,
+  });
+  const totalLabel =
+    `TOTAL DU JOURNAL — ${formatNumberFr(report.totals.rows)} lignes · ${report.totals.actions} type${report.totals.actions > 1 ? "s" : ""} d'action · ` +
+    `chaîne d'audit ${report.chainOk ? "intacte" : "INTERROMPUE"}`;
+  painter.text(p, totalLabel, MARGIN, PAGE.w - 2 * MARGIN - 90, painter.y - 12.6, {
+    size: 7.8, font: painter.bold, color: report.chainOk ? B.blue : B.red, align: "left",
+  });
+  painter.text(p, report.chainOk ? "Vérifiée" : "À inspecter", PAGE.w - MARGIN - 90, 90, painter.y - 12.6, {
+    size: 8, font: painter.bold, color: report.chainOk ? B.teal : B.red, align: "right",
+  });
+
+  return painter.finish();
+}
+
+function roleLabel(role: string): string {
+  switch (role) {
+    case "owner": return "propriétaire";
+    case "manager": return "gérante";
+    case "agent": return "agent";
+    case "controller": return "contrôleur";
+    case "admin": return "admin";
+    default: return "système";
+  }
 }
