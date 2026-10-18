@@ -531,3 +531,73 @@ backend sert déjà tout ce que les écrans mobiles des phases 2-4 consommeront.
   `next build` production vert ; sync packages↔backend diff nul. Les tests
   d'intégration exigent PostgreSQL (`DATABASE_URL`) — exécutés ici sur une
   base embarquée, reproductibles sur ta machine via `cd backend && DATABASE_URL="…" bun test`.
+
+### 11.7 Livraison « Phase 2 mobile — hors ligne + écrans agent » — 19 octobre 2026
+
+La couche locale du téléphone demandée par le plan (§11.4) est livrée :
+**SQLite chiffrée (SQLCipher + Drizzle), outbox avec reprise 2/4/8/16 s puis
+5 min, et la barre agent à 5 entrées** (Tournée, Encaisser hors ligne,
+Clients, Clôture, Compte — décision n° 18).
+
+- **`packages/sync` (nouveau, règles pures partagées)** : machine à états de
+  la file d'envoi — cadence 2/4/8/16 s puis 5 min, accusés PAR ÉVÉNEMENT
+  (accepté/doublon → terminé ; rejeté → définitif, motif conservé), lot FIFO
+  ≤ 50, récupération de crash `in_flight`, **blocage après 7 jours hors
+  ligne** (écart n° 7), upsert idempotent du pull delta. 19 tests bun ;
+  consommé par le mobile via `file:` + Metro `watchFolders` (même mécanisme
+  que domain/schemas).
+- **Chiffrement au repos** : `expo-sqlite` avec **SQLCipher compilé dans
+  l'application** (plugin `useSQLCipher` — support officiel Expo, Android/
+  iOS) ; clé aléatoire 32 octets née sur l'appareil, gardée dans le coffre
+  (`expo-secure-store`), jamais en base ni au serveur ; requêtes **Drizzle**
+  (`drizzle-orm/expo-sqlite`). Conséquence assumée : **build de développement
+  obligatoire** (`expo run:android`) — Expo Go ne peut pas embarquer SQLCipher
+  (l'app y démarre non chiffrée, développement uniquement).
+- **Miroir hors ligne** : chaque tirage `/v1/sync/pull` (plein ou delta) est
+  réécrit dans la base chiffrée AVANT l'affichage ; au démarrage, la tournée
+  est lisible immédiatement, sans réseau, à la fraîcheur du dernier tirage.
+  Les écritures provisoires de la file partagent l'UUID de leur événement :
+  l'accusé serveur remplace la ligne à l'identique (idempotence), le rejet la
+  retire. Purge intégrale à la déconnexion/révocation/changement de structure
+  (§8.5).
+- **Moteur de reprise** (`outbox-engine`) : retour du réseau → envoi
+  immédiat ; retour au premier plan → idem ; réveil cadencé sur la plus
+  proche échéance de la file (plafonné 5 min) ; l'enregistrement d'un
+  encaissement tente immédiatement (en ligne : accusé dans la seconde).
+  Décalage d'horloge et `deviceId` envoyés dans chaque événement (§8.4/§8.6).
+- **`POST /v1/closing` (canal additif)** : miroir EXACT des règles web de
+  `POST /api/agent/closing` (M5 — bornes, `closingGap`, upsert du jour,
+  verrou « déjà déclarée », audit chaîné `closing_declared` source
+  `closing_v1`) authentifié par jetons appareil ; la route web reste
+  INTOUCHABLE (écart n° 9 : fonction conservée, canal adapté — le mobile ne
+  peut pas présenter de session cookie). Test `v1-closing.test.ts` : jour
+  vide, espèces vs mobile money, 409, 400, 401, audit.
+- **Écrans agent** : Tournée (tri quartier puis nom, filtre, indicateurs du
+  jour, bandeaux clôture), Encaisser (modes ligne à ligne + avance partielle
+  inchangés, désormais hors ligne : bandeaux hors ligne/file/rejets,
+  confirmation locale, vibration 60 ms), Clients (portefeuille complet tous
+  carnets, recherche instantanée, « Encaisser sur ce carnet »), Clôture
+  (comptes du jour, écart prévisionnel, déclaration file vide uniquement —
+  « espèces attendues » se calcule serveur), Compte (synchronisation
+  manuelle, **écran de reprise des rejets** avec mise de côté, blocage 7 j,
+  déconnexion = purge).
+- **Deux erreurs de socle phase 1 corrigées** (piégées par le bundle de
+  vérification `expo export`, jamais exécuté avant — l'app n'avait pas encore
+  tourné) : `nativewind/babel` est un **PRESET** (l'inscrire comme plugin
+  cassait tout bundle : « .plugins is not a valid Plugin property », montage
+  conforme à la doc officielle NativeWind v4) ; l'import du CSS pointait
+  `src/global.css` au lieu de la racine (`../../global.css`).
+- **Décisions documentées** : relance de la file en tâche de fond OS
+  (`expo-background-task`, ≥ 15 min imposées par Android) reportée au prochain
+  incrément — la cadence courte du brief est tenue par le moteur premier
+  plan ; création de client sur mobile (écart n° 8) reportée en phase 3 avec
+  les routes `/v1/clients` (les routes web `POST /api/agent/clients*`
+  exigent la session cookie). Renommage `src/lib/uuid7.ts` → `src/lib/uuid.ts`.
+- **Vérifications de la livraison** : `packages/sync` 19/19 ; `tsc` racine /
+  backend / mobile 0 erreur chacun ; sync domain/schemas ↔ backend diff
+  nul ; **`expo export --platform android` VERT** (bundle Hermes 4,87 Mo —
+  résolution complète des paquets partagés). Les tests backend (dont
+  `v1-closing`) exigent PostgreSQL — reproductibles sur ta machine via
+  `cd backend && DATABASE_URL="…" bun test`. Le build natif SQLCipher se
+  joue côté Android Studio (`bunx expo run:android`, guide dans
+  `apps/mobile/README.md`).

@@ -79,3 +79,6 @@ backend/prisma/schema.sqlite.prisma
 backend/backend.log
 backend/scripts/test-register.ts
 dev.log
+
+# journal agent local
+worklog.md
