@@ -16,6 +16,7 @@ import exportRoutes from "./routes/export";
 import v1AuthRoutes from "./routes/v1/auth";
 import v1DeviceRoutes from "./routes/v1/devices";
 import v1SyncRoutes from "./routes/v1/sync";
+import v1ClosingRoutes from "./routes/v1/closing";
 import v1EventRoutes from "./routes/v1/events";
 import eventRoutes from "./routes/events";
 import { apiErrorHandler, getCurrentUser } from "./lib/auth";
@@ -106,6 +107,7 @@ app.use("/api/public", publicRoutes);
 app.use("/v1/auth", v1AuthRoutes);
 app.use("/v1/devices", v1DeviceRoutes);
 app.use("/v1/sync", v1SyncRoutes);
+app.use("/v1/closing", v1ClosingRoutes);
 app.use("/v1/events", v1EventRoutes);
 
 // 404 JSON uniforme pour toute route inconnue.
