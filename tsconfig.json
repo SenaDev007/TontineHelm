@@ -47,6 +47,7 @@
     "apps",
     "skills",
     "packages/domain/tests",
-    "packages/schemas/tests"
+    "packages/schemas/tests",
+    "packages/sync/tests"
   ]
 }
