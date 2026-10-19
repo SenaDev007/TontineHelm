@@ -80,6 +80,32 @@ Variables d'environnement (copier `.env.example`) :
    le contrôle qui a piégé les deux erreurs de socle corrigées en phase 2
    (preset NativeWind, import du CSS).
 
+### Dépannage : timeout au téléchargement de Gradle (connexion lente)
+
+Le premier `expo run:android` télécharge Gradle (~130 Mo) via le wrapper,
+avec un **délai de lecture de 10 s** par défaut — insuffisant sur connexion
+lente (`SocketTimeoutException: Read timed out`). Deux parades, par ordre :
+
+1. **Augmenter le délai** (le fichier est régénéré par prebuild — à refaire
+   si `android/` est supprimé) :
+   ```powershell
+   Add-Content android\gradle\wrapper\gradle-wrapper.properties "networkTimeout=180000"
+   bunx expo run:android   # retenter
+   ```
+2. **Téléchargement manuel** (le navigateur reprend les coupures) : récupérer
+   `https://services.gradle.org/distributions/gradle-8.14.3-bin.zip`, puis :
+   ```powershell
+   $d = "$env:USERPROFILE\.gradle\wrapper\dists\gradle-8.14.3-bin"
+   $h = (Get-ChildItem $d -Directory | Select-Object -First 1).FullName
+   Copy-Item "$env:USERPROFILE\Downloads\gradle-8.14.3-bin.zip" $h -Force
+   Remove-Item "$h\*.part" -Force -ErrorAction SilentlyContinue
+   bunx expo run:android   # le wrapper dézippe le fichier local, sans réseau
+   ```
+   Variante équivalente : ouvrir `apps/mobile/android` comme projet dans
+   Android Studio (son téléchargeur n'a pas de délai de 10 s) et lancer le
+   build depuis l'IDE, avec `bunx expo start --dev-client` à côté et
+   `adb reverse tcp:8081 tcp:8081` pour relier l'émulateur à Metro.
+
 ## Règles du dépôt
 
 Le web reste la source de vérité fonctionnelle (PARITE.md) : tout écran mobile
