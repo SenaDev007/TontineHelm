@@ -1,6 +1,0 @@
-[00:00:00.845] Server  LOG     ✓ Ready in 633ms
-[00:00:03.869] Server  LOG     ○ Compiling / ...
-[00:02:33.505] Browser ERROR   uncaughtError: Error: Module [project]/src/lib/export.ts [app-client] (ecmascript) was instantiated because it was required from module [project]/src/components/tontihelm/manager/AuditTab.tsx [app-client] (ecmascript), but the module factory is not available. It might have been deleted in an HMR update.
-[00:02:34.806] Server  WARN    ⚠ Cross origin request detected from preview-chat-126f3fa8-f521-4587-8a08-0376e3c844e3.space-z.ai to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
-Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
-[00:06:38.290] Browser ERROR   uncaughtError: Error: Module [project]/src/lib/export.ts [app-client] (ecmascript) was instantiated because it was required from module [project]/src/components/tontihelm/manager/AuditTab.tsx [app-client] (ecmascript), but the module factory is not available. It might have been deleted in an HMR update.

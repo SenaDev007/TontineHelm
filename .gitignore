@@ -1,2 +1,31 @@
 skills/
 node_modules/
+
+# ── Exécution / builds (jamais dans le dépôt) ──────────────────────────────
+.next/
+*.tsbuildinfo
+dev.log
+server.log
+upload/
+tool-results/
+
+# ── Bases SQLite locales d'exécution ───────────────────────────────────────
+db/
+*.db
+
+# ── Environnements (les .env.example restent suivis) ───────────────────────
+.env
+.env.local
+backend/.env
+apps/mobile/.env
+
+# ── Journal de travail des agents ───────────────────────────────────────────
+worklog.md
+
+# ── Mobile : artefacts générés par le prebuild Expo ────────────────────────
+apps/mobile/android/
+apps/mobile/.expo/
+apps/mobile/expo-env.d.ts
+
+# ── Dépôt de référence local (gitlink orphelin, hors projet) ────────────────
+repo-acadiahelm
